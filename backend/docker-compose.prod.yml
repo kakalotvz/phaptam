@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: phap_tam
+      POSTGRES_USER: phaptam
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - phaptam_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - phaptam_redis_data:/data
+    restart: unless-stopped
+
+  api:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npx prisma migrate deploy && npm run build && npm run start"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://phaptam:${POSTGRES_PASSWORD}@postgres:5432/phap_tam?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: ${PORT:-13010}
+    ports:
+      - "127.0.0.1:${PORT:-13010}:${PORT:-13010}"
+    volumes:
+      - ./:/app
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+volumes:
+  phaptam_postgres_data:
+  phaptam_redis_data:

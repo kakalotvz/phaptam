@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum FavoriteType {
+  AUDIO
+  VIDEO
+}
+
+enum FeedbackType {
+  FEEDBACK
+  REPORT
+}
+
+model User {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  passwordHash  String
+  name          String?
+  role          Role            @default(USER)
+  playlists     Playlist[]
+  favorites     Favorite[]
+  histories     History[]
+  progresses    AudioProgress[]
+  feedback      Feedback[]
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+}
+
+model AudioCategory {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  audios      Audio[]
+  createdAt   DateTime @default(now()) @map("created_at")
+}
+
+model VideoCategory {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  videos      Video[]
+  createdAt   DateTime @default(now()) @map("created_at")
+}
+
+model Audio {
+  id           String          @id @default(uuid())
+  title        String
+  description  String?
+  audioUrl     String          @map("audio_url")
+  thumbnailUrl String?         @map("thumbnail_url")
+  categoryId   String          @map("category_id")
+  duration     Int
+  category     AudioCategory   @relation(fields: [categoryId], references: [id])
+  playlistItems PlaylistItem[]
+  progresses   AudioProgress[]
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+}
+
+model Video {
+  id           String        @id @default(uuid())
+  title        String
+  description  String?
+  videoUrl     String        @map("video_url")
+  thumbnailUrl String?       @map("thumbnail_url")
+  categoryId   String        @map("category_id")
+  teacher      String?
+  category     VideoCategory @relation(fields: [categoryId], references: [id])
+  histories    History[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+}
+
+model Playlist {
+  id        String         @id @default(uuid())
+  userId    String         @map("user_id")
+  name      String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     PlaylistItem[]
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+}
+
+model PlaylistItem {
+  id         String   @id @default(uuid())
+  playlistId String   @map("playlist_id")
+  audioId    String   @map("audio_id")
+  orderIndex Int      @map("order_index")
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  audio      Audio    @relation(fields: [audioId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, audioId])
+  @@index([playlistId, orderIndex])
+}
+
+model Favorite {
+  id        String       @id @default(uuid())
+  userId    String       @map("user_id")
+  type      FavoriteType
+  contentId String       @map("content_id")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  @@unique([userId, type, contentId])
+  @@index([type, contentId])
+}
+
+model History {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  videoId   String   @map("video_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  watchedAt DateTime @default(now()) @map("watched_at")
+}
+
+model AudioProgress {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  audioId      String   @map("audio_id")
+  lastPosition Int      @map("last_position")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audio        Audio    @relation(fields: [audioId], references: [id], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, audioId])
+}
+
+model Quote {
+  id        String   @id @default(uuid())
+  content   String
+  imageUrl  String?  @map("image_url")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+}
+
+model Banner {
+  id        String   @id @default(uuid())
+  imageUrl  String   @map("image_url")
+  link      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+}
+
+model Feedback {
+  id        String       @id @default(uuid())
+  userId    String?      @map("user_id")
+  content   String
+  type      FeedbackType
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime     @default(now()) @map("created_at")
+}
+
+model RssSource {
+  id        String   @id @default(uuid())
+  name      String
+  url       String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+}
+
+model NewsItem {
+  id          String   @id @default(uuid())
+  sourceId    String?  @map("source_id")
+  title       String
+  link        String   @unique
+  summary     String?
+  imageUrl    String?  @map("image_url")
+  publishedAt DateTime @map("published_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+}
