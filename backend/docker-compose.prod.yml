@@ -19,7 +19,7 @@ services:
   api:
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "npm ci && npx prisma migrate deploy && npm run build && npm run start"
+    command: sh -c "npm ci && npx prisma db push && npm run build && npm run start"
     env_file:
       - .env
     environment:
