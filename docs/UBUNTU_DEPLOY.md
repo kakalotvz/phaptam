@@ -74,6 +74,8 @@ Gia tri can sua:
 
 ```env
 PORT=13010
+ADMIN_PORT=13011
+ADMIN_API_BASE_URL=http://208.87.132.135:8001/api
 POSTGRES_PASSWORD=doi-mat-khau-that-dai
 JWT_SECRET=doi-jwt-secret-that-dai
 R2_ACCOUNT_ID=...
@@ -96,6 +98,12 @@ Kiem tra local:
 
 ```bash
 curl http://127.0.0.1:13010/api/categories/audio
+```
+
+Admin dashboard chay noi bo tai:
+
+```bash
+curl -I http://127.0.0.1:13011
 ```
 
 ## 6. Cau hinh Nginx
@@ -134,6 +142,61 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+Neu dung IP va port rieng cho admin dashboard, tao them file:
+
+```bash
+sudo nano /etc/nginx/sites-available/phaptam-admin
+```
+
+Noi dung:
+
+```nginx
+server {
+    listen 8002;
+    server_name _;
+
+    client_max_body_size 20m;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:13010/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:13011;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Bat site:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/phaptam-admin /etc/nginx/sites-enabled/phaptam-admin
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Mo firewall neu chua co:
+
+```bash
+sudo ufw allow 8002/tcp
+```
+
+Admin se mo tai:
+
+```text
+http://IP_VPS:8002
+```
+
 ## 7. HTTPS
 
 ```bash
@@ -154,4 +217,4 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## 9. Luu y admin
 
-Hien tai project co admin API duoi `/api/admin/*`, chua co web admin dashboard rieng. Khi co dashboard web, nen deploy thanh domain rieng nhu `admin.tenmiencuaban.com` va reverse proxy den port rieng, khong dung chung port API neu co the.
+Admin dashboard nam trong `admin/`. Neu dung IP thay vi domain, nen proxy ra port rieng, vi du Nginx `listen 8002` proxy den `127.0.0.1:13011`.

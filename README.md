@@ -4,6 +4,7 @@ Monorepo cho ung dung Phat giao:
 
 - `mobile/`: Flutter Android-first app.
 - `backend/`: NestJS API, Prisma, PostgreSQL, Redis, BullMQ, Cloudflare R2.
+- `admin/`: React/Vite admin dashboard.
 - `docs/ARCHITECTURE.md`: ghi chu kien truc va cac viec can lam tiep de len production.
 
 ## Mobile
@@ -39,3 +40,17 @@ API chay voi prefix `/api`, vi du:
 - `POST /api/upload/presigned-url`
 - `POST /api/auth/register`
 - `POST /api/admin/audio`
+
+## Admin
+
+```bash
+cd admin
+npm install
+npm run dev
+```
+
+Set API endpoint:
+
+```bash
+cp .env.example .env
+```
