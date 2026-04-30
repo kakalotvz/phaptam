@@ -91,12 +91,12 @@ class AppShell extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.self_improvement_outlined),
             selectedIcon: Icon(Icons.self_improvement),
-            label: 'Thien',
+              label: 'Thiền',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
-            label: 'Ho so',
+              label: 'Hồ sơ',
           ),
         ],
       ),

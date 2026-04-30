@@ -64,6 +64,21 @@ export type Feedback = {
   createdAt: string;
 };
 
+export type UploadKind =
+  | 'audio'
+  | 'video'
+  | 'images/audio'
+  | 'images/video'
+  | 'images/banner'
+  | 'images/quote'
+  | 'images/news';
+
+export type PresignedUpload = {
+  key: string;
+  uploadUrl: string;
+  publicUrl: string;
+};
+
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
 
 export function defaultApiBaseUrl() {
@@ -105,6 +120,11 @@ export const api = {
   quotes: () => request<Quote[]>('/admin/quote'),
   banners: () => request<Banner[]>('/admin/banner'),
   feedback: () => request<Feedback[]>('/admin/feedback'),
+  presignedUrl: (data: { kind: UploadKind; contentType: string }) =>
+    request<PresignedUpload>('/upload/presigned-url', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   create: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(data) }),
@@ -112,3 +132,43 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data) }),
   remove: (path: string) => request<void>(path, { method: 'DELETE' }),
 };
+
+export async function uploadToR2(file: File, kind: UploadKind): Promise<string> {
+  const normalized = kind.startsWith('images/') ? await convertImageToWebp(file) : file;
+  const { uploadUrl, publicUrl } = await api.presignedUrl({
+    kind,
+    contentType: normalized.type,
+  });
+
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': normalized.type },
+    body: normalized,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Upload thất bại: ${response.status}`);
+  }
+
+  return publicUrl;
+}
+
+async function convertImageToWebp(file: File): Promise<File> {
+  if (file.type === 'image/webp') return file;
+
+  const image = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  const maxEdge = file.name.toLowerCase().includes('banner') ? 1200 : 600;
+  const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Không thể tối ưu ảnh trên trình duyệt này');
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.82));
+  if (!blob) throw new Error('Không thể chuyển ảnh sang WebP');
+
+  return new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), { type: 'image/webp' });
+}

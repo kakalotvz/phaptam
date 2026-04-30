@@ -7,7 +7,7 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: PhapTamApp()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Phap Tam'), findsWidgets);
+    expect(find.text('Pháp Tâm'), findsWidgets);
     expect(find.text('Kinh'), findsOneWidget);
   });
 }

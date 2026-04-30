@@ -17,10 +17,10 @@ class HomeScreen extends ConsumerWidget {
     return CustomScrollView(
       slivers: [
         SliverAppBar.large(
-          title: const Text('Phap Tam'),
+          title: const Text('Pháp Tâm'),
           actions: [
             IconButton(
-              tooltip: 'Thong bao',
+              tooltip: 'Thông báo',
               onPressed: () {},
               icon: const Icon(Icons.notifications_none),
             ),
@@ -49,7 +49,7 @@ class HomeScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Binh an khong phai la noi khong co tieng dong, ma la tam khong bi keo di.',
+                          'Bình an không phải là nơi không có tiếng động, mà là tâm không bị kéo đi.',
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(
                                 height: 1.35,
@@ -58,7 +58,7 @@ class HomeScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Loi nhac hom nay',
+                          'Lời nhắc hôm nay',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
@@ -90,7 +90,7 @@ class HomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
               CalmSection(
-                title: 'Tin Phat giao',
+                title: 'Tin Phật giáo',
                 child: Column(
                   children: [
                     for (final item in news)

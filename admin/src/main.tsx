@@ -14,6 +14,7 @@ import {
   Save,
   Settings,
   Trash2,
+  Upload,
 } from 'lucide-react';
 
 import {
@@ -26,6 +27,7 @@ import {
   Quote as QuoteRecord,
   RssSource,
   setApiBaseUrl,
+  uploadToR2,
   Video,
   VideoCategory,
 } from './lib/api';
@@ -58,14 +60,14 @@ const emptyData: DataState = {
 };
 
 const nav = [
-  { id: 'overview', label: 'Tong quan', icon: LayoutDashboard },
+  { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'audio', label: 'Kinh audio', icon: BookAudio },
-  { id: 'video', label: 'Video giang', icon: Clapperboard },
-  { id: 'rss', label: 'Nguon RSS', icon: Newspaper },
-  { id: 'quote', label: 'Loi nhac', icon: Quote },
+  { id: 'video', label: 'Video giảng', icon: Clapperboard },
+  { id: 'rss', label: 'Nguồn RSS', icon: Newspaper },
+  { id: 'quote', label: 'Lời nhắc', icon: Quote },
   { id: 'banner', label: 'Banner', icon: Image },
-  { id: 'feedback', label: 'Gop y', icon: MessageSquareText },
-  { id: 'settings', label: 'Cau hinh', icon: Settings },
+  { id: 'feedback', label: 'Góp ý', icon: MessageSquareText },
+  { id: 'settings', label: 'Cấu hình', icon: Settings },
 ] as const;
 
 function App() {
@@ -154,18 +156,18 @@ function App() {
       <main>
         <header className="topbar">
           <div>
-            <p>Bang dieu khien noi dung</p>
+            <p>Bảng điều khiển nội dung</p>
             <h1>{nav.find((item) => item.id === section)?.label}</h1>
           </div>
           <button className="ghost" onClick={() => void load()}>
             <RefreshCcw size={16} />
-            Tai lai
+            Tải lại
           </button>
         </header>
 
         {notice && <div className="notice">{notice}</div>}
         {error && <div className="error">{error}</div>}
-        {loading ? <div className="loading">Dang tai du lieu...</div> : null}
+        {loading ? <div className="loading">Đang tải dữ liệu...</div> : null}
 
         {!loading && (
           <>
@@ -186,11 +188,11 @@ function App() {
 
 function Overview({ data }: { data: DataState }) {
   const cards = [
-    ['Danh muc audio', data.overview.audioCategoryCount ?? 0, BookAudio],
-    ['Bai kinh audio', data.overview.audioCount ?? 0, FileText],
+    ['Danh mục audio', data.overview.audioCategoryCount ?? 0, BookAudio],
+    ['Bài kinh audio', data.overview.audioCount ?? 0, FileText],
     ['Video', data.overview.videoCount ?? 0, Clapperboard],
-    ['Nguon RSS', data.overview.rssCount ?? 0, Newspaper],
-    ['Gop y', data.overview.feedbackCount ?? 0, MessageSquareText],
+    ['Nguồn RSS', data.overview.rssCount ?? 0, Newspaper],
+    ['Góp ý', data.overview.feedbackCount ?? 0, MessageSquareText],
   ];
 
   return (
@@ -205,8 +207,8 @@ function Overview({ data }: { data: DataState }) {
       <article className="wide-card">
         <BarChart3 size={22} />
         <div>
-          <h2>Trang quan tri da san sang</h2>
-          <p>Quan ly danh muc, audio, video, RSS, banner, loi nhac va gop y. Upload media se hoat dong sau khi cau hinh Cloudflare R2 trong backend.</p>
+          <h2>Trang quản trị đã sẵn sàng</h2>
+          <p>Quản lý danh mục, audio, video, RSS, banner, lời nhắc và góp ý. Media được upload trực tiếp lên Cloudflare R2 bằng URL ký tạm thời từ backend.</p>
         </div>
       </article>
     </section>
@@ -216,46 +218,47 @@ function Overview({ data }: { data: DataState }) {
 function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
   return (
     <div className="two-column">
-      <Panel title="Tao danh muc audio">
+      <Panel title="Tạo danh mục audio">
         <SmartForm
-          fields={[['name', 'Ten danh muc'], ['description', 'Mo ta']]}
-          onSubmit={(values) => run(() => api.create('/admin/audio-category', values), 'Da tao danh muc audio')}
+          fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
+          onSubmit={(values) => run(() => api.create('/admin/audio-category', values), 'Đã tạo danh mục audio')}
         />
       </Panel>
-      <Panel title="Them kinh audio">
+      <Panel title="Thêm kinh audio">
         <SmartForm
           fields={[
-            ['title', 'Tieu de'],
-            ['description', 'Mo ta'],
-            ['audioUrl', 'URL file audio'],
-            ['thumbnailUrl', 'URL anh dai dien'],
-            ['duration', 'Thoi luong giay', 'number'],
-            ['categoryId', 'Danh muc', 'select', data.audioCategories.map((item) => [item.id, item.name])],
+            ['title', 'Tiêu đề'],
+            ['description', 'Mô tả'],
+            ['audioUrl', 'Tệp audio MP3', 'upload:audio'],
+            ['thumbnailUrl', 'Ảnh đại diện', 'upload:images/audio'],
+            ['duration', 'Thời lượng giây', 'number'],
+            ['categoryId', 'Danh mục', 'select', data.audioCategories.map((item) => [item.id, item.name])],
           ]}
-          onSubmit={(values) => run(() => api.create('/admin/audio', { ...values, duration: Number(values.duration || 0) }), 'Da them audio')}
+          onSubmit={(values) => run(() => api.create('/admin/audio', { ...values, duration: Number(values.duration || 0) }), 'Đã thêm audio')}
         />
       </Panel>
-      <Panel title="Danh muc audio" className="span">
+      <Panel title="Danh mục audio" className="span">
         <Table
           rows={data.audioCategories}
           columns={[
-            ['name', 'Ten'],
-            ['description', 'Mo ta'],
-            [(row: AudioCategory) => row._count?.audios ?? 0, 'So audio'],
+            ['name', 'Tên'],
+            ['description', 'Mô tả'],
+            [(row: AudioCategory) => row._count?.audios ?? 0, 'Số audio'],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Da xoa danh muc')}
+          onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục')}
         />
       </Panel>
-      <Panel title="Danh sach audio" className="span">
+      <Panel title="Danh sách audio" className="span">
         <Table
           rows={data.audios}
           columns={[
-            ['title', 'Tieu de'],
-            [(row: Audio) => row.category?.name ?? '-', 'Danh muc'],
-            [(row: Audio) => `${row.duration}s`, 'Thoi luong'],
+            ['thumbnailUrl', 'Ảnh'],
+            ['title', 'Tiêu đề'],
+            [(row: Audio) => row.category?.name ?? '-', 'Danh mục'],
+            [(row: Audio) => `${row.duration}s`, 'Thời lượng'],
             ['audioUrl', 'Audio URL'],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/audio/${row.id}`), 'Da xoa audio')}
+          onDelete={(row) => run(() => api.remove(`/admin/audio/${row.id}`), 'Đã xóa audio')}
         />
       </Panel>
     </div>
@@ -265,46 +268,47 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
 function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
   return (
     <div className="two-column">
-      <Panel title="Tao danh muc video">
+      <Panel title="Tạo danh mục video">
         <SmartForm
-          fields={[['name', 'Ten danh muc'], ['description', 'Mo ta']]}
-          onSubmit={(values) => run(() => api.create('/admin/video-category', values), 'Da tao danh muc video')}
+          fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
+          onSubmit={(values) => run(() => api.create('/admin/video-category', values), 'Đã tạo danh mục video')}
         />
       </Panel>
-      <Panel title="Them video giang">
+      <Panel title="Thêm video giảng">
         <SmartForm
           fields={[
-            ['title', 'Tieu de'],
-            ['teacher', 'Giang su'],
-            ['description', 'Mo ta'],
-            ['videoUrl', 'URL video / YouTube'],
-            ['thumbnailUrl', 'URL anh dai dien'],
-            ['categoryId', 'Danh muc', 'select', data.videoCategories.map((item) => [item.id, item.name])],
+            ['title', 'Tiêu đề'],
+            ['teacher', 'Giảng sư'],
+            ['description', 'Mô tả'],
+            ['videoUrl', 'Tệp video MP4 hoặc URL YouTube', 'upload:video'],
+            ['thumbnailUrl', 'Ảnh đại diện', 'upload:images/video'],
+            ['categoryId', 'Danh mục', 'select', data.videoCategories.map((item) => [item.id, item.name])],
           ]}
-          onSubmit={(values) => run(() => api.create('/admin/video', values), 'Da them video')}
+          onSubmit={(values) => run(() => api.create('/admin/video', values), 'Đã thêm video')}
         />
       </Panel>
-      <Panel title="Danh muc video" className="span">
+      <Panel title="Danh mục video" className="span">
         <Table
           rows={data.videoCategories}
           columns={[
-            ['name', 'Ten'],
-            ['description', 'Mo ta'],
-            [(row: VideoCategory) => row._count?.videos ?? 0, 'So video'],
+            ['name', 'Tên'],
+            ['description', 'Mô tả'],
+            [(row: VideoCategory) => row._count?.videos ?? 0, 'Số video'],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/video-category/${row.id}`), 'Da xoa danh muc')}
+          onDelete={(row) => run(() => api.remove(`/admin/video-category/${row.id}`), 'Đã xóa danh mục')}
         />
       </Panel>
-      <Panel title="Danh sach video" className="span">
+      <Panel title="Danh sách video" className="span">
         <Table
           rows={data.videos}
           columns={[
-            ['title', 'Tieu de'],
-            ['teacher', 'Giang su'],
-            [(row: Video) => row.category?.name ?? '-', 'Danh muc'],
+            ['thumbnailUrl', 'Ảnh'],
+            ['title', 'Tiêu đề'],
+            ['teacher', 'Giảng sư'],
+            [(row: Video) => row.category?.name ?? '-', 'Danh mục'],
             ['videoUrl', 'Video URL'],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/video/${row.id}`), 'Da xoa video')}
+          onDelete={(row) => run(() => api.remove(`/admin/video/${row.id}`), 'Đã xóa video')}
         />
       </Panel>
     </div>
@@ -314,21 +318,21 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
 function RssManager({ data, run }: { data: DataState; run: RunAction }) {
   return (
     <div className="single-column">
-      <Panel title="Them nguon RSS">
+      <Panel title="Thêm nguồn RSS">
         <SmartForm
-          fields={[['name', 'Ten website'], ['url', 'RSS URL']]}
-          onSubmit={(values) => run(() => api.create('/admin/rss', { ...values, active: true }), 'Da them RSS')}
+          fields={[['name', 'Tên website'], ['url', 'RSS URL']]}
+          onSubmit={(values) => run(() => api.create('/admin/rss', { ...values, active: true }), 'Đã thêm RSS')}
         />
       </Panel>
-      <Panel title="Nguon RSS dang quan ly">
+      <Panel title="Nguồn RSS đang quản lý">
         <Table
           rows={data.rss}
           columns={[
-            ['name', 'Ten'],
+            ['name', 'Tên'],
             ['url', 'URL'],
-            [(row: RssSource) => (row.active ? 'Dang bat' : 'Tat'), 'Trang thai'],
+            [(row: RssSource) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/rss/${row.id}`), 'Da xoa RSS')}
+          onDelete={(row) => run(() => api.remove(`/admin/rss/${row.id}`), 'Đã xóa RSS')}
         />
       </Panel>
     </div>
@@ -338,21 +342,21 @@ function RssManager({ data, run }: { data: DataState; run: RunAction }) {
 function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   return (
     <div className="single-column">
-      <Panel title="Tao loi nhac hang ngay">
+      <Panel title="Tạo lời nhắc hằng ngày">
         <SmartForm
-          fields={[['content', 'Noi dung'], ['imageUrl', 'URL anh']]}
-          onSubmit={(values) => run(() => api.create('/admin/quote', values), 'Da tao loi nhac')}
+          fields={[['content', 'Nội dung'], ['imageUrl', 'Ảnh minh họa', 'upload:images/quote']]}
+          onSubmit={(values) => run(() => api.create('/admin/quote', values), 'Đã tạo lời nhắc')}
         />
       </Panel>
-      <Panel title="Loi nhac">
+      <Panel title="Lời nhắc">
         <Table
           rows={data.quotes}
           columns={[
-            ['content', 'Noi dung'],
-            ['imageUrl', 'Anh'],
-            [(row: QuoteRecord) => (row.active ? 'Dang bat' : 'Tat'), 'Trang thai'],
+            ['imageUrl', 'Ảnh'],
+            ['content', 'Nội dung'],
+            [(row: QuoteRecord) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/quote/${row.id}`), 'Da xoa loi nhac')}
+          onDelete={(row) => run(() => api.remove(`/admin/quote/${row.id}`), 'Đã xóa lời nhắc')}
         />
       </Panel>
     </div>
@@ -362,21 +366,21 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
 function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
   return (
     <div className="single-column">
-      <Panel title="Tao banner">
+      <Panel title="Tạo banner">
         <SmartForm
-          fields={[['imageUrl', 'URL anh banner'], ['link', 'Lien ket']]}
-          onSubmit={(values) => run(() => api.create('/admin/banner', values), 'Da tao banner')}
+          fields={[['imageUrl', 'Ảnh banner', 'upload:images/banner'], ['link', 'Liên kết']]}
+          onSubmit={(values) => run(() => api.create('/admin/banner', values), 'Đã tạo banner')}
         />
       </Panel>
       <Panel title="Banner">
         <Table
           rows={data.banners}
           columns={[
-            ['imageUrl', 'Anh'],
-            ['link', 'Lien ket'],
-            [(row: Banner) => (row.active ? 'Dang bat' : 'Tat'), 'Trang thai'],
+            ['imageUrl', 'Ảnh'],
+            ['link', 'Liên kết'],
+            [(row: Banner) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/banner/${row.id}`), 'Da xoa banner')}
+          onDelete={(row) => run(() => api.remove(`/admin/banner/${row.id}`), 'Đã xóa banner')}
         />
       </Panel>
     </div>
@@ -385,15 +389,15 @@ function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
 
 function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
   return (
-    <Panel title="Gop y va bao loi tu nguoi dung">
+    <Panel title="Góp ý và báo lỗi từ người dùng">
       <Table
         rows={data.feedback}
         columns={[
-          ['type', 'Loai'],
-          ['content', 'Noi dung'],
-          [(row: Feedback) => new Date(row.createdAt).toLocaleString('vi-VN'), 'Thoi gian'],
+          ['type', 'Loại'],
+          ['content', 'Nội dung'],
+          [(row: Feedback) => new Date(row.createdAt).toLocaleString('vi-VN'), 'Thời gian'],
         ]}
-        onDelete={(row) => run(() => api.remove(`/admin/feedback/${row.id}`), 'Da xoa gop y')}
+        onDelete={(row) => run(() => api.remove(`/admin/feedback/${row.id}`), 'Đã xóa góp ý')}
       />
     </Panel>
   );
@@ -402,7 +406,7 @@ function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
 function SettingsPanel({ onSaved }: { onSaved: () => void }) {
   const [value, setValue] = useState(getApiBaseUrl());
   return (
-    <Panel title="Cau hinh ket noi API">
+    <Panel title="Cấu hình kết nối API">
       <form
         className="form"
         onSubmit={(event) => {
@@ -417,7 +421,7 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
         </label>
         <button className="primary" type="submit">
           <Save size={16} />
-          Luu cau hinh
+          Lưu cấu hình
         </button>
       </form>
     </Panel>
@@ -451,7 +455,13 @@ function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: R
                 </option>
               ))}
             </select>
-          ) : label === 'Mo ta' || label === 'Noi dung' ? (
+          ) : type.startsWith('upload:') ? (
+            <UploadField
+              kind={type.replace('upload:', '') as never}
+              value={values[name]}
+              onUploaded={(url) => setValues({ ...values, [name]: url })}
+            />
+          ) : label === 'Mô tả' || label === 'Nội dung' ? (
             <textarea value={values[name]} onChange={(event) => setValues({ ...values, [name]: event.target.value })} />
           ) : (
             <input type={type} value={values[name]} onChange={(event) => setValues({ ...values, [name]: event.target.value })} required={['name', 'title', 'url', 'audioUrl', 'videoUrl', 'imageUrl', 'content'].includes(name)} />
@@ -460,9 +470,44 @@ function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: R
       ))}
       <button className="primary" type="submit">
         <Save size={16} />
-        Luu
+        Lưu
       </button>
     </form>
+  );
+}
+
+function UploadField({
+  kind,
+  value,
+  onUploaded,
+}: {
+  kind: Parameters<typeof uploadToR2>[1];
+  value: string;
+  onUploaded: (url: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const accept = kind === 'audio' ? 'audio/mpeg,.mp3' : kind === 'video' ? 'video/mp4,.mp4' : 'image/*';
+
+  async function onFileSelected(file?: File) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      onUploaded(await uploadToR2(file, kind));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="upload-field">
+      <label className="upload-button">
+        <Upload size={16} />
+        {uploading ? 'Đang upload...' : 'Chọn tệp'}
+        <input type="file" accept={accept} onChange={(event) => void onFileSelected(event.target.files?.[0])} />
+      </label>
+      <input value={value} onChange={(event) => onUploaded(event.target.value)} placeholder="Hoặc dán URL có sẵn" />
+      {value && kind.startsWith('images/') && <img className="preview-image" src={value} alt="Xem trước" />}
+    </div>
   );
 }
 
@@ -484,7 +529,7 @@ function Table<T extends { id: string }>({
   columns: Array<[keyof T | ((row: T) => React.ReactNode), string]>;
   onDelete?: (row: T) => void;
 }) {
-  if (rows.length === 0) return <div className="empty">Chua co du lieu.</div>;
+  if (rows.length === 0) return <div className="empty">Chưa có dữ liệu.</div>;
 
   return (
     <div className="table-wrap">
@@ -502,13 +547,18 @@ function Table<T extends { id: string }>({
             <tr key={row.id}>
               {columns.map(([field, label]) => {
                 const value = typeof field === 'function' ? field(row) : (row[field] as React.ReactNode);
-                return <td key={label}>{value || '-'}</td>;
+                const isImage = typeof value === 'string' && /^https?:\/\//.test(value) && label === 'Ảnh';
+                return (
+                  <td key={label}>
+                    {isImage ? <img className="table-image" src={value} alt="" /> : value || '-'}
+                  </td>
+                );
               })}
               {onDelete && (
                 <td className="actions">
                   <button className="danger" onClick={() => onDelete(row)}>
                     <Trash2 size={15} />
-                    Xoa
+                    Xóa
                   </button>
                 </td>
               )}

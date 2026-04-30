@@ -13,7 +13,7 @@ class VideoScreen extends ConsumerWidget {
     final teachers = videos.map((e) => e.teacher).toSet().toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Phap thoai')),
+      appBar: AppBar(title: const Text('Pháp thoại')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
         children: [
@@ -28,7 +28,7 @@ class VideoScreen extends ConsumerWidget {
                   onSelected: (_) {},
                 ),
               FilterChip(
-                label: const Text('Chu de'),
+                label: const Text('Chủ đề'),
                 selected: false,
                 onSelected: (_) {},
               ),

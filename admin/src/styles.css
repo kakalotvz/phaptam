@@ -88,6 +88,41 @@ nav button,
   transition: transform .18s ease, background .18s ease, color .18s ease;
 }
 
+.upload-field {
+  display: grid;
+  gap: 10px;
+}
+
+.upload-button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 40px;
+  padding: 0 13px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #5a4036;
+  background: #f6ead0;
+  border: 1px solid rgba(109, 76, 65, .16);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.upload-button input {
+  display: none;
+}
+
+.preview-image,
+.table-image {
+  display: block;
+  width: 86px;
+  height: 58px;
+  object-fit: cover;
+  border: 1px solid rgba(109, 76, 65, .13);
+  border-radius: 10px;
+  background: #f1e4cf;
+}
+
 nav button {
   justify-content: flex-start;
   padding: 12px 14px;

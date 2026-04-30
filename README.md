@@ -6,6 +6,7 @@ Monorepo cho ung dung Phat giao:
 - `backend/`: NestJS API, Prisma, PostgreSQL, Redis, BullMQ, Cloudflare R2.
 - `admin/`: React/Vite admin dashboard.
 - `docs/ARCHITECTURE.md`: ghi chu kien truc va cac viec can lam tiep de len production.
+- `docs/R2_SETUP.md`: huong dan cau hinh Cloudflare R2.
 
 ## Mobile
 

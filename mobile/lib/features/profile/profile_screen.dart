@@ -12,7 +12,7 @@ class ProfileScreen extends ConsumerWidget {
     final darkMode = ref.watch(darkModeProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Ho so')),
+      appBar: AppBar(title: const Text('Hồ sơ')),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
@@ -31,14 +31,14 @@ class ProfileScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isLoggedIn ? 'Phat tu' : 'Chua dang nhap',
+                          isLoggedIn ? 'Phật tử' : 'Chưa đăng nhập',
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         Text(
                           isLoggedIn
-                              ? 'Quan ly yeu thich va playlist'
-                              : 'Dang nhap de luu tien trinh nghe',
+                              ? 'Quản lý yêu thích và playlist'
+                              : 'Đăng nhập để lưu tiến trình nghe',
                         ),
                       ],
                     ),
@@ -46,7 +46,7 @@ class ProfileScreen extends ConsumerWidget {
                   FilledButton(
                     onPressed: () =>
                         ref.read(isLoggedInProvider.notifier).toggle(),
-                    child: Text(isLoggedIn ? 'Thoat' : 'Dang nhap'),
+                    child: Text(isLoggedIn ? 'Thoát' : 'Đăng nhập'),
                   ),
                 ],
               ),
@@ -55,32 +55,32 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           _NavTile(
             icon: Icons.favorite_border,
-            title: 'Yeu thich',
-            subtitle: 'Audio va video da luu',
+            title: 'Yêu thích',
+            subtitle: 'Audio và video đã lưu',
             locked: !isLoggedIn,
           ),
           _NavTile(
             icon: Icons.playlist_play,
             title: 'Playlist',
-            subtitle: 'Danh sach kinh ca nhan',
+            subtitle: 'Danh sách kinh cá nhân',
             locked: !isLoggedIn,
           ),
           _NavTile(
             icon: Icons.history,
-            title: 'Lich su xem',
-            subtitle: 'Video da xem gan day',
+            title: 'Lịch sử xem',
+            subtitle: 'Video đã xem gần đây',
             locked: !isLoggedIn,
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Giao dien toi'),
+            title: const Text('Giao diện tối'),
             value: darkMode,
             onChanged: (value) =>
                 ref.read(darkModeProvider.notifier).setEnabled(value),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Thong bao'),
+            title: const Text('Thông báo'),
             value: true,
             onChanged: (_) {},
           ),
@@ -88,7 +88,7 @@ class ProfileScreen extends ConsumerWidget {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.feedback_outlined),
-            title: const Text('Gop y va bao loi noi dung'),
+            title: const Text('Góp ý và báo lỗi nội dung'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showFeedback(context),
           ),
@@ -101,19 +101,19 @@ class ProfileScreen extends ConsumerWidget {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Gui gop y'),
+        title: const Text('Gửi góp ý'),
         content: const TextField(
           maxLines: 4,
-          decoration: InputDecoration(hintText: 'Noi dung gop y hoac bao loi'),
+          decoration: InputDecoration(hintText: 'Nội dung góp ý hoặc báo lỗi'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Huy'),
+            child: const Text('Hủy'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Gui'),
+            child: const Text('Gửi'),
           ),
         ],
       ),
@@ -140,7 +140,7 @@ class _NavTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon),
       title: Text(title),
-      subtitle: Text(locked ? '$subtitle • Can dang nhap' : subtitle),
+      subtitle: Text(locked ? '$subtitle • Cần đăng nhập' : subtitle),
       trailing: Icon(locked ? Icons.lock_outline : Icons.chevron_right),
     );
   }

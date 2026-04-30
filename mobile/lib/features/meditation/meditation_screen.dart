@@ -58,7 +58,7 @@ class _MeditationScreenState extends State<MeditationScreen> {
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Thien',
+                  'Thiền',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -96,7 +96,7 @@ class _MeditationScreenState extends State<MeditationScreen> {
                 children: [
                   for (final value in durations)
                     ChoiceChip(
-                      label: Text('$value phut'),
+                        label: Text('$value phút'),
                       selected: selectedMinutes == value,
                       onSelected: isRunning
                           ? null
@@ -111,13 +111,13 @@ class _MeditationScreenState extends State<MeditationScreen> {
               FilledButton.icon(
                 onPressed: toggle,
                 icon: Icon(isRunning ? Icons.pause : Icons.play_arrow),
-                label: Text(isRunning ? 'Tam dung' : 'Bat dau'),
+                label: Text(isRunning ? 'Tạm dừng' : 'Bắt đầu'),
               ),
               const SizedBox(height: 16),
               TextButton.icon(
                 onPressed: () {},
                 icon: const Icon(Icons.water_drop_outlined),
-                label: const Text('Am thanh nen'),
+                label: const Text('Âm thanh nền'),
               ),
               const Spacer(),
             ],

@@ -15,7 +15,7 @@ class AudioScreen extends ConsumerWidget {
     final audios = ref.watch(filteredAudioProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Kinh Phat')),
+      appBar: AppBar(title: const Text('Kinh Phật')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 120),
         children: [
@@ -26,7 +26,7 @@ class AudioScreen extends ConsumerWidget {
               itemCount: categories.length + 1,
               separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
-                final name = index == 0 ? 'Tat ca' : categories[index - 1].name;
+                final name = index == 0 ? 'Tất cả' : categories[index - 1].name;
                 final isSelected = index == 0
                     ? selected == null
                     : selected == name;
@@ -114,7 +114,7 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Tu dong tiep tuc tu vi tri da nghe',
+            'Tự động tiếp tục từ vị trí đã nghe',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           Slider(
@@ -149,7 +149,7 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
           const SizedBox(height: 18),
           Row(
             children: [
-              Expanded(child: Text('Toc do ${speed.toStringAsFixed(1)}x')),
+              Expanded(child: Text('Tốc độ ${speed.toStringAsFixed(1)}x')),
               DropdownButton<double>(
                 value: speed,
                 items: const [
@@ -163,7 +163,7 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
               TextButton.icon(
                 onPressed: () {},
                 icon: const Icon(Icons.bedtime_outlined),
-                label: const Text('Hen gio'),
+                label: const Text('Hẹn giờ'),
               ),
             ],
           ),

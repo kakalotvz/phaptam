@@ -90,7 +90,7 @@ class AudioTile extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Yeu thich',
+                tooltip: 'Yêu thích',
                 onPressed: () {},
                 icon: const Icon(Icons.favorite_border),
               ),

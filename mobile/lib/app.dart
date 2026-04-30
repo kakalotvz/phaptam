@@ -12,7 +12,7 @@ class PhapTamApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final darkMode = ref.watch(darkModeProvider);
     return MaterialApp.router(
-      title: 'Phap Tam',
+      title: 'Pháp Tâm',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
