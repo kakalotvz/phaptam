@@ -29,6 +29,11 @@ export class AuthService {
     };
   }
 
+  async forgotPassword(email: string) {
+    await this.prisma.user.findUnique({ where: { email } });
+    return { ok: true, message: 'If the email exists, reset instructions will be sent.' };
+  }
+
   private sign(sub: string, role: string) {
     return this.jwt.signAsync({ sub, role });
   }

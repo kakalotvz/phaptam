@@ -64,6 +64,19 @@ export type Feedback = {
   createdAt: string;
 };
 
+export type AdminUser = {
+  id: string;
+  email: string;
+  name?: string;
+  role: 'USER' | 'ADMIN';
+  createdAt: string;
+  _count?: {
+    playlists: number;
+    favorites: number;
+    feedback: number;
+  };
+};
+
 export type UploadKind =
   | 'audio'
   | 'video'
@@ -120,6 +133,7 @@ export const api = {
   quotes: () => request<Quote[]>('/admin/quote'),
   banners: () => request<Banner[]>('/admin/banner'),
   feedback: () => request<Feedback[]>('/admin/feedback'),
+  users: () => request<AdminUser[]>('/admin/users'),
   presignedUrl: (data: { kind: UploadKind; contentType: string }) =>
     request<PresignedUpload>('/upload/presigned-url', {
       method: 'POST',

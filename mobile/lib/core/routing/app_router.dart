@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/audio/audio_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/meditation/meditation_screen.dart';
+import '../../features/profile/auth_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/video/video_screen.dart';
 
@@ -54,6 +55,18 @@ final appRouter = GoRouter(
         ),
       ],
     ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const AuthScreen(mode: AuthMode.login),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) => const AuthScreen(mode: AuthMode.register),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      builder: (context, state) => const AuthScreen(mode: AuthMode.forgot),
+    ),
   ],
 );
 
@@ -91,12 +104,12 @@ class AppShell extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.self_improvement_outlined),
             selectedIcon: Icon(Icons.self_improvement),
-              label: 'Thiền',
+            label: 'Thiền',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
-              label: 'Hồ sơ',
+            label: 'Hồ sơ',
           ),
         ],
       ),

@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   MessageSquareText,
   Newspaper,
+  ShieldCheck,
   Quote,
   RefreshCcw,
   Save,
@@ -19,6 +20,7 @@ import {
 
 import {
   api,
+  AdminUser,
   Audio,
   AudioCategory,
   Banner,
@@ -33,7 +35,7 @@ import {
 } from './lib/api';
 import './styles.css';
 
-type Section = 'overview' | 'audio' | 'video' | 'rss' | 'quote' | 'banner' | 'feedback' | 'settings';
+type Section = 'overview' | 'audio' | 'video' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
 
 type DataState = {
   overview: Record<string, number>;
@@ -45,6 +47,7 @@ type DataState = {
   quotes: QuoteRecord[];
   banners: Banner[];
   feedback: Feedback[];
+  users: AdminUser[];
 };
 
 const emptyData: DataState = {
@@ -57,6 +60,7 @@ const emptyData: DataState = {
   quotes: [],
   banners: [],
   feedback: [],
+  users: [],
 };
 
 const nav = [
@@ -66,6 +70,7 @@ const nav = [
   { id: 'rss', label: 'Nguồn RSS', icon: Newspaper },
   { id: 'quote', label: 'Lời nhắc', icon: Quote },
   { id: 'banner', label: 'Banner', icon: Image },
+  { id: 'users', label: 'Tài khoản', icon: ShieldCheck },
   { id: 'feedback', label: 'Góp ý', icon: MessageSquareText },
   { id: 'settings', label: 'Cấu hình', icon: Settings },
 ] as const;
@@ -91,6 +96,7 @@ function App() {
         quotes,
         banners,
         feedback,
+        users,
       ] = await Promise.all([
         api.overview(),
         api.audioCategories(),
@@ -101,10 +107,11 @@ function App() {
         api.quotes(),
         api.banners(),
         api.feedback(),
+        api.users(),
       ]);
-      setData({ overview, audioCategories, videoCategories, audios, videos, rss, quotes, banners, feedback });
+      setData({ overview, audioCategories, videoCategories, audios, videos, rss, quotes, banners, feedback, users });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Khong tai duoc du lieu');
+      setError(caught instanceof Error ? caught.message : 'Không tải được dữ liệu');
     } finally {
       setLoading(false);
     }
@@ -118,7 +125,7 @@ function App() {
       setNotice(message);
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Thao tac that bai');
+      setError(caught instanceof Error ? caught.message : 'Thao tác thất bại');
     }
   }
 
@@ -132,8 +139,8 @@ function App() {
         <div className="brand">
           <span className="brand-mark">PT</span>
           <div>
-            <strong>Phap Tam</strong>
-            <small>Admin Console</small>
+            <strong>Pháp Tâm</strong>
+            <small>Bảng quản trị</small>
           </div>
         </div>
         <nav>
@@ -177,6 +184,7 @@ function App() {
             {section === 'rss' && <RssManager data={data} run={run} />}
             {section === 'quote' && <QuoteManager data={data} run={run} />}
             {section === 'banner' && <BannerManager data={data} run={run} />}
+            {section === 'users' && <UserManager data={data} run={run} />}
             {section === 'feedback' && <FeedbackManager data={data} run={run} />}
             {section === 'settings' && <SettingsPanel onSaved={load} />}
           </>
@@ -192,6 +200,7 @@ function Overview({ data }: { data: DataState }) {
     ['Bài kinh audio', data.overview.audioCount ?? 0, FileText],
     ['Video', data.overview.videoCount ?? 0, Clapperboard],
     ['Nguồn RSS', data.overview.rssCount ?? 0, Newspaper],
+    ['Tài khoản', data.overview.userCount ?? 0, ShieldCheck],
     ['Góp ý', data.overview.feedbackCount ?? 0, MessageSquareText],
   ];
 
@@ -387,6 +396,55 @@ function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
   );
 }
 
+function UserManager({ data, run }: { data: DataState; run: RunAction }) {
+  return (
+    <div className="single-column">
+      <Panel title="Tạo tài khoản">
+        <SmartForm
+          fields={[
+            ['name', 'Họ tên'],
+            ['email', 'Email'],
+            ['password', 'Mật khẩu', 'password'],
+            [
+              'role',
+              'Vai trò',
+              'select',
+              [
+                ['USER', 'Người dùng'],
+                ['ADMIN', 'Quản trị viên'],
+              ],
+            ],
+          ]}
+          onSubmit={(values) =>
+            run(
+              () =>
+                api.create('/admin/users', {
+                  ...values,
+                  role: values.role || 'USER',
+                }),
+              'Đã tạo tài khoản',
+            )
+          }
+        />
+      </Panel>
+      <Panel title="Danh sách tài khoản">
+        <Table
+          rows={data.users}
+          columns={[
+            ['name', 'Họ tên'],
+            ['email', 'Email'],
+            [(row: AdminUser) => (row.role === 'ADMIN' ? 'Quản trị viên' : 'Người dùng'), 'Vai trò'],
+            [(row: AdminUser) => row._count?.playlists ?? 0, 'Playlist'],
+            [(row: AdminUser) => row._count?.favorites ?? 0, 'Yêu thích'],
+            [(row: AdminUser) => new Date(row.createdAt).toLocaleDateString('vi-VN'), 'Ngày tạo'],
+          ]}
+          onDelete={(row) => run(() => api.remove(`/admin/users/${row.id}`), 'Đã xóa tài khoản')}
+        />
+      </Panel>
+    </div>
+  );
+}
+
 function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
   return (
     <Panel title="Góp ý và báo lỗi từ người dùng">
@@ -448,7 +506,7 @@ function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: R
           {label}
           {type === 'select' ? (
             <select value={values[name]} onChange={(event) => setValues({ ...values, [name]: event.target.value })} required>
-              <option value="">Chon...</option>
+              <option value="">Chọn...</option>
               {options?.map(([value, optionLabel]) => (
                 <option key={value} value={value}>
                   {optionLabel}

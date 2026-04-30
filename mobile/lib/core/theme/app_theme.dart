@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   static const primary = Color(0xFF6D4C41);
@@ -49,7 +50,14 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      fontFamily: 'Roboto',
+      fontFamily: GoogleFonts.notoSans().fontFamily,
+      textTheme: GoogleFonts.notoSansTextTheme().copyWith(
+        displayLarge: GoogleFonts.notoSerif(fontWeight: FontWeight.w800),
+        displayMedium: GoogleFonts.notoSerif(fontWeight: FontWeight.w800),
+        headlineLarge: GoogleFonts.notoSerif(fontWeight: FontWeight.w800),
+        headlineMedium: GoogleFonts.notoSerif(fontWeight: FontWeight.w800),
+        titleLarge: GoogleFonts.notoSerif(fontWeight: FontWeight.w700),
+      ),
       cardTheme: CardThemeData(
         elevation: 0,
         color: scheme.surface,

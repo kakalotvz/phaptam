@@ -1,7 +1,9 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&family=Noto+Serif:wght@600;700;800&display=swap&subset=vietnamese");
+
 :root {
   color: #2e2420;
   background: #f6f0dd;
-  font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -63,6 +65,14 @@ textarea {
 .brand strong,
 .brand small {
   display: block;
+}
+
+.brand strong,
+.topbar h1,
+.wide-card h2,
+.panel h2,
+.metric-card strong {
+  font-family: "Noto Serif", "Noto Sans", serif;
 }
 
 .brand small {
@@ -151,7 +161,7 @@ main {
 .topbar p {
   margin: 0 0 6px;
   color: #7a655b;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: .06em;
@@ -199,7 +209,7 @@ main {
   display: block;
   margin-top: 18px;
   color: #7a655b;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
   font-size: 13px;
   font-weight: 700;
 }
@@ -258,7 +268,7 @@ label {
   display: grid;
   gap: 7px;
   color: #6a564e;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
   font-size: 13px;
   font-weight: 700;
 }
@@ -317,7 +327,7 @@ nav button:hover {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
   font-size: 14px;
 }
 
@@ -349,7 +359,7 @@ th {
   margin-bottom: 16px;
   padding: 13px 15px;
   border-radius: 14px;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
 }
 
 .notice {

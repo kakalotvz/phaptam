@@ -1,4 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Role } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('admin')
@@ -7,16 +9,60 @@ export class AdminController {
 
   @Get('overview')
   async overview() {
-    const [audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount] = await Promise.all([
+    const [audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount, userCount] = await Promise.all([
       this.prisma.audio.count(),
       this.prisma.video.count(),
       this.prisma.audioCategory.count(),
       this.prisma.videoCategory.count(),
       this.prisma.rssSource.count(),
       this.prisma.feedback.count(),
+      this.prisma.user.count(),
     ]);
 
-    return { audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount };
+    return { audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount, userCount };
+  }
+
+  @Get('users')
+  users() {
+    return this.prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        _count: { select: { playlists: true, favorites: true, feedback: true } },
+      },
+      take: 200,
+    });
+  }
+
+  @Post('users')
+  async createUser(@Body() data: { email: string; password: string; name?: string; role?: Role }) {
+    return this.prisma.user.create({
+      data: {
+        email: data.email,
+        name: data.name,
+        role: data.role ?? Role.USER,
+        passwordHash: await bcrypt.hash(data.password, 12),
+      },
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+    });
+  }
+
+  @Patch('users/:id')
+  updateUser(@Param('id') id: string, @Body() data: { name?: string; role?: Role }) {
+    return this.prisma.user.update({
+      where: { id },
+      data,
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+    });
+  }
+
+  @Delete('users/:id')
+  deleteUser(@Param('id') id: string) {
+    return this.prisma.user.delete({ where: { id } });
   }
 
   @Get('audio-category')

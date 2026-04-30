@@ -24,4 +24,9 @@ export class AuthController {
   login(@Body() dto: AuthDto) {
     return this.auth.login(dto.email, dto.password);
   }
+
+  @Post('forgot-password')
+  forgotPassword(@Body('email') email: string) {
+    return this.auth.forgotPassword(email);
+  }
 }

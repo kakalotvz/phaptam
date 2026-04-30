@@ -48,6 +48,8 @@ class LoginState extends Notifier<bool> {
   bool build() => false;
 
   void toggle() => state = !state;
+  void login() => state = true;
+  void logout() => state = false;
 }
 
 class DarkModeState extends Notifier<bool> {

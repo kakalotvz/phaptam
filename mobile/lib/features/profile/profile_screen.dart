@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../content/content_providers.dart';
 
@@ -44,8 +45,13 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ),
                   FilledButton(
-                    onPressed: () =>
-                        ref.read(isLoggedInProvider.notifier).toggle(),
+                    onPressed: () {
+                      if (isLoggedIn) {
+                        ref.read(isLoggedInProvider.notifier).logout();
+                      } else {
+                        context.push('/login');
+                      }
+                    },
                     child: Text(isLoggedIn ? 'Thoát' : 'Đăng nhập'),
                   ),
                 ],
@@ -59,6 +65,18 @@ class ProfileScreen extends ConsumerWidget {
             subtitle: 'Audio và video đã lưu',
             locked: !isLoggedIn,
           ),
+          if (!isLoggedIn) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/register'),
+              icon: const Icon(Icons.person_add_alt_1),
+              label: const Text('Đăng ký tài khoản'),
+            ),
+            TextButton(
+              onPressed: () => context.push('/forgot-password'),
+              child: const Text('Quên mật khẩu?'),
+            ),
+          ],
           _NavTile(
             icon: Icons.playlist_play,
             title: 'Playlist',
