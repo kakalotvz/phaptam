@@ -38,7 +38,7 @@ services:
   admin:
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "npm ci && VITE_API_BASE_URL=$${ADMIN_API_BASE_URL:-/api} npm run build && npm run preview -- --host 0.0.0.0 --port $${ADMIN_PORT:-13011}"
+    command: sh -c "npm ci && VITE_API_BASE_URL=/api npm run build && npm run preview -- --host 0.0.0.0 --port $${ADMIN_PORT:-13011}"
     env_file:
       - .env
     ports:

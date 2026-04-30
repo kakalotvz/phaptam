@@ -96,6 +96,7 @@ const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefine
 
 export function defaultApiBaseUrl() {
   if (configuredBaseUrl) return configuredBaseUrl.replace(/\/$/, '');
+  if (window.location.port === '8002') return '/api';
   const { protocol, hostname } = window.location;
   return `${protocol}//${hostname}:8001/api`;
 }

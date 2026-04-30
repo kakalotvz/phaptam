@@ -75,7 +75,7 @@ Gia tri can sua:
 ```env
 PORT=13010
 ADMIN_PORT=13011
-ADMIN_API_BASE_URL=http://208.87.132.135:8001/api
+ADMIN_API_BASE_URL=/api
 POSTGRES_PASSWORD=doi-mat-khau-that-dai
 JWT_SECRET=doi-jwt-secret-that-dai
 R2_ACCOUNT_ID=...
