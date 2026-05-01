@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import JSZip from 'jszip';
 import '@fontsource/noto-sans/400.css';
 import '@fontsource/noto-sans/500.css';
 import '@fontsource/noto-sans/600.css';
@@ -13,6 +14,7 @@ import {
   BookAudio,
   BookOpenText,
   Clapperboard,
+  Download,
   FileText,
   Image,
   LayoutDashboard,
@@ -48,6 +50,68 @@ import {
   VideoCategory,
 } from './lib/api';
 import './styles.css';
+
+type EditableScriptureLine = { content: string; start_time: number };
+
+const scriptureSampleJson = {
+  title: 'Kinh A Di Đà - bản đọc mẫu',
+  description: 'Mẫu JSON cho chức năng Đọc Kinh. Mỗi dòng cần có content và start_time tính bằng giây.',
+  categoryId: '',
+  lines: [
+    { content: 'Nam mô Bổn Sư Thích Ca Mâu Ni Phật', start_time: 0 },
+    { content: 'Như thị ngã văn.', start_time: 5.2 },
+    { content: 'Một thời Đức Phật ở nước Xá Vệ, tại vườn Kỳ Thọ Cấp Cô Độc.', start_time: 9.8 },
+    { content: 'Cùng với chúng đại Tỳ kheo, một ngàn hai trăm năm mươi vị.', start_time: 17.6 },
+    { content: 'Lại có các vị Bồ Tát Ma Ha Tát cùng dự trong pháp hội.', start_time: 24.4 },
+    { content: 'Bấy giờ Đức Phật bảo Trưởng lão Xá Lợi Phất rằng.', start_time: 31.2 },
+    { content: 'Từ đây qua phương Tây, cách mười muôn ức cõi Phật.', start_time: 37.4 },
+    { content: 'Có thế giới tên là Cực Lạc, trong cõi ấy có Đức Phật hiệu A Di Đà.', start_time: 44.6 },
+  ],
+};
+
+function linesFromText(text: string): EditableScriptureLine[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((content, index) => ({ content, start_time: index * 4 }));
+}
+
+function normalizeImportedLines(lines: ScriptureLine[]): EditableScriptureLine[] {
+  return lines
+    .map((line, index) => ({
+      content: String(line.content ?? '').trim(),
+      start_time: Number(line.start_time ?? line.startTime ?? index * 4),
+    }))
+    .filter((line) => line.content);
+}
+
+function downloadScriptureSample() {
+  const blob = new Blob([JSON.stringify(scriptureSampleJson, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'mau-doc-kinh.json';
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function extractDocxText(file: File) {
+  const zip = await JSZip.loadAsync(file);
+  const documentXml = await zip.file('word/document.xml')?.async('string');
+  if (!documentXml) throw new Error('Không tìm thấy nội dung word/document.xml trong tệp DOCX');
+
+  const xml = new DOMParser().parseFromString(documentXml, 'application/xml');
+  return Array.from(xml.getElementsByTagName('w:p'))
+    .map((paragraph) =>
+      Array.from(paragraph.getElementsByTagName('w:t'))
+        .map((node) => node.textContent ?? '')
+        .join('')
+        .trim(),
+    )
+    .filter(Boolean)
+    .join('\n');
+}
 
 type Section = 'overview' | 'audio' | 'scripture' | 'video' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
 
@@ -300,7 +364,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [rawText, setRawText] = useState('Nam mô A Di Đà Phật\nNguyện đem công đức này\nHướng về khắp tất cả\nĐệ tử và chúng sanh');
-  const [lines, setLines] = useState<Array<{ content: string; start_time: number }>>([
+  const [lines, setLines] = useState<EditableScriptureLine[]>([
     { content: 'Nam mô A Di Đà Phật', start_time: 0 },
     { content: 'Nguyện đem công đức này', start_time: 4 },
     { content: 'Hướng về khắp tất cả', start_time: 8 },
@@ -308,36 +372,37 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   ]);
 
   function splitText() {
-    setLines(
-      rawText
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((content, index) => ({ content, start_time: index * 4 })),
-    );
+    setLines(linesFromText(rawText));
   }
 
-  async function autoTiming() {
-    const generated = await api.generateScriptureTiming({ lines: lines.map((line) => line.content) });
+  async function autoTiming(sourceLines = lines) {
+    const generated = await api.generateScriptureTiming({ lines: sourceLines.map((line) => line.content) });
     setLines(generated);
   }
 
-  function importJson(file?: File) {
+  async function importScriptureFile(file?: File) {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const parsed = JSON.parse(String(reader.result));
-      setTitle(parsed.title ?? title);
-      setDescription(parsed.description ?? description);
-      setCategoryId(parsed.category_id ?? parsed.categoryId ?? categoryId);
-      setLines(
-        (parsed.lines ?? []).map((line: ScriptureLine, index: number) => ({
-          content: line.content,
-          start_time: Number(line.start_time ?? line.startTime ?? index * 4),
-        })),
-      );
-    };
-    reader.readAsText(file);
+    try {
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.json')) {
+        const parsed = JSON.parse(await file.text());
+        const importedLines = normalizeImportedLines(parsed.lines ?? []);
+        setTitle(parsed.title ?? title);
+        setDescription(parsed.description ?? description);
+        setCategoryId(parsed.category_id ?? parsed.categoryId ?? categoryId);
+        setRawText(importedLines.map((line) => line.content).join('\n'));
+        setLines(importedLines);
+        return;
+      }
+
+      const text = name.endsWith('.docx') ? await extractDocxText(file) : await file.text();
+      const nextLines = linesFromText(text);
+      setTitle((current) => current || file.name.replace(/\.(txt|docx)$/i, ''));
+      setRawText(text);
+      await autoTiming(nextLines);
+    } catch (caught) {
+      alert(caught instanceof Error ? caught.message : 'Không đọc được tệp Kinh');
+    }
   }
 
   function updateLine(index: number, patch: Partial<{ content: string; start_time: number }>) {
@@ -354,6 +419,12 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
 
   return (
     <div className="single-column">
+      <Panel title="Tạo danh mục Đọc Kinh">
+        <SmartForm
+          fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
+          onSubmit={(values) => run(() => api.create('/admin/audio-category', values), 'Đã tạo danh mục Đọc Kinh')}
+        />
+      </Panel>
       <Panel title="Tạo bản Đọc Kinh">
         <div className="scripture-create">
           <label>
@@ -388,10 +459,14 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               <RefreshCcw size={16} />
               Tự tính thời gian
             </button>
+            <button className="ghost" type="button" onClick={downloadScriptureSample}>
+              <Download size={16} />
+              Tải mẫu
+            </button>
             <label className="upload-button">
               <Upload size={16} />
-              Upload JSON
-              <input type="file" accept="application/json,.json" onChange={(event) => importJson(event.target.files?.[0])} />
+              Upload JSON/TXT/DOCX
+              <input type="file" accept="application/json,.json,text/plain,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => void importScriptureFile(event.target.files?.[0])} />
             </label>
             <button
               className="primary"
@@ -504,7 +579,7 @@ function ScripturePreview({ lines }: { lines: Array<{ content: string; start_tim
         ))}
         <label>
           Tùy chỉnh {speed.toFixed(2)}x
-          <input type="range" min="0.5" max="2" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+          <input type="range" min="0.25" max="3" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
         </label>
       </div>
       <div className="reader-stage">

@@ -180,8 +180,8 @@ class _ScriptureReaderState extends State<ScriptureReader> {
                       Text('${_speed.toStringAsFixed(2)}x', style: const TextStyle(color: Color(0xFFFFF8E8))),
                       Expanded(
                         child: Slider(
-                          min: .5,
-                          max: 2,
+                          min: .25,
+                          max: 3,
                           value: _speed,
                           onChanged: (value) => setState(() => _speed = value),
                         ),
