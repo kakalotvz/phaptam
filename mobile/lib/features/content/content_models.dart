@@ -59,3 +59,24 @@ class NewsItem {
   final String source;
   final DateTime publishedAt;
 }
+
+class ScriptureLine {
+  const ScriptureLine({required this.content, required this.startTime});
+
+  final String content;
+  final Duration startTime;
+}
+
+class Scripture {
+  const Scripture({
+    required this.id,
+    required this.title,
+    required this.lines,
+    this.description,
+  });
+
+  final String id;
+  final String title;
+  final String? description;
+  final List<ScriptureLine> lines;
+}

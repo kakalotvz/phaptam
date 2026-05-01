@@ -6,6 +6,7 @@ import '../../features/home/home_screen.dart';
 import '../../features/meditation/meditation_screen.dart';
 import '../../features/profile/auth_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/scripture/scripture_screen.dart';
 import '../../features/video/video_screen.dart';
 
 final appRouter = GoRouter(
@@ -34,6 +35,14 @@ final appRouter = GoRouter(
             GoRoute(
               path: '/video',
               builder: (context, state) => const VideoScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/scripture',
+              builder: (context, state) => const ScriptureScreen(),
             ),
           ],
         ),
@@ -100,6 +109,11 @@ class AppShell extends StatelessWidget {
             icon: Icon(Icons.play_circle_outline),
             selectedIcon: Icon(Icons.play_circle),
             label: 'Video',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book),
+            label: 'Đọc',
           ),
           NavigationDestination(
             icon: Icon(Icons.self_improvement_outlined),

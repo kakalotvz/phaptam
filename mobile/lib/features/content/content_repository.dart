@@ -74,4 +74,19 @@ class ContentRepository {
       publishedAt: DateTime(2026, 4, 29),
     ),
   ];
+
+  List<Scripture> get scriptures => const [
+    Scripture(
+      id: 's1',
+      title: 'Bài đọc mẫu',
+      description: 'Bản đọc ngắn để kiểm tra trải nghiệm chữ chạy.',
+      lines: [
+        ScriptureLine(content: 'Nam mô A Di Đà Phật', startTime: Duration.zero),
+        ScriptureLine(content: 'Nguyện đem công đức này', startTime: Duration(seconds: 4)),
+        ScriptureLine(content: 'Hướng về khắp tất cả', startTime: Duration(seconds: 8)),
+        ScriptureLine(content: 'Đệ tử và chúng sanh', startTime: Duration(seconds: 12)),
+        ScriptureLine(content: 'Đều trọn thành Phật đạo', startTime: Duration(seconds: 16)),
+      ],
+    ),
+  ];
 }

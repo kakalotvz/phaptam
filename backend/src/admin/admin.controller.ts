@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { generateScriptureTiming, validateScriptureLines } from '../scripture/timing';
 
 @Controller('admin')
 export class AdminController {
@@ -9,7 +10,7 @@ export class AdminController {
 
   @Get('overview')
   async overview() {
-    const [audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount, userCount] = await Promise.all([
+    const [audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount, userCount, scriptureCount] = await Promise.all([
       this.prisma.audio.count(),
       this.prisma.video.count(),
       this.prisma.audioCategory.count(),
@@ -17,9 +18,10 @@ export class AdminController {
       this.prisma.rssSource.count(),
       this.prisma.feedback.count(),
       this.prisma.user.count(),
+      this.prisma.scripture.count(),
     ]);
 
-    return { audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount, userCount };
+    return { audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount, userCount, scriptureCount };
   }
 
   @Get('users')
@@ -123,6 +125,122 @@ export class AdminController {
   @Delete('audio/:id')
   deleteAudio(@Param('id') id: string) {
     return this.prisma.audio.delete({ where: { id } });
+  }
+
+  @Get('scripture')
+  scriptures() {
+    return this.prisma.scripture.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        category: true,
+        lines: { orderBy: { orderIndex: 'asc' } },
+      },
+      take: 100,
+    });
+  }
+
+  @Post('scripture/generate-timing')
+  generateScriptureTiming(@Body() data: { lines: string[]; audioDuration?: number }) {
+    return generateScriptureTiming(data.lines ?? [], Number(data.audioDuration || 0) || undefined);
+  }
+
+  @Post('scripture')
+  async createScripture(
+    @Body()
+    data: {
+      title: string;
+      description?: string;
+      categoryId?: string;
+      lines: Array<{ content: string; start_time?: number; startTime?: number }>;
+    },
+  ) {
+    const lines = (data.lines ?? []).map((line) => ({
+      content: line.content,
+      start_time: Number(line.start_time ?? line.startTime),
+    }));
+
+    try {
+      validateScriptureLines(lines);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'Dữ liệu dòng kinh không hợp lệ');
+    }
+
+    return this.prisma.scripture.create({
+      data: {
+        title: data.title,
+        description: data.description,
+        categoryId: data.categoryId || null,
+        lines: {
+          create: lines.map((line, orderIndex) => ({
+            content: line.content.trim(),
+            startTime: line.start_time,
+            orderIndex,
+          })),
+        },
+      },
+      include: {
+        category: true,
+        lines: { orderBy: { orderIndex: 'asc' } },
+      },
+    });
+  }
+
+  @Patch('scripture/:id')
+  async updateScripture(
+    @Param('id') id: string,
+    @Body()
+    data: {
+      title?: string;
+      description?: string;
+      categoryId?: string;
+      lines?: Array<{ content: string; start_time?: number; startTime?: number }>;
+    },
+  ) {
+    const lines = data.lines?.map((line) => ({
+      content: line.content,
+      start_time: Number(line.start_time ?? line.startTime),
+    }));
+
+    if (lines) {
+      try {
+        validateScriptureLines(lines);
+      } catch (error) {
+        throw new BadRequestException(error instanceof Error ? error.message : 'Dữ liệu dòng kinh không hợp lệ');
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      if (lines) {
+        await tx.scriptureLine.deleteMany({ where: { scriptureId: id } });
+      }
+
+      return tx.scripture.update({
+        where: { id },
+        data: {
+          title: data.title,
+          description: data.description,
+          categoryId: data.categoryId === undefined ? undefined : data.categoryId || null,
+          lines: lines
+            ? {
+                create: lines.map((line, orderIndex) => ({
+                  content: line.content.trim(),
+                  startTime: line.start_time,
+                  orderIndex,
+                })),
+              }
+            : undefined,
+        },
+        include: {
+          category: true,
+          lines: { orderBy: { orderIndex: 'asc' } },
+        },
+      });
+    });
+  }
+
+  @Delete('scripture/:id')
+  deleteScripture(@Param('id') id: string) {
+    return this.prisma.scripture.delete({ where: { id } });
   }
 
   @Get('video')

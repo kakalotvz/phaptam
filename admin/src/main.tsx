@@ -11,12 +11,16 @@ import '@fontsource/noto-serif/800.css';
 import {
   BarChart3,
   BookAudio,
+  BookOpenText,
   Clapperboard,
   FileText,
   Image,
   LayoutDashboard,
   MessageSquareText,
   Newspaper,
+  Pause,
+  Play,
+  Plus,
   ShieldCheck,
   Quote,
   RefreshCcw,
@@ -37,19 +41,22 @@ import {
   Quote as QuoteRecord,
   RssSource,
   setApiBaseUrl,
+  Scripture,
+  ScriptureLine,
   uploadToR2,
   Video,
   VideoCategory,
 } from './lib/api';
 import './styles.css';
 
-type Section = 'overview' | 'audio' | 'video' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
+type Section = 'overview' | 'audio' | 'scripture' | 'video' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
 
 type DataState = {
   overview: Record<string, number>;
   audioCategories: AudioCategory[];
   videoCategories: VideoCategory[];
   audios: Audio[];
+  scriptures: Scripture[];
   videos: Video[];
   rss: RssSource[];
   quotes: QuoteRecord[];
@@ -63,6 +70,7 @@ const emptyData: DataState = {
   audioCategories: [],
   videoCategories: [],
   audios: [],
+  scriptures: [],
   videos: [],
   rss: [],
   quotes: [],
@@ -74,6 +82,7 @@ const emptyData: DataState = {
 const nav = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'audio', label: 'Kinh audio', icon: BookAudio },
+  { id: 'scripture', label: 'Đọc Kinh', icon: BookOpenText },
   { id: 'video', label: 'Video giảng', icon: Clapperboard },
   { id: 'rss', label: 'Nguồn RSS', icon: Newspaper },
   { id: 'quote', label: 'Lời nhắc', icon: Quote },
@@ -99,6 +108,7 @@ function App() {
         audioCategories,
         videoCategories,
         audios,
+        scriptures,
         videos,
         rss,
         quotes,
@@ -110,6 +120,7 @@ function App() {
         api.audioCategories(),
         api.videoCategories(),
         api.audios(),
+        api.scriptures(),
         api.videos(),
         api.rss(),
         api.quotes(),
@@ -117,7 +128,7 @@ function App() {
         api.feedback(),
         api.users(),
       ]);
-      setData({ overview, audioCategories, videoCategories, audios, videos, rss, quotes, banners, feedback, users });
+      setData({ overview, audioCategories, videoCategories, audios, scriptures, videos, rss, quotes, banners, feedback, users });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không tải được dữ liệu');
     } finally {
@@ -188,6 +199,7 @@ function App() {
           <>
             {section === 'overview' && <Overview data={data} />}
             {section === 'audio' && <AudioManager data={data} run={run} />}
+            {section === 'scripture' && <ScriptureManager data={data} run={run} />}
             {section === 'video' && <VideoManager data={data} run={run} />}
             {section === 'rss' && <RssManager data={data} run={run} />}
             {section === 'quote' && <QuoteManager data={data} run={run} />}
@@ -206,6 +218,7 @@ function Overview({ data }: { data: DataState }) {
   const cards = [
     ['Danh mục audio', data.overview.audioCategoryCount ?? 0, BookAudio],
     ['Bài kinh audio', data.overview.audioCount ?? 0, FileText],
+    ['Bản đọc Kinh', data.overview.scriptureCount ?? 0, BookOpenText],
     ['Video', data.overview.videoCount ?? 0, Clapperboard],
     ['Nguồn RSS', data.overview.rssCount ?? 0, Newspaper],
     ['Tài khoản', data.overview.userCount ?? 0, ShieldCheck],
@@ -278,6 +291,237 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
           onDelete={(row) => run(() => api.remove(`/admin/audio/${row.id}`), 'Đã xóa audio')}
         />
       </Panel>
+    </div>
+  );
+}
+
+function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [rawText, setRawText] = useState('Nam mô A Di Đà Phật\nNguyện đem công đức này\nHướng về khắp tất cả\nĐệ tử và chúng sanh');
+  const [lines, setLines] = useState<Array<{ content: string; start_time: number }>>([
+    { content: 'Nam mô A Di Đà Phật', start_time: 0 },
+    { content: 'Nguyện đem công đức này', start_time: 4 },
+    { content: 'Hướng về khắp tất cả', start_time: 8 },
+    { content: 'Đệ tử và chúng sanh', start_time: 12 },
+  ]);
+
+  function splitText() {
+    setLines(
+      rawText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((content, index) => ({ content, start_time: index * 4 })),
+    );
+  }
+
+  async function autoTiming() {
+    const generated = await api.generateScriptureTiming({ lines: lines.map((line) => line.content) });
+    setLines(generated);
+  }
+
+  function importJson(file?: File) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = JSON.parse(String(reader.result));
+      setTitle(parsed.title ?? title);
+      setDescription(parsed.description ?? description);
+      setCategoryId(parsed.category_id ?? parsed.categoryId ?? categoryId);
+      setLines(
+        (parsed.lines ?? []).map((line: ScriptureLine, index: number) => ({
+          content: line.content,
+          start_time: Number(line.start_time ?? line.startTime ?? index * 4),
+        })),
+      );
+    };
+    reader.readAsText(file);
+  }
+
+  function updateLine(index: number, patch: Partial<{ content: string; start_time: number }>) {
+    setLines(lines.map((line, current) => (current === index ? { ...line, ...patch } : line)));
+  }
+
+  function moveLine(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= lines.length) return;
+    const next = [...lines];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    setLines(next);
+  }
+
+  return (
+    <div className="single-column">
+      <Panel title="Tạo bản Đọc Kinh">
+        <div className="scripture-create">
+          <label>
+            Tiêu đề
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh A Di Đà - bản đọc chậm" />
+          </label>
+          <label>
+            Danh mục
+            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+              <option value="">Không chọn</option>
+              {data.audioCategories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="span">
+            Mô tả
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+          <label className="span">
+            Dán nội dung Kinh, mỗi câu một dòng
+            <textarea className="scripture-raw" value={rawText} onChange={(event) => setRawText(event.target.value)} />
+          </label>
+          <div className="scripture-actions span">
+            <button className="ghost" type="button" onClick={splitText}>
+              <FileText size={16} />
+              Tách dòng
+            </button>
+            <button className="ghost" type="button" onClick={() => void autoTiming()}>
+              <RefreshCcw size={16} />
+              Tự tính thời gian
+            </button>
+            <label className="upload-button">
+              <Upload size={16} />
+              Upload JSON
+              <input type="file" accept="application/json,.json" onChange={(event) => importJson(event.target.files?.[0])} />
+            </label>
+            <button
+              className="primary"
+              type="button"
+              onClick={() =>
+                run(
+                  () =>
+                    api.create('/admin/scripture', {
+                      title,
+                      description,
+                      categoryId,
+                      lines,
+                    }),
+                  'Đã tạo bản Đọc Kinh',
+                )
+              }
+            >
+              <Save size={16} />
+              Lưu bản đọc
+            </button>
+          </div>
+        </div>
+      </Panel>
+
+      <div className="scripture-editor">
+        <Panel title="Dòng Kinh">
+          <div className="line-editor">
+            {lines.map((line, index) => (
+              <div className="line-row" key={`${index}-${line.content}`}>
+                <span>{index + 1}</span>
+                <textarea value={line.content} onChange={(event) => updateLine(index, { content: event.target.value })} />
+                <input type="number" min="0" step="0.1" value={line.start_time} onChange={(event) => updateLine(index, { start_time: Number(event.target.value) })} />
+                <button className="ghost icon-only" type="button" onClick={() => moveLine(index, -1)} aria-label="Đưa dòng lên">
+                  ↑
+                </button>
+                <button className="ghost icon-only" type="button" onClick={() => moveLine(index, 1)} aria-label="Đưa dòng xuống">
+                  ↓
+                </button>
+                <button className="danger icon-only" type="button" onClick={() => setLines(lines.filter((_, current) => current !== index))} aria-label="Xóa dòng">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button className="ghost" type="button" onClick={() => setLines([...lines, { content: '', start_time: lines.length ? lines[lines.length - 1].start_time + 4 : 0 }])}>
+            <Plus size={16} />
+            Thêm dòng
+          </button>
+        </Panel>
+        <Panel title="Preview đọc Kinh">
+          <ScripturePreview lines={lines} />
+        </Panel>
+      </div>
+
+      <Panel title="Danh sách bản Đọc Kinh">
+        <Table
+          rows={data.scriptures}
+          columns={[
+            ['title', 'Tiêu đề'],
+            [(row: Scripture) => row.category?.name ?? '-', 'Danh mục'],
+            [(row: Scripture) => row.lines?.length ?? row._count?.lines ?? 0, 'Số dòng'],
+          ]}
+          onDelete={(row) => run(() => api.remove(`/admin/scripture/${row.id}`), 'Đã xóa bản Đọc Kinh')}
+        />
+      </Panel>
+    </div>
+  );
+}
+
+function ScripturePreview({ lines }: { lines: Array<{ content: string; start_time: number }> }) {
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [elapsed, setElapsed] = useState(0);
+  const activeIndex = useMemo(() => {
+    let index = 0;
+    lines.forEach((line, current) => {
+      if (elapsed >= line.start_time) index = current;
+    });
+    return index;
+  }, [elapsed, lines]);
+
+  useEffect(() => {
+    if (!playing) return undefined;
+    let frame = 0;
+    let previous = performance.now();
+    const tick = (now: number) => {
+      setElapsed((value) => value + ((now - previous) / 1000) * speed);
+      previous = now;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, speed]);
+
+  return (
+    <div className="scripture-preview">
+      <div className="preview-toolbar">
+        <button className="primary" type="button" onClick={() => setPlaying(!playing)}>
+          {playing ? <Pause size={16} /> : <Play size={16} />}
+          {playing ? 'Tạm dừng' : 'Đọc thử'}
+        </button>
+        <button className="ghost" type="button" onClick={() => setElapsed(0)}>
+          <RefreshCcw size={16} />
+          Về đầu
+        </button>
+        {[0.75, 1, 1.25].map((value) => (
+          <button key={value} className={speed === value ? 'speed active' : 'speed'} type="button" onClick={() => setSpeed(value)}>
+            {value === 0.75 ? 'Chậm' : value === 1 ? 'Bình thường' : 'Nhanh'}
+          </button>
+        ))}
+        <label>
+          Tùy chỉnh {speed.toFixed(2)}x
+          <input type="range" min="0.5" max="2" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+        </label>
+      </div>
+      <div className="reader-stage">
+        <div className="reader-center-line" />
+        <div className="reader-lines" style={{ transform: `translateY(${160 - activeIndex * 58}px)` }}>
+          {lines.map((line, index) => (
+            <button
+              type="button"
+              key={`${index}-${line.start_time}`}
+              className={index === activeIndex ? 'reader-line active' : 'reader-line'}
+              onClick={() => setElapsed(line.start_time)}
+            >
+              {line.content || '...'}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

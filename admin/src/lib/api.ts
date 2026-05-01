@@ -25,6 +25,24 @@ export type Audio = {
   category?: AudioCategory;
 };
 
+export type ScriptureLine = {
+  id?: string;
+  content: string;
+  startTime?: number;
+  start_time?: number;
+  orderIndex?: number;
+};
+
+export type Scripture = {
+  id: string;
+  title: string;
+  description?: string;
+  categoryId?: string;
+  category?: AudioCategory;
+  lines: ScriptureLine[];
+  _count?: { lines: number };
+};
+
 export type Video = {
   id: string;
   title: string;
@@ -129,6 +147,12 @@ export const api = {
   audioCategories: () => request<AudioCategory[]>('/admin/audio-category'),
   videoCategories: () => request<VideoCategory[]>('/admin/video-category'),
   audios: () => request<Audio[]>('/admin/audio'),
+  scriptures: () => request<Scripture[]>('/admin/scripture'),
+  generateScriptureTiming: (data: { lines: string[]; audioDuration?: number }) =>
+    request<Array<{ content: string; start_time: number }>>('/admin/scripture/generate-timing', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   videos: () => request<Video[]>('/admin/video'),
   rss: () => request<RssSource[]>('/admin/rss'),
   quotes: () => request<Quote[]>('/admin/quote'),

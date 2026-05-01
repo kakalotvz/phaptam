@@ -21,6 +21,10 @@ final newsListProvider = Provider<List<NewsItem>>(
   (ref) => ref.watch(contentRepositoryProvider).news,
 );
 
+final scriptureListProvider = Provider<List<Scripture>>(
+  (ref) => ref.watch(contentRepositoryProvider).scriptures,
+);
+
 final selectedAudioCategoryProvider =
     NotifierProvider<SelectedAudioCategory, String?>(SelectedAudioCategory.new);
 

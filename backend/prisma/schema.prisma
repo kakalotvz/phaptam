@@ -42,6 +42,7 @@ model AudioCategory {
   name        String
   description String?
   audios      Audio[]
+  scriptures  Scripture[]
   createdAt   DateTime @default(now()) @map("created_at")
 }
 
@@ -180,4 +181,29 @@ model NewsItem {
   imageUrl    String?  @map("image_url")
   publishedAt DateTime @map("published_at")
   createdAt   DateTime @default(now()) @map("created_at")
+}
+
+model Scripture {
+  id          String          @id @default(uuid())
+  title       String
+  description String?
+  categoryId  String?         @map("category_id")
+  category    AudioCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  lines       ScriptureLine[]
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  @@index([categoryId])
+}
+
+model ScriptureLine {
+  id          String    @id @default(uuid())
+  scriptureId String    @map("scripture_id")
+  content     String
+  startTime   Float     @map("start_time")
+  orderIndex  Int       @map("order_index")
+  scripture   Scripture @relation(fields: [scriptureId], references: [id], onDelete: Cascade)
+
+  @@unique([scriptureId, startTime])
+  @@index([scriptureId, orderIndex])
 }
