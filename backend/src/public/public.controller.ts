@@ -7,7 +7,10 @@ export class PublicController {
 
   @Get('categories/audio')
   audioCategories() {
-    return this.prisma.audioCategory.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.audioCategory.findMany({
+      where: { audios: { some: {} } },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   @Get('categories/video')

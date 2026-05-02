@@ -215,9 +215,12 @@ class Scripture {
     required this.lines,
     this.description,
     this.backgroundImageUrl,
+    this.categoryId,
+    this.category,
   });
 
   factory Scripture.fromJson(Map<String, dynamic> json) {
+    final category = json['category'];
     final rawLines = json['lines'];
     final lines = rawLines is List
         ? rawLines
@@ -231,6 +234,10 @@ class Scripture {
       title: json['title'] as String? ?? 'Bản đọc Kinh',
       description: json['description'] as String?,
       backgroundImageUrl: json['backgroundImageUrl'] as String?,
+      categoryId: json['categoryId'] as String?,
+      category: category is Map<String, dynamic>
+          ? category['name'] as String? ?? 'Đọc kinh'
+          : null,
       lines: lines,
     );
   }
@@ -239,6 +246,8 @@ class Scripture {
   final String title;
   final String? description;
   final String? backgroundImageUrl;
+  final String? categoryId;
+  final String? category;
   final List<ScriptureLine> lines;
 }
 

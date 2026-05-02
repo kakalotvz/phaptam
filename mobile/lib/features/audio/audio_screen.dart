@@ -130,6 +130,7 @@ class _AudioPlayerSheet extends ConsumerStatefulWidget {
 
 class _AudioPlayerSheetState extends ConsumerState<_AudioPlayerSheet> {
   late final AudioPlayer _player;
+  final ScrollController _lyricsController = ScrollController();
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlayerState>? _stateSub;
   double progress = .32;
@@ -141,6 +142,8 @@ class _AudioPlayerSheetState extends ConsumerState<_AudioPlayerSheet> {
   Duration duration = Duration.zero;
   bool isPlaying = false;
   bool loading = true;
+  int _activeLyricIndex = 0;
+  static const double _lyricItemHeight = 58;
 
   String get repeatLabel => switch (repeatMode) {
     'three' => 'Lặp 3 lần',
@@ -200,6 +203,7 @@ class _AudioPlayerSheetState extends ConsumerState<_AudioPlayerSheet> {
   void dispose() {
     _positionSub?.cancel();
     _stateSub?.cancel();
+    _lyricsController.dispose();
     _player.dispose();
     super.dispose();
   }
@@ -251,154 +255,293 @@ class _AudioPlayerSheetState extends ConsumerState<_AudioPlayerSheet> {
   @override
   Widget build(BuildContext context) {
     final audio = widget.audio;
+    final scriptures =
+        ref.watch(scriptureListProvider).whenOrNull(data: (value) => value) ??
+        const <Scripture>[];
+    final transcript = _matchingScripture(scriptures, audio);
+    final transcriptLines = transcript?.lines ?? const <ScriptureLine>[];
+    final activeLyricIndex = _syncActiveLyric(transcriptLines);
     final downloads = ref
         .watch(mediaDownloadsProvider)
         .whenOrNull(data: (value) => value);
     final downloaded =
         downloads?.isDownloaded(mediaKey('audio', audio.id)) ?? false;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 8, 22, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Hero(
-            tag: 'audio-${audio.id}',
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: Image.network(
-                audio.thumbnailUrl,
-                width: 180,
-                height: 180,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.music_note, size: 72),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            audio.title,
-            textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            downloaded
-                ? 'Đang ưu tiên bản đã tải về'
-                : 'Dùng online, có thể tải về để nghe offline',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          Slider(
-            value: progress,
-            onChanged: loading
-                ? null
-                : (value) => unawaited(_seekToProgress(value)),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 8, 22, 32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_formatDuration(position)),
-              Text('-${_formatDuration(duration - position)}'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton.filledTonal(
-                onPressed: loading
-                    ? null
-                    : () => unawaited(_seekBy(const Duration(seconds: -10))),
-                icon: const Icon(Icons.replay_10),
-              ),
-              const SizedBox(width: 18),
-              IconButton.filled(
-                onPressed: _togglePlayback,
-                iconSize: 34,
-                icon: loading
-                    ? const SizedBox.square(
-                        dimension: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-              ),
-              const SizedBox(width: 18),
-              IconButton.filledTonal(
-                onPressed: loading
-                    ? null
-                    : () => unawaited(_seekBy(const Duration(seconds: 10))),
-                icon: const Icon(Icons.forward_10),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 10,
-            runSpacing: 8,
-            children: [
-              PopupMenuButton<double>(
-                onSelected: (value) {
-                  setState(() => speed = value);
-                  unawaited(_player.setSpeed(value));
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: .75, child: Text('Tốc độ 0.75x')),
-                  PopupMenuItem(value: 1, child: Text('Tốc độ 1.0x')),
-                  PopupMenuItem(value: 1.25, child: Text('Tốc độ 1.25x')),
-                  PopupMenuItem(value: 1.5, child: Text('Tốc độ 1.5x')),
-                ],
-                child: Chip(
-                  avatar: const Icon(Icons.speed, size: 18),
-                  label: Text(
-                    'Tốc độ ${speed.toStringAsFixed(speed == 1 ? 1 : 2)}x',
+              Hero(
+                tag: 'audio-${audio.id}',
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: Image.network(
+                    audio.thumbnailUrl,
+                    width: 180,
+                    height: 180,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Icon(Icons.music_note, size: 72),
                   ),
                 ),
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) => setState(() => repeatMode = value),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'once', child: Text('Lặp lại 1 lần')),
-                  PopupMenuItem(value: 'three', child: Text('Lặp lại 3 lần')),
-                  PopupMenuItem(
-                    value: 'forever',
-                    child: Text('Lặp lại liên tục'),
-                  ),
-                  PopupMenuItem(value: 'custom', child: Text('Tùy chỉnh')),
+              const SizedBox(height: 18),
+              Text(
+                audio.title,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                downloaded
+                    ? 'Đang ưu tiên bản đã tải về'
+                    : 'Dùng online, có thể tải về để nghe offline',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              Slider(
+                value: progress,
+                onChanged: loading
+                    ? null
+                    : (value) => unawaited(_seekToProgress(value)),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_formatDuration(position)),
+                  Text('-${_formatDuration(duration - position)}'),
                 ],
-                child: Chip(
-                  avatar: const Icon(Icons.repeat, size: 18),
-                  label: Text(repeatLabel),
-                ),
               ),
-              ActionChip(
-                avatar: const Icon(Icons.bedtime_outlined, size: 18),
-                label: Text(
-                  sleepTimer == null
-                      ? 'Hẹn giờ'
-                      : '${sleepTimer!.inMinutes} phút',
+              if (transcriptLines.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _AudioLyricsView(
+                  controller: _lyricsController,
+                  lines: transcriptLines,
+                  activeIndex: activeLyricIndex,
+                  itemHeight: _lyricItemHeight,
+                  onLineTap: (line) {
+                    unawaited(_player.seek(line.startTime));
+                    if (!isPlaying && !loading) unawaited(_player.play());
+                  },
                 ),
-                onPressed: pickSleepTimer,
+              ],
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton.filledTonal(
+                    onPressed: loading
+                        ? null
+                        : () =>
+                              unawaited(_seekBy(const Duration(seconds: -10))),
+                    icon: const Icon(Icons.replay_10),
+                  ),
+                  const SizedBox(width: 18),
+                  IconButton.filled(
+                    onPressed: _togglePlayback,
+                    iconSize: 34,
+                    icon: loading
+                        ? const SizedBox.square(
+                            dimension: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+                  ),
+                  const SizedBox(width: 18),
+                  IconButton.filledTonal(
+                    onPressed: loading
+                        ? null
+                        : () => unawaited(_seekBy(const Duration(seconds: 10))),
+                    icon: const Icon(Icons.forward_10),
+                  ),
+                ],
               ),
+              const SizedBox(height: 18),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 8,
+                children: [
+                  PopupMenuButton<double>(
+                    onSelected: (value) {
+                      setState(() => speed = value);
+                      unawaited(_player.setSpeed(value));
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: .75, child: Text('Tốc độ 0.75x')),
+                      PopupMenuItem(value: 1, child: Text('Tốc độ 1.0x')),
+                      PopupMenuItem(value: 1.25, child: Text('Tốc độ 1.25x')),
+                      PopupMenuItem(value: 1.5, child: Text('Tốc độ 1.5x')),
+                    ],
+                    child: Chip(
+                      avatar: const Icon(Icons.speed, size: 18),
+                      label: Text(
+                        'Tốc độ ${speed.toStringAsFixed(speed == 1 ? 1 : 2)}x',
+                      ),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) => setState(() => repeatMode = value),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'once',
+                        child: Text('Lặp lại 1 lần'),
+                      ),
+                      PopupMenuItem(
+                        value: 'three',
+                        child: Text('Lặp lại 3 lần'),
+                      ),
+                      PopupMenuItem(
+                        value: 'forever',
+                        child: Text('Lặp lại liên tục'),
+                      ),
+                      PopupMenuItem(value: 'custom', child: Text('Tùy chỉnh')),
+                    ],
+                    child: Chip(
+                      avatar: const Icon(Icons.repeat, size: 18),
+                      label: Text(repeatLabel),
+                    ),
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.bedtime_outlined, size: 18),
+                    label: Text(
+                      sleepTimer == null
+                          ? 'Hẹn giờ'
+                          : '${sleepTimer!.inMinutes} phút',
+                    ),
+                    onPressed: pickSleepTimer,
+                  ),
+                ],
+              ),
+              if (repeatMode == 'custom')
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: TextField(
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Số lần lặp lại',
+                    ),
+                    onChanged: (value) {
+                      final parsed = int.tryParse(value);
+                      if (parsed != null && parsed > 0) {
+                        setState(() => customRepeatCount = parsed);
+                      }
+                    },
+                  ),
+                ),
             ],
           ),
-          if (repeatMode == 'custom')
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: TextField(
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Số lần lặp lại'),
-                onChanged: (value) {
-                  final parsed = int.tryParse(value);
-                  if (parsed != null && parsed > 0) {
-                    setState(() => customRepeatCount = parsed);
-                  }
-                },
+        ),
+      ),
+    );
+  }
+
+  Scripture? _matchingScripture(List<Scripture> scriptures, AudioItem audio) {
+    final audioTitle = _normalizeMatchText(audio.title);
+    final audioCategory = _normalizeMatchText(audio.category);
+    for (final scripture in scriptures) {
+      final title = _normalizeMatchText(scripture.title);
+      final category = _normalizeMatchText(scripture.category ?? '');
+      if (title.isEmpty && category.isEmpty) continue;
+      if (_containsMatch(audioTitle, title) ||
+          _containsMatch(title, audioTitle) ||
+          audioCategory == category ||
+          _containsMatch(audioCategory, title) ||
+          _containsMatch(category, audioCategory)) {
+        return scripture;
+      }
+    }
+    return null;
+  }
+
+  int _syncActiveLyric(List<ScriptureLine> lines) {
+    if (lines.isEmpty) return 0;
+    var nextIndex = 0;
+    for (var index = 0; index < lines.length; index++) {
+      if (position >= lines[index].startTime) nextIndex = index;
+    }
+    if (nextIndex != _activeLyricIndex) {
+      _activeLyricIndex = nextIndex;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_lyricsController.hasClients) return;
+        final max = _lyricsController.position.maxScrollExtent;
+        final target = (nextIndex * _lyricItemHeight).clamp(0, max).toDouble();
+        _lyricsController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+        );
+      });
+    }
+    return _activeLyricIndex;
+  }
+}
+
+class _AudioLyricsView extends StatelessWidget {
+  const _AudioLyricsView({
+    required this.controller,
+    required this.lines,
+    required this.activeIndex,
+    required this.itemHeight,
+    required this.onLineTap,
+  });
+
+  final ScrollController controller;
+  final List<ScriptureLine> lines;
+  final int activeIndex;
+  final double itemHeight;
+  final ValueChanged<ScriptureLine> onLineTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      height: 190,
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: .58),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: ListView.builder(
+        controller: controller,
+        padding: const EdgeInsets.symmetric(vertical: 66, horizontal: 12),
+        itemExtent: itemHeight,
+        itemCount: lines.length,
+        itemBuilder: (context, index) {
+          final active = index == activeIndex;
+          return InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => onLineTap(lines[index]),
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 180),
+              textAlign: TextAlign.center,
+              style:
+                  Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: active
+                        ? colorScheme.primary
+                        : colorScheme.onSurface.withValues(alpha: .52),
+                    fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                    height: 1.25,
+                  ) ??
+                  TextStyle(
+                    color: active
+                        ? colorScheme.primary
+                        : colorScheme.onSurface.withValues(alpha: .52),
+                    fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                  ),
+              child: Center(
+                child: Text(
+                  lines[index].content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -416,4 +559,12 @@ String _formatDuration(Duration duration) {
   final seconds = safe.inSeconds.remainder(60).toString().padLeft(2, '0');
   if (hours > 0) return '$hours:$minutes:$seconds';
   return '$minutes:$seconds';
+}
+
+String _normalizeMatchText(String value) {
+  return value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+bool _containsMatch(String source, String query) {
+  return source.isNotEmpty && query.isNotEmpty && source.contains(query);
 }

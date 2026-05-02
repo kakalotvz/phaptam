@@ -412,6 +412,11 @@ function Overview({ data }: { data: DataState }) {
 }
 
 function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
+  const scriptureCategoryIds = new Set(data.scriptures.map((scripture) => scripture.categoryId).filter(Boolean));
+  const audioCategories = data.audioCategories.filter(
+    (item) => (item._count?.audios ?? 0) > 0 || !scriptureCategoryIds.has(item.id),
+  );
+
   function editCategory(row: AudioCategory) {
     const name = askText('Tên danh mục', row.name);
     if (name === undefined) return;
@@ -453,14 +458,14 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
             ['audioUrl', 'Tệp audio MP3', 'upload:audio/library'],
             ['thumbnailUrl', 'Ảnh đại diện', 'upload:images/audio'],
             ['duration', 'Thời lượng giây', 'number'],
-            ['categoryId', 'Danh mục', 'select', data.audioCategories.map((item) => [item.id, item.name])],
+            ['categoryId', 'Danh mục', 'select', audioCategories.map((item) => [item.id, item.name])],
           ]}
           onSubmit={(values) => run(() => api.create('/admin/audio', { ...values, duration: Number(values.duration || 0) }), 'Đã thêm audio')}
         />
       </Panel>
       <Panel title="Danh mục audio" className="span">
         <Table
-          rows={data.audioCategories}
+          rows={audioCategories}
           columns={[
             ['name', 'Tên'],
             ['description', 'Mô tả'],
@@ -522,6 +527,10 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     [title, description, backgroundImageUrl, categoryId, rawText, lines],
   );
   const hasUnsavedChanges = currentDraft !== savedDraftRef.current;
+  const scriptureCategoryIds = new Set(data.scriptures.map((scripture) => scripture.categoryId).filter(Boolean));
+  const scriptureCategories = data.audioCategories.filter(
+    (item) => scriptureCategoryIds.has(item.id) || (item._count?.audios ?? 0) === 0,
+  );
 
   useEffect(() => {
     return () => window.clearTimeout(autoTimingTimer.current);
@@ -717,7 +726,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
       </Panel>
       <Panel title="Danh mục Đọc Kinh">
         <Table
-          rows={data.audioCategories}
+          rows={scriptureCategories}
           columns={[
             ['name', 'Tên'],
             ['description', 'Mô tả'],
@@ -762,7 +771,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             Danh mục
             <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
               <option value="">Không chọn</option>
-              {data.audioCategories.map((item) => (
+              {scriptureCategories.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
                 </option>

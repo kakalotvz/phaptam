@@ -220,6 +220,8 @@ class _ScriptureContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scriptureGroups = _groupScriptures(scriptures);
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
@@ -305,29 +307,124 @@ class _ScriptureContent extends StatelessWidget {
               title: Text('Chưa có bản Đọc Kinh'),
             ),
           ),
-        for (final scripture in scriptures)
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.menu_book_outlined),
-              title: Text(scripture.title),
-              subtitle: Text(
-                scripture.lines.isEmpty
-                    ? 'Chưa có dòng kinh'
-                    : scripture.description ?? '${scripture.lines.length} dòng',
-              ),
-              trailing: scripture.lines.isEmpty
-                  ? const Icon(Icons.info_outline)
-                  : const Icon(Icons.chevron_right),
-              onTap: scripture.lines.isEmpty
-                  ? null
-                  : () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ScriptureReader(scripture: scripture),
-                      ),
-                    ),
+        for (final group in scriptureGroups) ...[
+          _ScriptureGroupCard(group: group),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+}
+
+class _ScriptureGroup {
+  const _ScriptureGroup({required this.title, required this.items});
+
+  final String title;
+  final List<Scripture> items;
+}
+
+List<_ScriptureGroup> _groupScriptures(List<Scripture> scriptures) {
+  final grouped = <String, List<Scripture>>{};
+  for (final scripture in scriptures) {
+    final title = (scripture.category?.trim().isNotEmpty ?? false)
+        ? scripture.category!.trim()
+        : scripture.title.trim();
+    grouped.putIfAbsent(title, () => []).add(scripture);
+  }
+  return [
+    for (final entry in grouped.entries)
+      _ScriptureGroup(title: entry.key, items: entry.value),
+  ];
+}
+
+class _ScriptureGroupCard extends StatelessWidget {
+  const _ScriptureGroupCard({required this.group});
+
+  final _ScriptureGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final shouldOpenSubcategory =
+        group.items.length > 1 ||
+        ((group.items.first.category?.trim().isNotEmpty ?? false) &&
+            group.items.first.title.trim() != group.title);
+    if (!shouldOpenSubcategory) {
+      return _ScriptureListCard(scripture: group.items.first);
+    }
+
+    final totalLines = group.items.fold<int>(
+      0,
+      (sum, scripture) => sum + scripture.lines.length,
+    );
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.menu_book_outlined),
+        title: Text(group.title),
+        subtitle: Text('${group.items.length} phẩm • $totalLines dòng'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => _ScriptureCategoryScreen(
+              title: group.title,
+              items: group.items,
             ),
           ),
-      ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScriptureListCard extends StatelessWidget {
+  const _ScriptureListCard({required this.scripture});
+
+  final Scripture scripture;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.menu_book_outlined),
+        title: Text(scripture.title),
+        subtitle: Text(
+          scripture.lines.isEmpty
+              ? 'Chưa có dòng kinh'
+              : scripture.description ?? '${scripture.lines.length} dòng',
+        ),
+        trailing: scripture.lines.isEmpty
+            ? const Icon(Icons.info_outline)
+            : const Icon(Icons.chevron_right),
+        onTap: scripture.lines.isEmpty
+            ? null
+            : () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ScriptureReader(scripture: scripture),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _ScriptureCategoryScreen extends StatelessWidget {
+  const _ScriptureCategoryScreen({required this.title, required this.items});
+
+  final String title;
+  final List<Scripture> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+        children: [
+          for (final scripture in items) ...[
+            _ScriptureListCard(scripture: scripture),
+            const SizedBox(height: 12),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -986,7 +1083,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
               Positioned(
                 left: 0,
                 right: 0,
-                bottom: 84,
+                bottom: 46,
                 child: Center(
                   child: SafeArea(
                     top: false,
