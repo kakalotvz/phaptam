@@ -67,6 +67,7 @@ import {
   NewsCategory,
   NewsItem,
   Quote as QuoteRecord,
+  R2Usage,
   RssSource,
   setApiBaseUrl,
   Scripture,
@@ -2534,26 +2535,75 @@ function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
 
 function SettingsPanel({ onSaved }: { onSaved: () => void }) {
   const [value, setValue] = useState(getApiBaseUrl());
+  const [usage, setUsage] = useState<R2Usage | null>(null);
+  const [usageError, setUsageError] = useState('');
+
+  async function loadUsage() {
+    setUsageError('');
+    try {
+      setUsage(await api.r2Usage());
+    } catch (error) {
+      setUsageError(error instanceof Error ? error.message : 'Không tải được usage R2');
+    }
+  }
+
+  useEffect(() => {
+    void loadUsage();
+  }, []);
+
   return (
-    <Panel title="Cấu hình kết nối API">
-      <form
-        className="form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setApiBaseUrl(value);
-          void onSaved();
-        }}
-      >
-        <label>
-          API Base URL
-          <input value={value} onChange={(event) => setValue(event.target.value)} />
-        </label>
-        <button className="primary" type="submit">
-          <Save size={16} />
-          Lưu cấu hình
+    <div className="single-column">
+      <Panel title="Cấu hình kết nối API">
+        <form
+          className="form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setApiBaseUrl(value);
+            void onSaved();
+            void loadUsage();
+          }}
+        >
+          <label>
+            API Base URL
+            <input value={value} onChange={(event) => setValue(event.target.value)} />
+          </label>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu cấu hình
+          </button>
+        </form>
+      </Panel>
+      <Panel title="Usage R2">
+        <div className="usage-grid">
+          <article>
+            <span>Bucket</span>
+            <strong>{usage?.bucket ?? '-'}</strong>
+          </article>
+          <article>
+            <span>Dung lượng</span>
+            <strong>{usage ? formatBytes(usage.storageBytes) : '-'}</strong>
+          </article>
+          <article>
+            <span>Số object</span>
+            <strong>{usage?.objectCount ?? '-'}</strong>
+          </article>
+          <article>
+            <span>Băng thông 30 ngày</span>
+            <strong>{usage?.bandwidth.available ? formatBytes(usage.bandwidth.bytes ?? 0) : 'Chưa có dữ liệu'}</strong>
+          </article>
+          <article>
+            <span>Requests 30 ngày</span>
+            <strong>{usage?.bandwidth.available ? usage.bandwidth.requests?.toLocaleString('vi-VN') : '-'}</strong>
+          </article>
+        </div>
+        {usage?.bandwidth.reason && <p className="field-note">Băng thông cần cấu hình CLOUDFLARE_API_TOKEN trên backend để đọc Cloudflare GraphQL.</p>}
+        {usageError && <p className="error">{usageError}</p>}
+        <button className="ghost" type="button" onClick={() => void loadUsage()}>
+          <RefreshCcw size={16} />
+          Tải lại usage
         </button>
-      </form>
-    </Panel>
+      </Panel>
+    </div>
   );
 }
 
@@ -2604,6 +2654,19 @@ function formatDurationSeconds(seconds?: number) {
   const minutes = Math.floor((safe % 3600) / 60).toString().padStart(2, '0');
   const rest = Math.floor(safe % 60).toString().padStart(2, '0');
   return hours > 0 ? `${hours}:${minutes}:${rest}` : `${minutes}:${rest}`;
+}
+
+function formatBytes(bytes?: number | null) {
+  const safe = Math.max(0, Number(bytes || 0));
+  if (safe < 1024) return `${safe} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = safe / 1024;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[index]}`;
 }
 
 function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: Record<string, string>) => void }) {

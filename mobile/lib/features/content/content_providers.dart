@@ -112,7 +112,7 @@ void refreshPublicContent(WidgetRef ref) {
 }
 
 void _refreshPeriodically(Ref ref) {
-  final timer = Timer(const Duration(seconds: 15), ref.invalidateSelf);
+  final timer = Timer(const Duration(minutes: 5), ref.invalidateSelf);
   ref.onDispose(timer.cancel);
 }
 

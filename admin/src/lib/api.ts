@@ -166,6 +166,18 @@ export type PresignedUpload = {
   publicUrl: string;
 };
 
+export type R2Usage = {
+  bucket: string;
+  objectCount: number;
+  storageBytes: number;
+  bandwidth: {
+    available: boolean;
+    reason: string | null;
+    requests: number | null;
+    bytes: number | null;
+  };
+};
+
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
 
 export function defaultApiBaseUrl() {
@@ -233,6 +245,7 @@ export const api = {
   meditationPrograms: () => request<MeditationProgram[]>('/admin/meditation'),
   feedback: () => request<Feedback[]>('/admin/feedback'),
   users: () => request<AdminUser[]>('/admin/users'),
+  r2Usage: () => request<R2Usage>('/admin/r2/usage'),
   presignedUrl: (data: { kind: UploadKind; contentType: string }) =>
     request<PresignedUpload>('/upload/presigned-url', {
       method: 'POST',

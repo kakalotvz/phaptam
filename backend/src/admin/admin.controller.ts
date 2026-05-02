@@ -3,10 +3,11 @@ import { NewsSourceType, ReminderResumeMode, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateScriptureTiming, validateScriptureLines } from '../scripture/timing';
+import { R2Service } from '../storage/r2.service';
 
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly r2: R2Service) {}
 
   @Get('overview')
   async overview() {
@@ -52,6 +53,11 @@ export class AdminController {
       scriptureReminderCount,
       meditationProgramCount,
     };
+  }
+
+  @Get('r2/usage')
+  r2Usage() {
+    return this.r2.usage();
   }
 
   @Get('users')
@@ -160,13 +166,22 @@ export class AdminController {
   }
 
   @Patch('audio/:id')
-  updateAudio(@Param('id') id: string, @Body() data: { title?: string; description?: string; audioUrl?: string; thumbnailUrl?: string; categoryId?: string; duration?: number }) {
-    return this.prisma.audio.update({ where: { id }, data });
+  async updateAudio(@Param('id') id: string, @Body() data: { title?: string; description?: string; audioUrl?: string; thumbnailUrl?: string; categoryId?: string; duration?: number }) {
+    const current = await this.prisma.audio.findUniqueOrThrow({ where: { id } });
+    const updated = await this.prisma.audio.update({ where: { id }, data });
+    await this.deleteReplacedR2Media([
+      [current.audioUrl, data.audioUrl],
+      [current.thumbnailUrl, data.thumbnailUrl],
+    ]);
+    return updated;
   }
 
   @Delete('audio/:id')
-  deleteAudio(@Param('id') id: string) {
-    return this.prisma.audio.delete({ where: { id } });
+  async deleteAudio(@Param('id') id: string) {
+    const audio = await this.prisma.audio.findUniqueOrThrow({ where: { id } });
+    const deleted = await this.prisma.audio.delete({ where: { id } });
+    await this.r2.deletePublicUrls([audio.audioUrl, audio.thumbnailUrl]);
+    return deleted;
   }
 
   @Get('scripture')
@@ -395,13 +410,22 @@ export class AdminController {
   }
 
   @Patch('video/:id')
-  updateVideo(@Param('id') id: string, @Body() data: { title?: string; description?: string; videoUrl?: string; thumbnailUrl?: string; categoryId?: string; teacher?: string }) {
-    return this.prisma.video.update({ where: { id }, data });
+  async updateVideo(@Param('id') id: string, @Body() data: { title?: string; description?: string; videoUrl?: string; thumbnailUrl?: string; categoryId?: string; teacher?: string }) {
+    const current = await this.prisma.video.findUniqueOrThrow({ where: { id } });
+    const updated = await this.prisma.video.update({ where: { id }, data });
+    await this.deleteReplacedR2Media([
+      [current.videoUrl, data.videoUrl],
+      [current.thumbnailUrl, data.thumbnailUrl],
+    ]);
+    return updated;
   }
 
   @Delete('video/:id')
-  deleteVideo(@Param('id') id: string) {
-    return this.prisma.video.delete({ where: { id } });
+  async deleteVideo(@Param('id') id: string) {
+    const video = await this.prisma.video.findUniqueOrThrow({ where: { id } });
+    const deleted = await this.prisma.video.delete({ where: { id } });
+    await this.r2.deletePublicUrls([video.videoUrl, video.thumbnailUrl]);
+    return deleted;
   }
 
   @Get('banner')
@@ -552,7 +576,7 @@ export class AdminController {
   }
 
   @Patch('news/:id')
-  updateNewsItem(
+  async updateNewsItem(
     @Param('id') id: string,
     @Body()
     data: {
@@ -568,7 +592,8 @@ export class AdminController {
       publishedAt?: string;
     },
   ) {
-    return this.prisma.newsItem.update({
+    const current = await this.prisma.newsItem.findUniqueOrThrow({ where: { id } });
+    const updated = await this.prisma.newsItem.update({
       where: { id },
       data: {
         title: data.title,
@@ -584,11 +609,17 @@ export class AdminController {
       },
       include: { category: true },
     });
+    await this.deleteReplacedR2Media([[current.imageUrl, data.imageUrl]]);
+    await this.r2.deletePublicUrls(removedR2Urls(current.content, data.content));
+    return updated;
   }
 
   @Delete('news/:id')
-  deleteNewsItem(@Param('id') id: string) {
-    return this.prisma.newsItem.delete({ where: { id } });
+  async deleteNewsItem(@Param('id') id: string) {
+    const item = await this.prisma.newsItem.findUniqueOrThrow({ where: { id } });
+    const deleted = await this.prisma.newsItem.delete({ where: { id } });
+    await this.r2.deletePublicUrls([item.imageUrl, ...extractUrls(item.content)]);
+    return deleted;
   }
 
   @Get('feedback')
@@ -600,4 +631,18 @@ export class AdminController {
   deleteFeedback(@Param('id') id: string) {
     return this.prisma.feedback.delete({ where: { id } });
   }
+
+  private async deleteReplacedR2Media(pairs: Array<[string | null | undefined, string | null | undefined]>) {
+    await this.r2.deletePublicUrls(pairs.filter(([previous, next]) => next !== undefined && previous !== next).map(([previous]) => previous));
+  }
+}
+
+function extractUrls(value?: string | null) {
+  if (!value) return [];
+  return Array.from(value.matchAll(/https?:\/\/[^\s"'<>]+/g)).map((match) => match[0]);
+}
+
+function removedR2Urls(previous?: string | null, next?: string | null) {
+  const nextUrls = new Set(extractUrls(next));
+  return extractUrls(previous).filter((url) => !nextUrls.has(url));
 }

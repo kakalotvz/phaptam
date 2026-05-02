@@ -954,6 +954,34 @@ th {
   justify-content: flex-end;
 }
 
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.usage-grid article {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  background: #fffaf0;
+  border: 1px solid rgba(109, 76, 65, .12);
+  border-radius: 14px;
+}
+
+.usage-grid span {
+  color: #7a655b;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.usage-grid strong {
+  color: #2e2420;
+  font-size: 18px;
+}
+
 .notice,
 .error,
 .loading,
