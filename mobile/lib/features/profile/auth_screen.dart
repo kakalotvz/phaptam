@@ -209,18 +209,20 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           body['birthDate'] = birthDateController.text.trim();
         }
         final result = await apiClient.post('/auth/register', body);
-        apiClient.accessToken = result['accessToken'] as String?;
-        apiClient.currentUserId =
-            (result['user'] as Map<String, dynamic>?)?['id'] as String?;
+        await apiClient.saveSession(
+          token: result['accessToken'] as String?,
+          userId: (result['user'] as Map<String, dynamic>?)?['id'] as String?,
+        );
         ref.read(isLoggedInProvider.notifier).login();
       } else {
         final result = await apiClient.post('/auth/login', {
           'email': emailController.text.trim(),
           'password': passwordController.text,
         });
-        apiClient.accessToken = result['accessToken'] as String?;
-        apiClient.currentUserId =
-            (result['user'] as Map<String, dynamic>?)?['id'] as String?;
+        await apiClient.saveSession(
+          token: result['accessToken'] as String?,
+          userId: (result['user'] as Map<String, dynamic>?)?['id'] as String?,
+        );
         ref.read(isLoggedInProvider.notifier).login();
       }
       if (!mounted) return;

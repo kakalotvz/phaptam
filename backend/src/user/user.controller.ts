@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Put, Req, UnauthorizedException } from '@nestjs/common';
 import { IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
 import { JwtService } from '@nestjs/jwt';
-import { FavoriteType, FeedbackType } from '@prisma/client';
+import { FavoriteType, FeedbackType, ReminderResumeMode } from '@prisma/client';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -37,6 +37,29 @@ class FeedbackDto {
   @IsOptional()
   @IsString()
   userId?: string;
+}
+
+class ScriptureReminderDto {
+  @IsString()
+  scriptureId!: string;
+
+  @IsString()
+  title!: string;
+
+  @IsString()
+  timeOfDay!: string;
+
+  weekdays!: number[];
+
+  @IsEnum(ReminderResumeMode)
+  resumeMode!: ReminderResumeMode;
+
+  @IsOptional()
+  active?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  lastLineIndex?: number;
 }
 
 @Controller()
@@ -118,6 +141,75 @@ export class UserController {
       update: { lastPosition: dto.lastPosition },
       create: { userId, audioId: dto.audioId, lastPosition: dto.lastPosition },
     });
+  }
+
+  @Get('me/scripture-reminders')
+  async scriptureReminders(@Req() request: Request) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.scriptureReminder.findMany({
+      where: { userId },
+      orderBy: { timeOfDay: 'asc' },
+      include: {
+        scripture: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            backgroundImageUrl: true,
+            lines: {
+              orderBy: { orderIndex: 'asc' },
+              select: { content: true, startTime: true },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  @Post('me/scripture-reminders')
+  async createScriptureReminder(@Req() request: Request, @Body() dto: ScriptureReminderDto) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.scriptureReminder.create({
+      data: {
+        userId,
+        scriptureId: dto.scriptureId,
+        title: dto.title,
+        timeOfDay: dto.timeOfDay,
+        weekdays: dto.weekdays ?? [],
+        resumeMode: dto.resumeMode,
+        active: dto.active ?? true,
+        lastLineIndex: dto.lastLineIndex ?? 0,
+      },
+      include: { scripture: { select: { id: true, title: true, description: true, backgroundImageUrl: true, lines: { orderBy: { orderIndex: 'asc' }, select: { content: true, startTime: true } } } } },
+    });
+  }
+
+  @Patch('me/scripture-reminders/:id')
+  async updateScriptureReminder(@Req() request: Request, @Param('id') id: string, @Body() dto: Partial<ScriptureReminderDto>) {
+    const userId = await this.userIdFromRequest(request);
+    const existing = await this.prisma.scriptureReminder.findFirst({ where: { id, userId }, select: { id: true } });
+    if (!existing) throw new NotFoundException('Không tìm thấy lịch nhắc');
+    return this.prisma.scriptureReminder.update({
+      where: { id },
+      data: {
+        scriptureId: dto.scriptureId,
+        title: dto.title,
+        timeOfDay: dto.timeOfDay,
+        weekdays: dto.weekdays,
+        resumeMode: dto.resumeMode,
+        active: dto.active,
+        lastLineIndex: dto.lastLineIndex,
+      },
+      include: { scripture: { select: { id: true, title: true, description: true, backgroundImageUrl: true, lines: { orderBy: { orderIndex: 'asc' }, select: { content: true, startTime: true } } } } },
+    });
+  }
+
+  @Delete('me/scripture-reminders/:id')
+  async deleteScriptureReminder(@Req() request: Request, @Param('id') id: string) {
+    const userId = await this.userIdFromRequest(request);
+    const existing = await this.prisma.scriptureReminder.findFirst({ where: { id, userId }, select: { id: true } });
+    if (!existing) throw new NotFoundException('Không tìm thấy lịch nhắc');
+    return this.prisma.scriptureReminder.delete({ where: { id } });
   }
 
   @Post('feedback')

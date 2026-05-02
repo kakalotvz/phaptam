@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
@@ -12,7 +13,8 @@ class ScriptureScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scripturesAsync = ref.watch(scriptureListProvider);
-    final reminders = ref.watch(scriptureReminderProvider);
+    final remindersAsync = ref.watch(scriptureReminderProvider);
+    final isLoggedIn = ref.watch(isLoggedInProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Đọc kinh')),
@@ -46,43 +48,104 @@ class ScriptureScreen extends ConsumerWidget {
               FilledButton.icon(
                 onPressed: scriptures.isEmpty
                     ? null
-                    : () => _showReminderSheet(context, ref, scriptures),
+                    : () {
+                        if (!isLoggedIn) {
+                          context.push('/login');
+                          return;
+                        }
+                        _showReminderSheet(context, ref, scriptures);
+                      },
                 icon: const Icon(Icons.add_alarm),
                 label: const Text('Đặt lịch nhắc tụng kinh'),
               ),
               const SizedBox(height: 16),
               Text('Lịch nhắc', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 10),
-              for (final reminder in reminders)
+              if (!isLoggedIn)
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.notifications_active_outlined),
-                    title: Text(reminder.title),
-                    subtitle: Text(
-                      '${_formatTime(reminder.timeOfDay)} • ${reminder.scripture.title}\n${_formatWeekdays(reminder.weekdays)} • ${reminder.resumeMode == ReminderResumeMode.resume ? 'Tiếp tục chỗ dừng' : 'Bắt đầu lại'}',
+                    leading: const Icon(Icons.lock_outline),
+                    title: const Text('Đăng nhập để đồng bộ lịch nhắc'),
+                    subtitle: const Text(
+                      'Lịch tụng kinh sẽ lưu theo tài khoản của bạn.',
                     ),
-                    isThreeLine: true,
-                    trailing: Switch(
-                      value: reminder.active,
-                      onChanged: (value) => ref
-                          .read(scriptureReminderProvider.notifier)
-                          .toggle(reminder.id, value),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/login'),
+                  ),
+                )
+              else
+                remindersAsync.when(
+                  loading: () => const Card(
+                    child: ListTile(
+                      leading: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      title: Text('Đang tải lịch nhắc...'),
                     ),
-                    onTap: () {
-                      final startIndex =
-                          reminder.resumeMode == ReminderResumeMode.resume
-                          ? reminder.lastLineIndex
-                          : 0;
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ScriptureReader(
-                            scripture: reminder.scripture,
-                            reminderId: reminder.id,
-                            initialLineIndex: startIndex,
+                  ),
+                  error: (error, stackTrace) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.wifi_off_outlined),
+                      title: const Text('Chưa tải được lịch nhắc'),
+                      subtitle: Text(error.toString()),
+                      trailing: IconButton(
+                        tooltip: 'Tải lại',
+                        onPressed: () =>
+                            ref.invalidate(scriptureReminderProvider),
+                        icon: const Icon(Icons.refresh),
+                      ),
+                    ),
+                  ),
+                  data: (reminders) => Column(
+                    children: [
+                      if (reminders.isEmpty)
+                        const Card(
+                          child: ListTile(
+                            leading: Icon(Icons.notifications_none_outlined),
+                            title: Text('Chưa có lịch nhắc'),
+                            subtitle: Text(
+                              'Tạo lịch nhắc để app báo giờ tụng kinh.',
+                            ),
                           ),
                         ),
-                      );
-                    },
+                      for (final reminder in reminders)
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(
+                              Icons.notifications_active_outlined,
+                            ),
+                            title: Text(reminder.title),
+                            subtitle: Text(
+                              '${_formatTime(reminder.timeOfDay)} • ${reminder.scripture.title}\n${_formatWeekdays(reminder.weekdays)} • ${reminder.resumeMode == ReminderResumeMode.resume ? 'Tiếp tục chỗ dừng' : 'Bắt đầu lại'}',
+                            ),
+                            isThreeLine: true,
+                            trailing: Switch(
+                              value: reminder.active,
+                              onChanged: (value) => ref
+                                  .read(scriptureReminderProvider.notifier)
+                                  .toggle(reminder.id, value),
+                            ),
+                            onTap: () {
+                              final startIndex =
+                                  reminder.resumeMode ==
+                                      ReminderResumeMode.resume
+                                  ? reminder.lastLineIndex
+                                  : 0;
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ScriptureReader(
+                                    scripture: reminder.scripture,
+                                    reminderId: reminder.id,
+                                    initialLineIndex: startIndex,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               const SizedBox(height: 20),
@@ -250,8 +313,8 @@ class ScriptureScreen extends ConsumerWidget {
                       label: const Text('Lưu lịch nhắc'),
                       onPressed: weekdays.isEmpty
                           ? null
-                          : () {
-                              ref
+                          : () async {
+                              await ref
                                   .read(scriptureReminderProvider.notifier)
                                   .add(
                                     title: title.trim().isEmpty
@@ -265,7 +328,7 @@ class ScriptureScreen extends ConsumerWidget {
                                     weekdays: weekdays,
                                     resumeMode: resumeMode,
                                   );
-                              Navigator.pop(context);
+                              if (context.mounted) Navigator.pop(context);
                             },
                     ),
                   ),
@@ -427,7 +490,8 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     if (widget.reminderId != null) {
       ProviderScope.containerOf(context)
           .read(scriptureReminderProvider.notifier)
-          .saveProgress(widget.reminderId!, index);
+          .saveProgress(widget.reminderId!, index)
+          .ignore();
     }
     _centerLine(index);
   }

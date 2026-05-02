@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/notifications/notification_service.dart';
 import 'content_models.dart';
 
 final audioCategoriesProvider = FutureProvider<List<AudioCategory>>((
@@ -89,49 +90,77 @@ final scriptureListProvider = FutureProvider<List<Scripture>>((ref) async {
 });
 
 final scriptureReminderProvider =
-    NotifierProvider<ScriptureReminderState, List<ScriptureReminder>>(
+    AsyncNotifierProvider<ScriptureReminderState, List<ScriptureReminder>>(
       ScriptureReminderState.new,
     );
 
-class ScriptureReminderState extends Notifier<List<ScriptureReminder>> {
+class ScriptureReminderState extends AsyncNotifier<List<ScriptureReminder>> {
   @override
-  List<ScriptureReminder> build() {
-    return const [];
+  Future<List<ScriptureReminder>> build() async {
+    if (apiClient.accessToken == null) return const [];
+    final items = await apiClient.getList('/me/scripture-reminders');
+    final reminders = items
+        .cast<Map<String, dynamic>>()
+        .map(ScriptureReminder.fromJson)
+        .where((item) => item.scripture.id.isNotEmpty)
+        .toList();
+    await NotificationService.instance.syncScriptureReminders(reminders);
+    return reminders;
   }
 
-  void add({
+  Future<void> add({
     required String title,
     required Scripture scripture,
     required Duration timeOfDay,
     required Set<int> weekdays,
     required ReminderResumeMode resumeMode,
-  }) {
-    state = [
-      ScriptureReminder(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        title: title,
-        scripture: scripture,
-        timeOfDay: timeOfDay,
-        weekdays: weekdays,
-        resumeMode: resumeMode,
-      ),
-      ...state,
+  }) async {
+    final created = await apiClient.post('/me/scripture-reminders', {
+      'title': title,
+      'scriptureId': scripture.id,
+      'timeOfDay': _formatReminderTime(timeOfDay),
+      'weekdays': weekdays.toList()..sort(),
+      'resumeMode': resumeMode == ReminderResumeMode.restart
+          ? 'RESTART'
+          : 'RESUME',
+      'active': true,
+    });
+    final current = state.value ?? const <ScriptureReminder>[];
+    final next = <ScriptureReminder>[
+      ScriptureReminder.fromJson(created),
+      ...current,
     ];
+    state = AsyncData(next);
+    await NotificationService.instance.syncScriptureReminders(next);
   }
 
-  void toggle(String id, bool active) {
-    state = [
-      for (final item in state)
+  Future<void> toggle(String id, bool active) async {
+    await apiClient.patch('/me/scripture-reminders/$id', {'active': active});
+    final next = [
+      for (final item in state.value ?? const <ScriptureReminder>[])
         if (item.id == id) item.copyWith(active: active) else item,
     ];
+    state = AsyncData(next);
+    await NotificationService.instance.syncScriptureReminders(next);
   }
 
-  void saveProgress(String id, int lineIndex) {
-    state = [
-      for (final item in state)
+  Future<void> saveProgress(String id, int lineIndex) async {
+    final current = state.value ?? const <ScriptureReminder>[];
+    final next = [
+      for (final item in current)
         if (item.id == id) item.copyWith(lastLineIndex: lineIndex) else item,
     ];
+    state = AsyncData(next);
+    await apiClient.patch('/me/scripture-reminders/$id', {
+      'lastLineIndex': lineIndex,
+    });
   }
+}
+
+String _formatReminderTime(Duration value) {
+  final hour = value.inHours.remainder(24).toString().padLeft(2, '0');
+  final minute = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+  return '$hour:$minute';
 }
 
 final selectedAudioCategoryProvider =
@@ -160,11 +189,15 @@ final darkModeProvider = NotifierProvider<DarkModeState, bool>(
 
 class LoginState extends Notifier<bool> {
   @override
-  bool build() => false;
+  bool build() => apiClient.accessToken != null;
 
   void toggle() => state = !state;
   void login() => state = true;
-  void logout() => state = false;
+  Future<void> logout() async {
+    await apiClient.clearSession();
+    state = false;
+    ref.invalidate(scriptureReminderProvider);
+  }
 }
 
 class DarkModeState extends Notifier<bool> {

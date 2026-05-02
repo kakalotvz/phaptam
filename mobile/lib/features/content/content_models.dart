@@ -242,6 +242,29 @@ class Scripture {
   final List<ScriptureLine> lines;
 }
 
+class AppUser {
+  const AppUser({
+    required this.id,
+    required this.email,
+    this.username,
+    this.name,
+  });
+
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    return AppUser(
+      id: json['id'] as String,
+      email: json['email'] as String? ?? '',
+      username: json['username'] as String?,
+      name: json['name'] as String?,
+    );
+  }
+
+  final String id;
+  final String email;
+  final String? username;
+  final String? name;
+}
+
 class NumberParser {
   const NumberParser._();
 
@@ -281,6 +304,42 @@ class ScriptureReminder {
   final bool active;
   final int lastLineIndex;
 
+  factory ScriptureReminder.fromJson(Map<String, dynamic> json) {
+    final scriptureJson = json['scripture'];
+    final scripture = scriptureJson is Map<String, dynamic>
+        ? Scripture.fromJson(scriptureJson)
+        : const Scripture(id: '', title: 'Bản đọc Kinh', lines: []);
+    return ScriptureReminder(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'Nhắc tụng kinh',
+      scripture: scripture,
+      timeOfDay: _durationFromTimeOfDay(json['timeOfDay'] as String?),
+      weekdays: (json['weekdays'] as List? ?? const [])
+          .map(NumberParser.asInt)
+          .where((value) => value >= 1 && value <= 7)
+          .toSet(),
+      resumeMode: json['resumeMode'] == 'RESTART'
+          ? ReminderResumeMode.restart
+          : ReminderResumeMode.resume,
+      active: json['active'] as bool? ?? true,
+      lastLineIndex: NumberParser.asInt(json['lastLineIndex']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'scriptureId': scripture.id,
+      'timeOfDay': _formatTimeOfDay(timeOfDay),
+      'weekdays': weekdays.toList()..sort(),
+      'resumeMode': resumeMode == ReminderResumeMode.restart
+          ? 'RESTART'
+          : 'RESUME',
+      'active': active,
+      'lastLineIndex': lastLineIndex,
+    };
+  }
+
   ScriptureReminder copyWith({
     String? title,
     Scripture? scripture,
@@ -301,4 +360,17 @@ class ScriptureReminder {
       lastLineIndex: lastLineIndex ?? this.lastLineIndex,
     );
   }
+}
+
+Duration _durationFromTimeOfDay(String? value) {
+  final parts = (value ?? '05:30').split(':');
+  final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 5;
+  final minute = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 30;
+  return Duration(hours: hour.clamp(0, 23), minutes: minute.clamp(0, 59));
+}
+
+String _formatTimeOfDay(Duration value) {
+  final hour = value.inHours.remainder(24).toString().padLeft(2, '0');
+  final minute = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+  return '$hour:$minute';
 }

@@ -46,9 +46,9 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ),
                   FilledButton(
-                    onPressed: () {
+                    onPressed: () async {
                       if (isLoggedIn) {
-                        ref.read(isLoggedInProvider.notifier).logout();
+                        await ref.read(isLoggedInProvider.notifier).logout();
                       } else {
                         context.push('/login');
                       }
