@@ -22,17 +22,31 @@ enum FeedbackType {
   REPORT
 }
 
+enum NewsSourceType {
+  RSS
+  MANUAL
+}
+
+enum ReminderResumeMode {
+  RESUME
+  RESTART
+}
+
 model User {
   id            String          @id @default(uuid())
   email         String          @unique
+  username      String?         @unique
   passwordHash  String
   name          String?
+  birthDate     DateTime?       @map("birth_date")
+  active        Boolean         @default(true)
   role          Role            @default(USER)
   playlists     Playlist[]
   favorites     Favorite[]
   histories     History[]
   progresses    AudioProgress[]
   feedback      Feedback[]
+  scriptureReminders ScriptureReminder[]
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
 }
@@ -154,6 +168,18 @@ model Banner {
   createdAt DateTime @default(now()) @map("created_at")
 }
 
+model MeditationProgram {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  duration    Int
+  audioUrl    String?  @map("audio_url")
+  imageUrl    String?  @map("image_url")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+}
+
 model Feedback {
   id        String       @id @default(uuid())
   userId    String?      @map("user_id")
@@ -172,24 +198,45 @@ model RssSource {
   updatedAt DateTime @updatedAt @map("updated_at")
 }
 
+model NewsCategory {
+  id          String     @id @default(uuid())
+  name        String
+  description String?
+  items       NewsItem[]
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+}
+
 model NewsItem {
-  id          String   @id @default(uuid())
-  sourceId    String?  @map("source_id")
-  title       String
-  link        String   @unique
-  summary     String?
-  imageUrl    String?  @map("image_url")
-  publishedAt DateTime @map("published_at")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String          @id @default(uuid())
+  sourceId     String?         @map("source_id")
+  categoryId   String?         @map("category_id")
+  title        String
+  link         String?         @unique
+  summary      String?
+  content      String?
+  imageUrl     String?         @map("image_url")
+  sourceName   String?         @map("source_name")
+  sourceType   NewsSourceType  @default(RSS) @map("source_type")
+  shareEnabled Boolean         @default(true) @map("share_enabled")
+  publishedAt  DateTime        @default(now()) @map("published_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  category     NewsCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([categoryId])
+  @@index([publishedAt])
 }
 
 model Scripture {
   id          String          @id @default(uuid())
   title       String
   description String?
+  backgroundImageUrl String?    @map("background_image_url")
   categoryId  String?         @map("category_id")
   category    AudioCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   lines       ScriptureLine[]
+  reminders   ScriptureReminder[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -206,4 +253,23 @@ model ScriptureLine {
 
   @@unique([scriptureId, startTime])
   @@index([scriptureId, orderIndex])
+}
+
+model ScriptureReminder {
+  id           String             @id @default(uuid())
+  userId       String?            @map("user_id")
+  scriptureId  String             @map("scripture_id")
+  title        String
+  timeOfDay    String             @map("time_of_day")
+  weekdays     Int[]
+  resumeMode   ReminderResumeMode @default(RESUME) @map("resume_mode")
+  active       Boolean            @default(true)
+  lastLineIndex Int               @default(0) @map("last_line_index")
+  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scripture    Scripture          @relation(fields: [scriptureId], references: [id], onDelete: Cascade)
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([scriptureId])
 }

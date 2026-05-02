@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { NewsSourceType, ReminderResumeMode, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateScriptureTiming, validateScriptureLines } from '../scripture/timing';
@@ -10,7 +10,20 @@ export class AdminController {
 
   @Get('overview')
   async overview() {
-    const [audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount, userCount, scriptureCount] = await Promise.all([
+    const [
+      audioCount,
+      videoCount,
+      audioCategoryCount,
+      videoCategoryCount,
+      rssCount,
+      feedbackCount,
+      userCount,
+      scriptureCount,
+      newsCount,
+      newsCategoryCount,
+      scriptureReminderCount,
+      meditationProgramCount,
+    ] = await Promise.all([
       this.prisma.audio.count(),
       this.prisma.video.count(),
       this.prisma.audioCategory.count(),
@@ -19,9 +32,26 @@ export class AdminController {
       this.prisma.feedback.count(),
       this.prisma.user.count(),
       this.prisma.scripture.count(),
+      this.prisma.newsItem.count(),
+      this.prisma.newsCategory.count(),
+      this.prisma.scriptureReminder.count(),
+      this.prisma.meditationProgram.count(),
     ]);
 
-    return { audioCount, videoCount, audioCategoryCount, videoCategoryCount, rssCount, feedbackCount, userCount, scriptureCount };
+    return {
+      audioCount,
+      videoCount,
+      audioCategoryCount,
+      videoCategoryCount,
+      rssCount,
+      feedbackCount,
+      userCount,
+      scriptureCount,
+      newsCount,
+      newsCategoryCount,
+      scriptureReminderCount,
+      meditationProgramCount,
+    };
   }
 
   @Get('users')
@@ -31,7 +61,10 @@ export class AdminController {
       select: {
         id: true,
         email: true,
+        username: true,
         name: true,
+        birthDate: true,
+        active: true,
         role: true,
         createdAt: true,
         _count: { select: { playlists: true, favorites: true, feedback: true } },
@@ -41,24 +74,33 @@ export class AdminController {
   }
 
   @Post('users')
-  async createUser(@Body() data: { email: string; password: string; name?: string; role?: Role }) {
+  async createUser(@Body() data: { email: string; username?: string; password: string; name?: string; birthDate?: string; role?: Role; active?: boolean }) {
     return this.prisma.user.create({
       data: {
         email: data.email,
+        username: data.username,
         name: data.name,
+        birthDate: data.birthDate ? new Date(data.birthDate) : null,
+        active: data.active ?? true,
         role: data.role ?? Role.USER,
         passwordHash: await bcrypt.hash(data.password, 12),
       },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      select: { id: true, email: true, username: true, name: true, birthDate: true, active: true, role: true, createdAt: true },
     });
   }
 
   @Patch('users/:id')
-  updateUser(@Param('id') id: string, @Body() data: { name?: string; role?: Role }) {
+  updateUser(@Param('id') id: string, @Body() data: { name?: string; username?: string; birthDate?: string; active?: boolean; role?: Role }) {
     return this.prisma.user.update({
       where: { id },
-      data,
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      data: {
+        name: data.name,
+        username: data.username,
+        birthDate: data.birthDate ? new Date(data.birthDate) : undefined,
+        active: data.active,
+        role: data.role,
+      },
+      select: { id: true, email: true, username: true, name: true, birthDate: true, active: true, role: true, createdAt: true },
     });
   }
 
@@ -150,6 +192,7 @@ export class AdminController {
     data: {
       title: string;
       description?: string;
+      backgroundImageUrl?: string;
       categoryId?: string;
       lines: Array<{ content: string; start_time?: number; startTime?: number }>;
     },
@@ -169,6 +212,7 @@ export class AdminController {
       data: {
         title: data.title,
         description: data.description,
+        backgroundImageUrl: data.backgroundImageUrl,
         categoryId: data.categoryId || null,
         lines: {
           create: lines.map((line, orderIndex) => ({
@@ -192,6 +236,7 @@ export class AdminController {
     data: {
       title?: string;
       description?: string;
+      backgroundImageUrl?: string;
       categoryId?: string;
       lines?: Array<{ content: string; start_time?: number; startTime?: number }>;
     },
@@ -219,6 +264,7 @@ export class AdminController {
         data: {
           title: data.title,
           description: data.description,
+          backgroundImageUrl: data.backgroundImageUrl,
           categoryId: data.categoryId === undefined ? undefined : data.categoryId || null,
           lines: lines
             ? {
@@ -241,6 +287,78 @@ export class AdminController {
   @Delete('scripture/:id')
   deleteScripture(@Param('id') id: string) {
     return this.prisma.scripture.delete({ where: { id } });
+  }
+
+  @Get('scripture-reminder')
+  scriptureReminders() {
+    return this.prisma.scriptureReminder.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { scripture: { select: { id: true, title: true } }, user: { select: { id: true, email: true, name: true } } },
+      take: 100,
+    });
+  }
+
+  @Post('scripture-reminder')
+  createScriptureReminder(
+    @Body()
+    data: {
+      userId?: string;
+      scriptureId: string;
+      title?: string;
+      timeOfDay: string;
+      weekdays: number[];
+      resumeMode?: ReminderResumeMode;
+      active?: boolean;
+    },
+  ) {
+    return this.prisma.scriptureReminder.create({
+      data: {
+        userId: data.userId || null,
+        scriptureId: data.scriptureId,
+        title: data.title?.trim() || 'Nhắc tụng kinh',
+        timeOfDay: data.timeOfDay,
+        weekdays: data.weekdays ?? [],
+        resumeMode: data.resumeMode ?? ReminderResumeMode.RESUME,
+        active: data.active ?? true,
+      },
+      include: { scripture: { select: { id: true, title: true } }, user: { select: { id: true, email: true, name: true } } },
+    });
+  }
+
+  @Patch('scripture-reminder/:id')
+  updateScriptureReminder(
+    @Param('id') id: string,
+    @Body()
+    data: {
+      userId?: string;
+      scriptureId?: string;
+      title?: string;
+      timeOfDay?: string;
+      weekdays?: number[];
+      resumeMode?: ReminderResumeMode;
+      active?: boolean;
+      lastLineIndex?: number;
+    },
+  ) {
+    return this.prisma.scriptureReminder.update({
+      where: { id },
+      data: {
+        userId: data.userId === undefined ? undefined : data.userId || null,
+        scriptureId: data.scriptureId,
+        title: data.title,
+        timeOfDay: data.timeOfDay,
+        weekdays: data.weekdays,
+        resumeMode: data.resumeMode,
+        active: data.active,
+        lastLineIndex: data.lastLineIndex,
+      },
+      include: { scripture: { select: { id: true, title: true } }, user: { select: { id: true, email: true, name: true } } },
+    });
+  }
+
+  @Delete('scripture-reminder/:id')
+  deleteScriptureReminder(@Param('id') id: string) {
+    return this.prisma.scriptureReminder.delete({ where: { id } });
   }
 
   @Get('video')
@@ -283,6 +401,31 @@ export class AdminController {
     return this.prisma.banner.delete({ where: { id } });
   }
 
+  @Get('meditation')
+  meditationPrograms() {
+    return this.prisma.meditationProgram.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
+  }
+
+  @Post('meditation')
+  createMeditationProgram(@Body() data: { title: string; description?: string; duration: number; audioUrl?: string; imageUrl?: string; active?: boolean }) {
+    return this.prisma.meditationProgram.create({
+      data: { ...data, duration: Number(data.duration || 0), active: data.active ?? true },
+    });
+  }
+
+  @Patch('meditation/:id')
+  updateMeditationProgram(@Param('id') id: string, @Body() data: { title?: string; description?: string; duration?: number; audioUrl?: string; imageUrl?: string; active?: boolean }) {
+    return this.prisma.meditationProgram.update({
+      where: { id },
+      data: { ...data, duration: data.duration === undefined ? undefined : Number(data.duration || 0) },
+    });
+  }
+
+  @Delete('meditation/:id')
+  deleteMeditationProgram(@Param('id') id: string) {
+    return this.prisma.meditationProgram.delete({ where: { id } });
+  }
+
   @Get('quote')
   quotes() {
     return this.prisma.quote.findMany({ orderBy: { createdAt: 'desc' }, take: 50 });
@@ -323,9 +466,111 @@ export class AdminController {
     return this.prisma.rssSource.delete({ where: { id } });
   }
 
+  @Get('news-category')
+  newsCategories() {
+    return this.prisma.newsCategory.findMany({ orderBy: { createdAt: 'desc' }, include: { _count: { select: { items: true } } } });
+  }
+
+  @Post('news-category')
+  createNewsCategory(@Body() data: { name: string; description?: string }) {
+    return this.prisma.newsCategory.create({ data });
+  }
+
+  @Patch('news-category/:id')
+  updateNewsCategory(@Param('id') id: string, @Body() data: { name?: string; description?: string }) {
+    return this.prisma.newsCategory.update({ where: { id }, data });
+  }
+
+  @Delete('news-category/:id')
+  deleteNewsCategory(@Param('id') id: string) {
+    return this.prisma.newsCategory.delete({ where: { id } });
+  }
+
+  @Get('news')
+  newsItems() {
+    return this.prisma.newsItem.findMany({
+      orderBy: { publishedAt: 'desc' },
+      include: { category: true },
+      take: 100,
+    });
+  }
+
+  @Post('news')
+  createNewsItem(
+    @Body()
+    data: {
+      title: string;
+      summary?: string;
+      content?: string;
+      imageUrl?: string;
+      link?: string;
+      categoryId?: string;
+      sourceName?: string;
+      sourceType?: NewsSourceType;
+      shareEnabled?: boolean;
+      publishedAt?: string;
+    },
+  ) {
+    return this.prisma.newsItem.create({
+      data: {
+        title: data.title,
+        summary: data.summary,
+        content: data.content,
+        imageUrl: data.imageUrl,
+        link: data.link || null,
+        categoryId: data.categoryId || null,
+        sourceName: data.sourceName || 'Pháp Tâm',
+        sourceType: data.sourceType ?? NewsSourceType.MANUAL,
+        shareEnabled: data.shareEnabled ?? true,
+        publishedAt: data.publishedAt ? new Date(data.publishedAt) : new Date(),
+      },
+      include: { category: true },
+    });
+  }
+
+  @Patch('news/:id')
+  updateNewsItem(
+    @Param('id') id: string,
+    @Body()
+    data: {
+      title?: string;
+      summary?: string;
+      content?: string;
+      imageUrl?: string;
+      link?: string;
+      categoryId?: string;
+      sourceName?: string;
+      sourceType?: NewsSourceType;
+      shareEnabled?: boolean;
+      publishedAt?: string;
+    },
+  ) {
+    return this.prisma.newsItem.update({
+      where: { id },
+      data: {
+        title: data.title,
+        summary: data.summary,
+        content: data.content,
+        imageUrl: data.imageUrl,
+        link: data.link === undefined ? undefined : data.link || null,
+        categoryId: data.categoryId === undefined ? undefined : data.categoryId || null,
+        sourceName: data.sourceName,
+        sourceType: data.sourceType,
+        shareEnabled: data.shareEnabled,
+        publishedAt: data.publishedAt ? new Date(data.publishedAt) : undefined,
+      },
+      include: { category: true },
+    });
+  }
+
+  @Delete('news/:id')
+  deleteNewsItem(@Param('id') id: string) {
+    return this.prisma.newsItem.delete({ where: { id } });
+  }
+
   @Get('feedback')
   feedback() {
-    return this.prisma.feedback.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
+    return this.prisma.feedback.findMany({ orderBy: { createdAt: 'desc' }, include: { user: { select: { id: true, email: true, username: true, name: true } } }, take: 100 });
   }
 
   @Delete('feedback/:id')

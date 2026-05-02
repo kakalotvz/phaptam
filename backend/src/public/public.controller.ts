@@ -29,6 +29,7 @@ export class PublicController {
         id: true,
         title: true,
         description: true,
+        backgroundImageUrl: true,
         categoryId: true,
         category: true,
         _count: { select: { lines: true } },
@@ -45,6 +46,7 @@ export class PublicController {
         id: true,
         title: true,
         description: true,
+        backgroundImageUrl: true,
         categoryId: true,
         lines: {
           orderBy: { orderIndex: 'asc' },
@@ -67,8 +69,70 @@ export class PublicController {
     return this.prisma.video.findMany({ where: { categoryId }, include: { category: true }, take: 30 });
   }
 
+  @Get('meditation')
+  meditationPrograms() {
+    return this.prisma.meditationProgram.findMany({
+      where: { active: true },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    });
+  }
+
+  @Get('quotes')
+  quotes() {
+    return this.prisma.quote.findMany({
+      where: { active: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+  }
+
+  @Get('banners')
+  banners() {
+    return this.prisma.banner.findMany({
+      where: { active: true },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+  }
+
+  @Get('news/categories')
+  newsCategories() {
+    return this.prisma.newsCategory.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
   @Get('news')
-  news() {
-    return this.prisma.newsItem.findMany({ orderBy: { publishedAt: 'desc' }, take: 30 });
+  news(@Query('category_id') categoryId?: string) {
+    return this.prisma.newsItem.findMany({
+      where: { categoryId },
+      orderBy: { publishedAt: 'desc' },
+      include: { category: true },
+      take: 30,
+    });
+  }
+
+  @Get('news/:id')
+  newsItem(@Param('id') id: string) {
+    return this.prisma.newsItem.findUniqueOrThrow({
+      where: { id },
+      include: { category: true },
+    });
+  }
+
+  @Get('scripture-reminders')
+  scriptureReminders(@Query('user_id') userId?: string) {
+    return this.prisma.scriptureReminder.findMany({
+      where: {
+        active: true,
+        userId: userId || null,
+      },
+      orderBy: { timeOfDay: 'asc' },
+      include: {
+        scripture: {
+          select: { id: true, title: true, description: true },
+        },
+      },
+      take: 50,
+    });
   }
 }

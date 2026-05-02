@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/network/api_client.dart';
 import '../content/content_providers.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -116,11 +117,13 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   void _showFeedback(BuildContext context) {
+    final controller = TextEditingController();
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Gửi góp ý'),
-        content: const TextField(
+        content: TextField(
+          controller: controller,
           maxLines: 4,
           decoration: InputDecoration(hintText: 'Nội dung góp ý hoặc báo lỗi'),
         ),
@@ -130,7 +133,23 @@ class ProfileScreen extends ConsumerWidget {
             child: const Text('Hủy'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () async {
+              try {
+                await apiClient.post('/feedback', {
+                  'content': controller.text.trim(),
+                  'type': 'FEEDBACK',
+                  'userId': apiClient.currentUserId,
+                });
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã gửi góp ý')));
+                }
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+                }
+              }
+            },
             child: const Text('Gửi'),
           ),
         ],

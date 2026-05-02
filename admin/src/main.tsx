@@ -13,7 +13,9 @@ import {
   BarChart3,
   BookAudio,
   BookOpenText,
+  CalendarClock,
   Clapperboard,
+  Code2,
   Download,
   FileText,
   Image,
@@ -28,6 +30,7 @@ import {
   RefreshCcw,
   Save,
   Settings,
+  Share2,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -40,11 +43,15 @@ import {
   Banner,
   Feedback,
   getApiBaseUrl,
+  MeditationProgram,
+  NewsCategory,
+  NewsItem,
   Quote as QuoteRecord,
   RssSource,
   setApiBaseUrl,
   Scripture,
   ScriptureLine,
+  ScriptureReminder,
   uploadToR2,
   Video,
   VideoCategory,
@@ -113,7 +120,7 @@ async function extractDocxText(file: File) {
     .join('\n');
 }
 
-type Section = 'overview' | 'audio' | 'scripture' | 'video' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
+type Section = 'overview' | 'audio' | 'scripture' | 'reminder' | 'video' | 'meditation' | 'news' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
 
 type DataState = {
   overview: Record<string, number>;
@@ -121,8 +128,12 @@ type DataState = {
   videoCategories: VideoCategory[];
   audios: Audio[];
   scriptures: Scripture[];
+  scriptureReminders: ScriptureReminder[];
   videos: Video[];
+  meditationPrograms: MeditationProgram[];
   rss: RssSource[];
+  newsCategories: NewsCategory[];
+  news: NewsItem[];
   quotes: QuoteRecord[];
   banners: Banner[];
   feedback: Feedback[];
@@ -135,8 +146,12 @@ const emptyData: DataState = {
   videoCategories: [],
   audios: [],
   scriptures: [],
+  scriptureReminders: [],
   videos: [],
+  meditationPrograms: [],
   rss: [],
+  newsCategories: [],
+  news: [],
   quotes: [],
   banners: [],
   feedback: [],
@@ -147,7 +162,10 @@ const nav = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'audio', label: 'Kinh audio', icon: BookAudio },
   { id: 'scripture', label: 'Đọc Kinh', icon: BookOpenText },
+  { id: 'reminder', label: 'Lịch tụng', icon: CalendarClock },
   { id: 'video', label: 'Video giảng', icon: Clapperboard },
+  { id: 'meditation', label: 'Thiền', icon: Pause },
+  { id: 'news', label: 'Tin tức', icon: Newspaper },
   { id: 'rss', label: 'Nguồn RSS', icon: Newspaper },
   { id: 'quote', label: 'Lời nhắc', icon: Quote },
   { id: 'banner', label: 'Banner', icon: Image },
@@ -173,8 +191,12 @@ function App() {
         videoCategories,
         audios,
         scriptures,
+        scriptureReminders,
         videos,
+        meditationPrograms,
         rss,
+        newsCategories,
+        news,
         quotes,
         banners,
         feedback,
@@ -185,14 +207,34 @@ function App() {
         api.videoCategories(),
         api.audios(),
         api.scriptures(),
+        api.scriptureReminders(),
         api.videos(),
+        api.meditationPrograms(),
         api.rss(),
+        api.newsCategories(),
+        api.news(),
         api.quotes(),
         api.banners(),
         api.feedback(),
         api.users(),
       ]);
-      setData({ overview, audioCategories, videoCategories, audios, scriptures, videos, rss, quotes, banners, feedback, users });
+      setData({
+        overview,
+        audioCategories,
+        videoCategories,
+        audios,
+        scriptures,
+        scriptureReminders,
+        videos,
+        meditationPrograms,
+        rss,
+        newsCategories,
+        news,
+        quotes,
+        banners,
+        feedback,
+        users,
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không tải được dữ liệu');
     } finally {
@@ -264,7 +306,10 @@ function App() {
             {section === 'overview' && <Overview data={data} />}
             {section === 'audio' && <AudioManager data={data} run={run} />}
             {section === 'scripture' && <ScriptureManager data={data} run={run} />}
+            {section === 'reminder' && <ScriptureReminderManager data={data} run={run} />}
             {section === 'video' && <VideoManager data={data} run={run} />}
+            {section === 'meditation' && <MeditationManager data={data} run={run} />}
+            {section === 'news' && <NewsManager data={data} run={run} />}
             {section === 'rss' && <RssManager data={data} run={run} />}
             {section === 'quote' && <QuoteManager data={data} run={run} />}
             {section === 'banner' && <BannerManager data={data} run={run} />}
@@ -283,7 +328,11 @@ function Overview({ data }: { data: DataState }) {
     ['Danh mục audio', data.overview.audioCategoryCount ?? 0, BookAudio],
     ['Bài kinh audio', data.overview.audioCount ?? 0, FileText],
     ['Bản đọc Kinh', data.overview.scriptureCount ?? 0, BookOpenText],
+    ['Lịch tụng', data.overview.scriptureReminderCount ?? 0, CalendarClock],
     ['Video', data.overview.videoCount ?? 0, Clapperboard],
+    ['Bài Thiền', data.overview.meditationProgramCount ?? 0, Pause],
+    ['Tin tức', data.overview.newsCount ?? 0, Newspaper],
+    ['Danh mục tin', data.overview.newsCategoryCount ?? 0, Newspaper],
     ['Nguồn RSS', data.overview.rssCount ?? 0, Newspaper],
     ['Tài khoản', data.overview.userCount ?? 0, ShieldCheck],
     ['Góp ý', data.overview.feedbackCount ?? 0, MessageSquareText],
@@ -362,6 +411,7 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
 function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [rawText, setRawText] = useState('Nam mô A Di Đà Phật\nNguyện đem công đức này\nHướng về khắp tất cả\nĐệ tử và chúng sanh');
   const [lines, setLines] = useState<EditableScriptureLine[]>([
@@ -442,6 +492,10 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               ))}
             </select>
           </label>
+          <label>
+            Ảnh nền đọc kinh
+            <UploadField kind="images/news" value={backgroundImageUrl} onUploaded={setBackgroundImageUrl} />
+          </label>
           <label className="span">
             Mô tả
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
@@ -477,6 +531,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
                     api.create('/admin/scripture', {
                       title,
                       description,
+                      backgroundImageUrl,
                       categoryId,
                       lines,
                     }),
@@ -601,6 +656,82 @@ function ScripturePreview({ lines }: { lines: Array<{ content: string; start_tim
   );
 }
 
+const weekdayOptions = [
+  [1, 'T2'],
+  [2, 'T3'],
+  [3, 'T4'],
+  [4, 'T5'],
+  [5, 'T6'],
+  [6, 'T7'],
+  [0, 'CN'],
+] as const;
+
+function ScriptureReminderManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]);
+  const [resumeMode, setResumeMode] = useState<'RESUME' | 'RESTART'>('RESUME');
+
+  function toggleWeekday(value: number) {
+    setWeekdays((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value].sort()));
+  }
+
+  return (
+    <div className="single-column">
+      <Panel title="Tạo lịch nhắc tụng kinh">
+        <SmartForm
+          fields={[
+            ['title', 'Tên lời nhắc'],
+            ['timeOfDay', 'Giờ nhắc', 'time'],
+            ['scriptureId', 'Bộ kinh', 'select', data.scriptures.map((item) => [item.id, item.title])],
+          ]}
+          onSubmit={(values) =>
+            run(
+              () =>
+                api.create('/admin/scripture-reminder', {
+                  ...values,
+                  weekdays,
+                  resumeMode,
+                  active: true,
+                }),
+              'Đã tạo lịch nhắc tụng kinh',
+            )
+          }
+        />
+        <div className="option-row">
+          <span>Ngày nhắc</span>
+          {weekdayOptions.map(([value, label]) => (
+            <button key={value} type="button" className={weekdays.includes(value) ? 'speed active' : 'speed'} onClick={() => toggleWeekday(value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="option-row">
+          <span>Khi mở đọc kinh</span>
+          <button type="button" className={resumeMode === 'RESUME' ? 'speed active' : 'speed'} onClick={() => setResumeMode('RESUME')}>
+            Tiếp tục chỗ dừng
+          </button>
+          <button type="button" className={resumeMode === 'RESTART' ? 'speed active' : 'speed'} onClick={() => setResumeMode('RESTART')}>
+            Bắt đầu lại
+          </button>
+        </div>
+      </Panel>
+      <Panel title="Lịch nhắc đang bật">
+        <Table
+          rows={data.scriptureReminders}
+          columns={[
+            ['title', 'Lời nhắc'],
+            [(row: ScriptureReminder) => row.scripture?.title ?? '-', 'Bộ kinh'],
+            ['timeOfDay', 'Giờ'],
+            [(row: ScriptureReminder) => row.weekdays.map((day) => weekdayOptions.find(([value]) => value === day)?.[1] ?? day).join(', '), 'Ngày'],
+            [(row: ScriptureReminder) => (row.resumeMode === 'RESUME' ? 'Tiếp tục' : 'Bắt đầu lại'), 'Chế độ'],
+            [(row: ScriptureReminder) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+          ]}
+          onDelete={(row) => run(() => api.remove(`/admin/scripture-reminder/${row.id}`), 'Đã xóa lịch nhắc')}
+        />
+      </Panel>
+    </div>
+  );
+}
+
 function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
   return (
     <div className="two-column">
@@ -645,6 +776,178 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
             ['videoUrl', 'Video URL'],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/video/${row.id}`), 'Đã xóa video')}
+        />
+      </Panel>
+    </div>
+  );
+}
+
+const newsFormatTemplates = [
+  {
+    id: 'announcement',
+    label: 'Thông báo',
+    content: '## Thông báo\n\n**Thời gian:** \n\n**Địa điểm:** \n\nNội dung chính:\n\n- \n- \n\nThông tin liên hệ: ',
+  },
+  {
+    id: 'article',
+    label: 'Bài viết',
+    content: '## Mở đầu\n\n\n## Nội dung chính\n\n\n## Gợi ý thực hành\n\n- \n- \n\n## Kết luận\n\n',
+  },
+  {
+    id: 'event',
+    label: 'Sự kiện',
+    content: '## Chương trình\n\n**Ngày:** \n**Giờ:** \n**Địa điểm:** \n\n### Nội dung\n\n1. \n2. \n3. \n\n### Lưu ý tham dự\n\n',
+  },
+] as const;
+
+function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
+  const [content, setContent] = useState<string>(newsFormatTemplates[0].content);
+  const [categoryId, setCategoryId] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [link, setLink] = useState('');
+  const [shareEnabled, setShareEnabled] = useState(true);
+
+  return (
+    <div className="single-column">
+      <div className="two-column">
+        <Panel title="Tạo danh mục tin tức">
+          <SmartForm
+            fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
+            onSubmit={(values) => run(() => api.create('/admin/news-category', values), 'Đã tạo danh mục tin tức')}
+          />
+        </Panel>
+        <Panel title="Danh mục tin tức">
+          <Table
+            rows={data.newsCategories}
+            columns={[
+              ['name', 'Tên'],
+              ['description', 'Mô tả'],
+              [(row: NewsCategory) => row._count?.items ?? 0, 'Số tin'],
+            ]}
+            onDelete={(row) => run(() => api.remove(`/admin/news-category/${row.id}`), 'Đã xóa danh mục tin')}
+          />
+        </Panel>
+      </div>
+
+      <Panel title="Tạo tin riêng">
+        <div className="news-editor">
+          <label>
+            Tiêu đề
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Tiêu đề tin tức" />
+          </label>
+          <label>
+            Danh mục
+            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+              <option value="">Không chọn</option>
+              {data.newsCategories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="span">
+            Tóm tắt
+            <textarea value={summary} onChange={(event) => setSummary(event.target.value)} />
+          </label>
+          <label>
+            Ảnh tin
+            <UploadField kind="images/news" value={imageUrl} onUploaded={setImageUrl} />
+          </label>
+          <label>
+            Link gốc hoặc link chia sẻ
+            <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="https://..." />
+          </label>
+          <div className="span option-row">
+            <Code2 size={16} />
+            <span>Mẫu format</span>
+            {newsFormatTemplates.map((template) => (
+              <button key={template.id} type="button" className="speed" onClick={() => setContent(template.content)}>
+                {template.label}
+              </button>
+            ))}
+          </div>
+          <label className="span">
+            Nội dung
+            <textarea className="news-content" value={content} onChange={(event) => setContent(event.target.value)} />
+          </label>
+          <label className="check-row span">
+            <input type="checkbox" checked={shareEnabled} onChange={(event) => setShareEnabled(event.target.checked)} />
+            <Share2 size={16} />
+            Cho phép chia sẻ lên mạng xã hội
+          </label>
+          <button
+            className="primary"
+            type="button"
+            onClick={() =>
+              run(
+                () =>
+                  api.create('/admin/news', {
+                    title,
+                    summary,
+                    content,
+                    imageUrl,
+                    link,
+                    categoryId,
+                    shareEnabled,
+                    sourceType: 'MANUAL',
+                  }),
+                'Đã tạo tin riêng',
+              )
+            }
+          >
+            <Save size={16} />
+            Lưu tin
+          </button>
+        </div>
+      </Panel>
+
+      <Panel title="Danh sách tin tức">
+        <Table
+          rows={data.news}
+          columns={[
+            ['imageUrl', 'Ảnh'],
+            ['title', 'Tiêu đề'],
+            [(row: NewsItem) => row.category?.name ?? '-', 'Danh mục'],
+            [(row: NewsItem) => (row.sourceType === 'MANUAL' ? 'Tin riêng' : 'RSS'), 'Nguồn'],
+            [(row: NewsItem) => (row.shareEnabled ? 'Cho phép' : 'Tắt'), 'Chia sẻ'],
+            [(row: NewsItem) => new Date(row.publishedAt).toLocaleDateString('vi-VN'), 'Ngày đăng'],
+          ]}
+          onDelete={(row) => run(() => api.remove(`/admin/news/${row.id}`), 'Đã xóa tin')}
+        />
+      </Panel>
+    </div>
+  );
+}
+
+function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
+  return (
+    <div className="single-column">
+      <Panel title="Tạo bài Thiền">
+        <SmartForm
+          fields={[
+            ['title', 'Tiêu đề'],
+            ['description', 'Mô tả'],
+            ['duration', 'Thời lượng giây', 'number'],
+            ['audioUrl', 'Âm thanh nền', 'upload:audio'],
+            ['imageUrl', 'Ảnh nền', 'upload:images/news'],
+          ]}
+          onSubmit={(values) => run(() => api.create('/admin/meditation', { ...values, duration: Number(values.duration || 0), active: true }), 'Đã tạo bài Thiền')}
+        />
+      </Panel>
+      <Panel title="Danh sách bài Thiền">
+        <Table
+          rows={data.meditationPrograms}
+          columns={[
+            ['imageUrl', 'Ảnh'],
+            ['title', 'Tiêu đề'],
+            ['description', 'Mô tả'],
+            [(row: MeditationProgram) => `${row.duration}s`, 'Thời lượng'],
+            [(row: MeditationProgram) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+          ]}
+          onDelete={(row) => run(() => api.remove(`/admin/meditation/${row.id}`), 'Đã xóa bài Thiền')}
         />
       </Panel>
     </div>
@@ -730,7 +1033,9 @@ function UserManager({ data, run }: { data: DataState; run: RunAction }) {
         <SmartForm
           fields={[
             ['name', 'Họ tên'],
+            ['username', 'Tài khoản'],
             ['email', 'Email'],
+            ['birthDate', 'Ngày sinh', 'date'],
             ['password', 'Mật khẩu', 'password'],
             [
               'role',
@@ -758,12 +1063,42 @@ function UserManager({ data, run }: { data: DataState; run: RunAction }) {
         <Table
           rows={data.users}
           columns={[
+            ['username', 'Tài khoản'],
             ['name', 'Họ tên'],
             ['email', 'Email'],
+            [(row: AdminUser) => (row.birthDate ? new Date(row.birthDate).toLocaleDateString('vi-VN') : '-'), 'Ngày sinh'],
             [(row: AdminUser) => (row.role === 'ADMIN' ? 'Quản trị viên' : 'Người dùng'), 'Vai trò'],
+            [(row: AdminUser) => (row.active ? 'Đang hoạt động' : 'Đã dừng'), 'Trạng thái'],
             [(row: AdminUser) => row._count?.playlists ?? 0, 'Playlist'],
             [(row: AdminUser) => row._count?.favorites ?? 0, 'Yêu thích'],
             [(row: AdminUser) => new Date(row.createdAt).toLocaleDateString('vi-VN'), 'Ngày tạo'],
+            [
+              (row: AdminUser) => (
+                <div className="action-group">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => {
+                      const name = window.prompt('Họ tên', row.name ?? '');
+                      if (name === null) return;
+                      const username = window.prompt('Tài khoản', row.username ?? '');
+                      if (username === null) return;
+                      void run(() => api.update(`/admin/users/${row.id}`, { name, username }), 'Đã cập nhật tài khoản');
+                    }}
+                  >
+                    Sửa
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => run(() => api.update(`/admin/users/${row.id}`, { active: !row.active }), row.active ? 'Đã dừng tài khoản' : 'Đã kích hoạt tài khoản')}
+                  >
+                    {row.active ? 'Dừng' : 'Kích hoạt'}
+                  </button>
+                </div>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/users/${row.id}`), 'Đã xóa tài khoản')}
         />
@@ -779,6 +1114,7 @@ function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
         rows={data.feedback}
         columns={[
           ['type', 'Loại'],
+          [(row: Feedback) => row.user?.username || row.user?.email || row.user?.name || 'Khách/không xác định', 'Người góp ý'],
           ['content', 'Nội dung'],
           [(row: Feedback) => new Date(row.createdAt).toLocaleString('vi-VN'), 'Thời gian'],
         ]}
@@ -849,7 +1185,7 @@ function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: R
           ) : label === 'Mô tả' || label === 'Nội dung' ? (
             <textarea value={values[name]} onChange={(event) => setValues({ ...values, [name]: event.target.value })} />
           ) : (
-            <input type={type} value={values[name]} onChange={(event) => setValues({ ...values, [name]: event.target.value })} required={['name', 'title', 'url', 'audioUrl', 'videoUrl', 'imageUrl', 'content'].includes(name)} />
+            <input type={type} value={values[name]} onChange={(event) => setValues({ ...values, [name]: event.target.value })} required={['name', 'title', 'url', 'audioUrl', 'videoUrl', 'imageUrl', 'content', 'timeOfDay'].includes(name)} />
           )}
         </label>
       ))}

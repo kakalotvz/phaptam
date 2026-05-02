@@ -37,6 +37,7 @@ export type Scripture = {
   id: string;
   title: string;
   description?: string;
+  backgroundImageUrl?: string;
   categoryId?: string;
   category?: AudioCategory;
   lines: ScriptureLine[];
@@ -61,6 +62,42 @@ export type RssSource = {
   active: boolean;
 };
 
+export type NewsCategory = {
+  id: string;
+  name: string;
+  description?: string;
+  _count?: { items: number };
+};
+
+export type NewsItem = {
+  id: string;
+  title: string;
+  summary?: string;
+  content?: string;
+  imageUrl?: string;
+  link?: string;
+  categoryId?: string;
+  category?: NewsCategory;
+  sourceName?: string;
+  sourceType: 'RSS' | 'MANUAL';
+  shareEnabled: boolean;
+  publishedAt: string;
+};
+
+export type ScriptureReminder = {
+  id: string;
+  title: string;
+  scriptureId: string;
+  scripture?: Pick<Scripture, 'id' | 'title'>;
+  userId?: string;
+  user?: Pick<AdminUser, 'id' | 'email' | 'username' | 'name'>;
+  timeOfDay: string;
+  weekdays: number[];
+  resumeMode: 'RESUME' | 'RESTART';
+  active: boolean;
+  lastLineIndex: number;
+};
+
 export type Quote = {
   id: string;
   content: string;
@@ -75,17 +112,31 @@ export type Banner = {
   active: boolean;
 };
 
+export type MeditationProgram = {
+  id: string;
+  title: string;
+  description?: string;
+  duration: number;
+  audioUrl?: string;
+  imageUrl?: string;
+  active: boolean;
+};
+
 export type Feedback = {
   id: string;
   content: string;
   type: 'FEEDBACK' | 'REPORT';
   createdAt: string;
+  user?: Pick<AdminUser, 'id' | 'email' | 'username' | 'name'>;
 };
 
 export type AdminUser = {
   id: string;
   email: string;
+  username?: string;
   name?: string;
+  birthDate?: string;
+  active: boolean;
   role: 'USER' | 'ADMIN';
   createdAt: string;
   _count?: {
@@ -155,8 +206,12 @@ export const api = {
     }),
   videos: () => request<Video[]>('/admin/video'),
   rss: () => request<RssSource[]>('/admin/rss'),
+  newsCategories: () => request<NewsCategory[]>('/admin/news-category'),
+  news: () => request<NewsItem[]>('/admin/news'),
+  scriptureReminders: () => request<ScriptureReminder[]>('/admin/scripture-reminder'),
   quotes: () => request<Quote[]>('/admin/quote'),
   banners: () => request<Banner[]>('/admin/banner'),
+  meditationPrograms: () => request<MeditationProgram[]>('/admin/meditation'),
   feedback: () => request<Feedback[]>('/admin/feedback'),
   users: () => request<AdminUser[]>('/admin/users'),
   presignedUrl: (data: { kind: UploadKind; contentType: string }) =>

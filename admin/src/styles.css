@@ -250,13 +250,15 @@ main {
 }
 
 .scripture-create,
-.scripture-editor {
+.scripture-editor,
+.news-editor {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
 }
 
-.scripture-create .span {
+.scripture-create .span,
+.news-editor .span {
   grid-column: span 2;
 }
 
@@ -265,11 +267,36 @@ main {
 }
 
 .scripture-actions,
-.preview-toolbar {
+.preview-toolbar,
+.option-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+}
+
+.option-row {
+  margin-top: 14px;
+  color: #6a564e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.news-content {
+  min-height: 260px;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
+  line-height: 1.55;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+}
+
+.check-row input {
+  width: 18px;
+  min-height: 18px;
 }
 
 .line-editor {
@@ -506,6 +533,12 @@ th {
   width: 92px;
 }
 
+.action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .notice,
 .error,
 .loading,
@@ -553,13 +586,15 @@ th {
   .grid,
   .two-column,
   .scripture-create,
-  .scripture-editor {
+  .scripture-editor,
+  .news-editor {
     grid-template-columns: 1fr;
   }
 
   .wide-card,
   .panel.span,
-  .scripture-create .span {
+  .scripture-create .span,
+  .news-editor .span {
     grid-column: span 1;
   }
 

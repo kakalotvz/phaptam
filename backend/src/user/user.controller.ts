@@ -31,6 +31,10 @@ class FeedbackDto {
 
   @IsEnum(FeedbackType)
   type!: FeedbackType;
+
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 @Controller()
@@ -99,6 +103,6 @@ export class UserController {
 
   @Post('feedback')
   feedback(@Body() dto: FeedbackDto) {
-    return this.prisma.feedback.create({ data: { userId: this.mockUserId, content: dto.content, type: dto.type } });
+    return this.prisma.feedback.create({ data: { userId: dto.userId || null, content: dto.content, type: dto.type } });
   }
 }

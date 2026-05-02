@@ -64,14 +64,28 @@ class ContentRepository {
     NewsItem(
       id: 'n1',
       title: 'Khóa tu mùa hè dành cho Phật tử trẻ',
+      category: 'Sinh hoạt',
       source: 'RSS Giáo hội',
       publishedAt: DateTime(2026, 4, 30),
+      summary: 'Thông tin về chương trình tu học mùa hè dành cho người trẻ.',
+      content:
+          'Khóa tu mùa hè mở ra không gian học hỏi, lắng nghe và thực tập chánh niệm cho Phật tử trẻ.\n\nChương trình gồm thiền tọa, pháp thoại, sinh hoạt nhóm và các buổi chia sẻ kỹ năng sống tỉnh thức.',
+      imageUrl:
+          'https://images.unsplash.com/photo-1528319725582-ddc096101511?auto=format&fit=crop&w=900&q=80',
+      link: 'https://phaptam.local/news/n1',
     ),
     NewsItem(
       id: 'n2',
       title: 'Những bài học về lòng từ bi trong đời sống hiện đại',
+      category: 'Bài viết',
       source: 'Phật giáo VN',
       publishedAt: DateTime(2026, 4, 29),
+      summary: 'Gợi ý thực hành lòng từ bi trong gia đình, công việc và cộng đồng.',
+      content:
+          'Lòng từ bi không dừng lại ở ý niệm tốt đẹp, mà được nuôi lớn qua cách ta nói năng, lắng nghe và phản hồi trước khổ đau của người khác.\n\nMỗi ngày có thể bắt đầu bằng một việc nhỏ: nói chậm hơn, lắng nghe sâu hơn, và bớt vội kết luận.',
+      imageUrl:
+          'https://images.unsplash.com/photo-1545389336-cf090694435e?auto=format&fit=crop&w=900&q=80',
+      link: 'https://phaptam.local/news/n2',
     ),
   ];
 
@@ -80,6 +94,8 @@ class ContentRepository {
       id: 's1',
       title: 'Bài đọc mẫu',
       description: 'Bản đọc ngắn để kiểm tra trải nghiệm chữ chạy.',
+      backgroundImageUrl:
+          'https://images.unsplash.com/photo-1528319725582-ddc096101511?auto=format&fit=crop&w=1200&q=80',
       lines: [
         ScriptureLine(content: 'Nam mô A Di Đà Phật', startTime: Duration.zero),
         ScriptureLine(content: 'Nguyện đem công đức này', startTime: Duration(seconds: 4)),
