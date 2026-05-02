@@ -322,6 +322,15 @@ main {
   background: #fff8e8;
 }
 
+.bbcode-toolbar.compact {
+  padding: 8px;
+}
+
+.bbcode-toolbar.compact button {
+  min-width: 34px;
+  min-height: 30px;
+}
+
 .news-content-input {
   min-height: 420px;
   resize: vertical;
@@ -333,6 +342,12 @@ main {
 
 .bbcode-toolbar + .news-content-input {
   margin-top: 0;
+  border-radius: 0 0 14px 14px;
+}
+
+.bbcode-toolbar + textarea {
+  margin-top: 0;
+  min-height: 150px;
   border-radius: 0 0 14px 14px;
 }
 

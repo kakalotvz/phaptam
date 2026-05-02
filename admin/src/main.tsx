@@ -1580,6 +1580,102 @@ function newsContentToPlainText(value: string) {
     .trim();
 }
 
+function BbCodeTextarea({
+  value,
+  onChange,
+  placeholder,
+  className,
+  compact = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+  compact?: boolean;
+}) {
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function insertBbcode(startTag: string, endTag = '') {
+    const input = inputRef.current;
+    if (!input) {
+      onChange(`${value}${startTag}${endTag}`);
+      return;
+    }
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    const selected = value.slice(start, end);
+    const next = `${value.slice(0, start)}${startTag}${selected}${endTag}${value.slice(end)}`;
+    onChange(next);
+    window.setTimeout(() => {
+      input.focus();
+      const cursor = selected ? start + startTag.length + selected.length + endTag.length : start + startTag.length;
+      input.setSelectionRange(cursor, cursor);
+    }, 0);
+  }
+
+  function insertLink() {
+    const url = window.prompt('Dán liên kết https://...');
+    if (!url) return;
+    insertBbcode(`[url=${url}]`, '[/url]');
+  }
+
+  function insertImage() {
+    const url = window.prompt('Dán URL hình ảnh https://...');
+    if (!url) return;
+    insertBbcode(`[img]${url}[/img]`);
+  }
+
+  function insertVideo() {
+    const url = window.prompt('Dán link video YouTube hoặc MP4');
+    if (!url) return;
+    insertBbcode(`[video]${url}[/video]`);
+  }
+
+  return (
+    <>
+      <div className={`bbcode-toolbar ${compact ? 'compact' : ''}`} aria-label="Công cụ BBCode">
+        <button type="button" onClick={() => insertBbcode('[b]', '[/b]')} title="In đậm">
+          <Bold size={16} />
+        </button>
+        <button type="button" onClick={() => insertBbcode('[i]', '[/i]')} title="In nghiêng">
+          <Italic size={16} />
+        </button>
+        <button type="button" onClick={() => insertBbcode('[u]', '[/u]')} title="Gạch chân">
+          <Underline size={16} />
+        </button>
+        <button type="button" onClick={() => insertBbcode('[s]', '[/s]')} title="Gạch ngang">
+          <Strikethrough size={16} />
+        </button>
+        <button type="button" onClick={() => insertBbcode('[quote]', '[/quote]')} title="Trích dẫn">
+          <Quote size={16} />
+        </button>
+        <button type="button" onClick={() => insertBbcode('\n- ')} title="Danh sách">
+          <List size={16} />
+        </button>
+        <button type="button" onClick={insertLink} title="Liên kết">
+          <Link2 size={16} />
+        </button>
+        <button type="button" onClick={insertImage} title="Hình ảnh">
+          <ImagePlus size={16} />
+        </button>
+        <button type="button" onClick={insertVideo} title="Video">
+          <VideoIcon size={16} />
+        </button>
+      </div>
+      <textarea
+        ref={inputRef}
+        className={className}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
+        placeholder={placeholder}
+      />
+    </>
+  );
+}
+
 function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -1589,7 +1685,6 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [link, setLink] = useState('');
   const [shareEnabled, setShareEnabled] = useState(true);
   const [editingNewsId, setEditingNewsId] = useState('');
-  const contentInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   function editCategory(row: NewsCategory) {
     const name = askText('Tên danh mục', row.name);
@@ -1620,42 +1715,6 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
     setImageUrl('');
     setLink('');
     setShareEnabled(true);
-  }
-
-  function insertNewsBbcode(startTag: string, endTag = '') {
-    const input = contentInputRef.current;
-    if (!input) {
-      setContent((current) => `${current}${startTag}${endTag}`);
-      return;
-    }
-    const start = input.selectionStart;
-    const end = input.selectionEnd;
-    const selected = content.slice(start, end);
-    const next = `${content.slice(0, start)}${startTag}${selected}${endTag}${content.slice(end)}`;
-    setContent(next);
-    window.setTimeout(() => {
-      input.focus();
-      const cursor = selected ? start + startTag.length + selected.length + endTag.length : start + startTag.length;
-      input.setSelectionRange(cursor, cursor);
-    }, 0);
-  }
-
-  function insertNewsLink() {
-    const url = window.prompt('Dán liên kết https://...');
-    if (!url) return;
-    insertNewsBbcode(`[url=${url}]`, '[/url]');
-  }
-
-  function insertNewsImage() {
-    const url = window.prompt('Dán URL hình ảnh https://...');
-    if (!url) return;
-    insertNewsBbcode(`[img]${url}[/img]`);
-  }
-
-  function insertNewsVideo() {
-    const url = window.prompt('Dán link video YouTube hoặc MP4');
-    if (!url) return;
-    insertNewsBbcode(`[video]${url}[/video]`);
   }
 
   return (
@@ -1731,43 +1790,10 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
           </label>
           <label className="span">
             Nội dung
-            <div className="bbcode-toolbar" aria-label="Công cụ BBCode">
-              <button type="button" onClick={() => insertNewsBbcode('[b]', '[/b]')} title="In đậm">
-                <Bold size={16} />
-              </button>
-              <button type="button" onClick={() => insertNewsBbcode('[i]', '[/i]')} title="In nghiêng">
-                <Italic size={16} />
-              </button>
-              <button type="button" onClick={() => insertNewsBbcode('[u]', '[/u]')} title="Gạch chân">
-                <Underline size={16} />
-              </button>
-              <button type="button" onClick={() => insertNewsBbcode('[s]', '[/s]')} title="Gạch ngang">
-                <Strikethrough size={16} />
-              </button>
-              <button type="button" onClick={() => insertNewsBbcode('[quote]', '[/quote]')} title="Trích dẫn">
-                <Quote size={16} />
-              </button>
-              <button type="button" onClick={() => insertNewsBbcode('\n- ')} title="Danh sách">
-                <List size={16} />
-              </button>
-              <button type="button" onClick={insertNewsLink} title="Liên kết">
-                <Link2 size={16} />
-              </button>
-              <button type="button" onClick={insertNewsImage} title="Hình ảnh">
-                <ImagePlus size={16} />
-              </button>
-              <button type="button" onClick={insertNewsVideo} title="Video">
-                <VideoIcon size={16} />
-              </button>
-            </div>
-            <textarea
-              ref={contentInputRef}
+            <BbCodeTextarea
               className="news-content-input"
               value={content}
-              onChange={(event) => setContent(event.target.value)}
-              spellCheck={false}
-              autoCorrect="off"
-              autoCapitalize="off"
+              onChange={setContent}
               placeholder="Viết nội dung tin tức"
             />
           </label>
@@ -1997,11 +2023,10 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
           )}
           <label>
             Nội dung
-            <RichTextEditor
+            <BbCodeTextarea
               value={content}
               onChange={setContent}
               compact
-              imageUploadKind="images/quote"
               placeholder="Viết lời nhắc. Có thể in đậm, xuống dòng hoặc gắn liên kết."
             />
           </label>
@@ -2297,7 +2322,9 @@ function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: R
               value={values[name]}
               onUploaded={(url) => setValues({ ...values, [name]: url })}
             />
-          ) : label === 'Mô tả' || label === 'Nội dung' ? (
+          ) : label === 'Nội dung' ? (
+            <BbCodeTextarea value={values[name]} onChange={(value) => setValues({ ...values, [name]: value })} compact />
+          ) : label === 'Mô tả' ? (
             <textarea value={values[name]} onChange={(event) => setValues({ ...values, [name]: event.target.value })} />
           ) : (
             <input type={type} value={values[name]} onChange={(event) => setValues({ ...values, [name]: event.target.value })} required={['name', 'title', 'url', 'audioUrl', 'videoUrl', 'imageUrl', 'content', 'timeOfDay'].includes(name)} />

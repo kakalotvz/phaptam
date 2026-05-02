@@ -126,23 +126,12 @@ class HomeScreen extends ConsumerWidget {
                           child: Column(
                             children: [
                               for (final item in items)
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(item.title),
-                                  subtitle: Text(
-                                    '${item.category} • ${item.source} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
-                                  ),
-                                  trailing: item.shareEnabled
-                                      ? IconButton(
-                                          tooltip: 'Chia sẻ',
-                                          icon: const Icon(
-                                            Icons.share_outlined,
-                                          ),
-                                          onPressed: () =>
-                                              _showShareSheet(context, item),
-                                        )
-                                      : const Icon(Icons.chevron_right),
+                                _NewsListTile(
+                                  item: item,
                                   onTap: () => _showNewsDetail(context, item),
+                                  onShare: item.shareEnabled
+                                      ? () => _showShareSheet(context, item)
+                                      : null,
                                 ),
                             ],
                           ),
@@ -312,6 +301,91 @@ class _EmptyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(leading: Icon(icon), title: Text(label)),
+    );
+  }
+}
+
+class _NewsListTile extends StatelessWidget {
+  const _NewsListTile({
+    required this.item,
+    required this.onTap,
+    required this.onShare,
+  });
+
+  final NewsItem item;
+  final VoidCallback onTap;
+  final VoidCallback? onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = item.imageUrl;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${item.category} • ${item.source} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (onShare != null) ...[
+                      const SizedBox(height: 8),
+                      IconButton(
+                        tooltip: 'Chia sẻ',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: onShare,
+                        icon: const Icon(Icons.share_outlined),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: imageUrl == null || imageUrl.trim().isEmpty
+                    ? Container(
+                        width: 92,
+                        height: 92,
+                        color: Theme.of(context).colorScheme.surfaceContainer,
+                        child: const Icon(Icons.article_outlined),
+                      )
+                    : Image.network(
+                        imageUrl,
+                        width: 92,
+                        height: 92,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          width: 92,
+                          height: 92,
+                          color: Theme.of(context).colorScheme.surfaceContainer,
+                          child: const Icon(Icons.article_outlined),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
