@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Controller()
@@ -21,6 +21,15 @@ export class PublicController {
   @Get('audio')
   audio(@Query('category_id') categoryId?: string) {
     return this.prisma.audio.findMany({ where: { categoryId }, include: { category: true }, take: 30 });
+  }
+
+  @Post('audio/:id/view')
+  audioView(@Param('id') id: string) {
+    return this.prisma.audio.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+      select: { id: true, viewCount: true },
+    });
   }
 
   @Get('scriptures')
@@ -71,9 +80,27 @@ export class PublicController {
     };
   }
 
+  @Post('scriptures/:id/view')
+  scriptureView(@Param('id') id: string) {
+    return this.prisma.scripture.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+      select: { id: true, viewCount: true },
+    });
+  }
+
   @Get('video')
   video(@Query('category_id') categoryId?: string) {
     return this.prisma.video.findMany({ where: { categoryId }, include: { category: true }, take: 30 });
+  }
+
+  @Post('video/:id/view')
+  videoView(@Param('id') id: string) {
+    return this.prisma.video.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+      select: { id: true, viewCount: true },
+    });
   }
 
   @Get('meditation')
@@ -123,6 +150,15 @@ export class PublicController {
     return this.prisma.newsItem.findUniqueOrThrow({
       where: { id },
       include: { category: true },
+    });
+  }
+
+  @Post('news/:id/view')
+  newsView(@Param('id') id: string) {
+    return this.prisma.newsItem.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+      select: { id: true, viewCount: true },
     });
   }
 

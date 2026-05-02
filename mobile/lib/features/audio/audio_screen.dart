@@ -5,19 +5,33 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/offline/media_downloads.dart';
+import '../../core/network/api_client.dart';
 import '../../shared/widgets/content_cards.dart';
 import '../../shared/widgets/media_download_button.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
-class AudioScreen extends ConsumerWidget {
+enum _AudioSortOrder { newest, oldest, popular }
+
+class AudioScreen extends ConsumerStatefulWidget {
   const AudioScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AudioScreen> createState() => _AudioScreenState();
+}
+
+class _AudioScreenState extends ConsumerState<AudioScreen> {
+  String _query = '';
+  _AudioSortOrder _sortOrder = _AudioSortOrder.newest;
+
+  @override
+  Widget build(BuildContext context) {
     final categories = ref.watch(audioCategoriesProvider);
     final selected = ref.watch(selectedAudioCategoryProvider);
-    final audios = ref.watch(filteredAudioProvider);
+    final audios = _sortAudios(
+      _filterAudios(ref.watch(filteredAudioProvider)),
+      _sortOrder,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Kinh Phật')),
@@ -33,6 +47,15 @@ class AudioScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(18, 8, 18, 120),
             children: [
+              _AudioSearchControls(
+                query: _query,
+                selectedCategory: selected,
+                sortOrder: _sortOrder,
+                onQueryChanged: (value) => setState(() => _query = value),
+                onFilterPressed: () => _showFilterSheet(items),
+                onSortChanged: (value) => setState(() => _sortOrder = value),
+              ),
+              const SizedBox(height: 12),
               SizedBox(
                 height: 44,
                 child: ListView.separated(
@@ -91,12 +114,156 @@ class AudioScreen extends ConsumerWidget {
     );
   }
 
+  List<AudioItem> _filterAudios(List<AudioItem> items) {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return items;
+    return items.where((item) {
+      return item.title.toLowerCase().contains(query) ||
+          item.category.toLowerCase().contains(query) ||
+          (item.description ?? '').toLowerCase().contains(query);
+    }).toList();
+  }
+
+  List<AudioItem> _sortAudios(List<AudioItem> items, _AudioSortOrder order) {
+    final sorted = [...items];
+    sorted.sort((a, b) {
+      return switch (order) {
+        _AudioSortOrder.oldest => a.createdAt.compareTo(b.createdAt),
+        _AudioSortOrder.popular => b.viewCount.compareTo(a.viewCount),
+        _AudioSortOrder.newest => b.createdAt.compareTo(a.createdAt),
+      };
+    });
+    return sorted;
+  }
+
+  void _showFilterSheet(List<AudioCategory> categories) {
+    final selected = ref.read(selectedAudioCategoryProvider);
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Wrap(
+            runSpacing: 10,
+            children: [
+              Text('Bộ lọc', style: Theme.of(context).textTheme.titleLarge),
+              ListTile(
+                leading: const Icon(Icons.clear_all),
+                title: const Text('Tất cả danh mục'),
+                selected: selected == null,
+                onTap: () {
+                  ref.read(selectedAudioCategoryProvider.notifier).select(null);
+                  Navigator.pop(context);
+                },
+              ),
+              for (final category in categories)
+                ListTile(
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(category.name),
+                  subtitle: category.description == null
+                      ? null
+                      : Text(category.description!),
+                  selected: selected == category.name,
+                  onTap: () {
+                    ref
+                        .read(selectedAudioCategoryProvider.notifier)
+                        .select(category.name);
+                    Navigator.pop(context);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showPlayer(BuildContext context, AudioItem audio) {
+    unawaited(apiClient.post('/audio/${audio.id}/view', {}));
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => _AudioPlayerSheet(audio: audio),
+    );
+  }
+}
+
+class _AudioSearchControls extends StatelessWidget {
+  const _AudioSearchControls({
+    required this.query,
+    required this.selectedCategory,
+    required this.sortOrder,
+    required this.onQueryChanged,
+    required this.onFilterPressed,
+    required this.onSortChanged,
+  });
+
+  final String query;
+  final String? selectedCategory;
+  final _AudioSortOrder sortOrder;
+  final ValueChanged<String> onQueryChanged;
+  final VoidCallback onFilterPressed;
+  final ValueChanged<_AudioSortOrder> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Tìm kiếm audio',
+                ),
+                onChanged: onQueryChanged,
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'Bộ lọc',
+              onPressed: onFilterPressed,
+              icon: const Icon(Icons.tune),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                selectedCategory == null
+                    ? 'Bộ lọc: Tất cả'
+                    : 'Bộ lọc: $selectedCategory',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            DropdownButton<_AudioSortOrder>(
+              value: sortOrder,
+              underline: const SizedBox.shrink(),
+              onChanged: (value) {
+                if (value != null) onSortChanged(value);
+              },
+              items: const [
+                DropdownMenuItem(
+                  value: _AudioSortOrder.newest,
+                  child: Text('Mới -> cũ'),
+                ),
+                DropdownMenuItem(
+                  value: _AudioSortOrder.oldest,
+                  child: Text('Cũ -> mới'),
+                ),
+                DropdownMenuItem(
+                  value: _AudioSortOrder.popular,
+                  child: Text('Nhiều lượt xem'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

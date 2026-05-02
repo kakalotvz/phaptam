@@ -5,17 +5,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/offline/media_downloads.dart';
 import '../../shared/widgets/content_cards.dart';
 import '../../shared/widgets/media_download_button.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
-class VideoScreen extends ConsumerWidget {
+enum _VideoSortOrder { newest, oldest, popular }
+
+class VideoScreen extends ConsumerStatefulWidget {
   const VideoScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<VideoScreen> createState() => _VideoScreenState();
+}
+
+class _VideoScreenState extends ConsumerState<VideoScreen> {
+  String _query = '';
+  String? _teacherFilter;
+  String? _topicFilter;
+  _VideoSortOrder _sortOrder = _VideoSortOrder.newest;
+
+  @override
+  Widget build(BuildContext context) {
     final videos = ref.watch(videoListProvider);
 
     return Scaffold(
@@ -29,6 +42,12 @@ class VideoScreen extends ConsumerWidget {
               .where((teacher) => teacher.trim().isNotEmpty)
               .toSet()
               .toList();
+          final topics = items
+              .map((e) => e.topic)
+              .where((topic) => topic.trim().isNotEmpty)
+              .toSet()
+              .toList();
+          final visibleItems = _sortVideos(_filterVideos(items), _sortOrder);
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(videoListProvider);
@@ -37,28 +56,23 @@ class VideoScreen extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
               children: [
-                if (teachers.isNotEmpty)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final teacher in teachers)
-                        FilterChip(
-                          label: Text(teacher),
-                          selected: false,
-                          onSelected: (_) {},
-                        ),
-                    ],
-                  ),
-                if (teachers.isNotEmpty) const SizedBox(height: 18),
-                if (items.isEmpty)
+                _VideoSearchControls(
+                  query: _query,
+                  filterLabel: _filterLabel,
+                  sortOrder: _sortOrder,
+                  onQueryChanged: (value) => setState(() => _query = value),
+                  onFilterPressed: () => _showFilterSheet(teachers, topics),
+                  onSortChanged: (value) => setState(() => _sortOrder = value),
+                ),
+                const SizedBox(height: 14),
+                if (visibleItems.isEmpty)
                   const Card(
                     child: ListTile(
                       leading: Icon(Icons.video_library_outlined),
                       title: Text('Chưa có videos'),
                     ),
                   ),
-                for (final video in items) ...[
+                for (final video in visibleItems) ...[
                   InkWell(
                     borderRadius: BorderRadius.circular(18),
                     onTap: () => _showVideoPlayer(context, video),
@@ -83,12 +97,198 @@ class VideoScreen extends ConsumerWidget {
     );
   }
 
+  String get _filterLabel {
+    final parts = [?_teacherFilter, ?_topicFilter];
+    return parts.isEmpty ? 'Tất cả' : parts.join(' • ');
+  }
+
+  List<VideoItem> _filterVideos(List<VideoItem> items) {
+    final query = _query.trim().toLowerCase();
+    return items.where((item) {
+      final matchesQuery =
+          query.isEmpty ||
+          item.title.toLowerCase().contains(query) ||
+          item.teacher.toLowerCase().contains(query) ||
+          item.topic.toLowerCase().contains(query) ||
+          (item.description ?? '').toLowerCase().contains(query);
+      final matchesTeacher =
+          _teacherFilter == null || item.teacher == _teacherFilter;
+      final matchesTopic = _topicFilter == null || item.topic == _topicFilter;
+      return matchesQuery && matchesTeacher && matchesTopic;
+    }).toList();
+  }
+
+  List<VideoItem> _sortVideos(List<VideoItem> items, _VideoSortOrder order) {
+    final sorted = [...items];
+    sorted.sort((a, b) {
+      return switch (order) {
+        _VideoSortOrder.oldest => a.createdAt.compareTo(b.createdAt),
+        _VideoSortOrder.popular => b.viewCount.compareTo(a.viewCount),
+        _VideoSortOrder.newest => b.createdAt.compareTo(a.createdAt),
+      };
+    });
+    return sorted;
+  }
+
+  void _showFilterSheet(List<String> teachers, List<String> topics) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(18),
+            shrinkWrap: true,
+            children: [
+              Text('Bộ lọc', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Tất cả'),
+                    selected: _teacherFilter == null && _topicFilter == null,
+                    onSelected: (_) {
+                      setSheetState(() {
+                        _teacherFilter = null;
+                        _topicFilter = null;
+                      });
+                      setState(() {});
+                    },
+                  ),
+                  for (final teacher in teachers)
+                    FilterChip(
+                      label: Text(teacher),
+                      selected: _teacherFilter == teacher,
+                      onSelected: (_) {
+                        setSheetState(
+                          () => _teacherFilter = _teacherFilter == teacher
+                              ? null
+                              : teacher,
+                        );
+                        setState(() {});
+                      },
+                    ),
+                ],
+              ),
+              if (topics.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Danh mục',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final topic in topics)
+                      FilterChip(
+                        label: Text(topic),
+                        selected: _topicFilter == topic,
+                        onSelected: (_) {
+                          setSheetState(
+                            () => _topicFilter = _topicFilter == topic
+                                ? null
+                                : topic,
+                          );
+                          setState(() {});
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showVideoPlayer(BuildContext context, VideoItem video) {
+    unawaited(apiClient.post('/video/${video.id}/view', {}));
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => _VideoPlayerSheet(video: video),
+    );
+  }
+}
+
+class _VideoSearchControls extends StatelessWidget {
+  const _VideoSearchControls({
+    required this.query,
+    required this.filterLabel,
+    required this.sortOrder,
+    required this.onQueryChanged,
+    required this.onFilterPressed,
+    required this.onSortChanged,
+  });
+
+  final String query;
+  final String filterLabel;
+  final _VideoSortOrder sortOrder;
+  final ValueChanged<String> onQueryChanged;
+  final VoidCallback onFilterPressed;
+  final ValueChanged<_VideoSortOrder> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Tìm kiếm video',
+                ),
+                onChanged: onQueryChanged,
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'Bộ lọc',
+              onPressed: onFilterPressed,
+              icon: const Icon(Icons.tune),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Bộ lọc: $filterLabel',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            DropdownButton<_VideoSortOrder>(
+              value: sortOrder,
+              underline: const SizedBox.shrink(),
+              onChanged: (value) {
+                if (value != null) onSortChanged(value);
+              },
+              items: const [
+                DropdownMenuItem(
+                  value: _VideoSortOrder.newest,
+                  child: Text('Mới -> cũ'),
+                ),
+                DropdownMenuItem(
+                  value: _VideoSortOrder.oldest,
+                  child: Text('Cũ -> mới'),
+                ),
+                DropdownMenuItem(
+                  value: _VideoSortOrder.popular,
+                  child: Text('Nhiều lượt xem'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

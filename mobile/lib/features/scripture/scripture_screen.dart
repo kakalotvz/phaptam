@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/network/api_client.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
@@ -205,7 +206,9 @@ class ScriptureScreen extends ConsumerWidget {
   }
 }
 
-class _ScriptureContent extends StatelessWidget {
+enum _ScriptureSortOrder { newest, oldest, popular }
+
+class _ScriptureContent extends StatefulWidget {
   const _ScriptureContent({
     required this.scriptures,
     required this.remindersAsync,
@@ -219,24 +222,42 @@ class _ScriptureContent extends StatelessWidget {
   final WidgetRef ref;
 
   @override
+  State<_ScriptureContent> createState() => _ScriptureContentState();
+}
+
+class _ScriptureContentState extends State<_ScriptureContent> {
+  String _query = '';
+  String? _categoryFilter;
+  _ScriptureSortOrder _sortOrder = _ScriptureSortOrder.newest;
+
+  @override
   Widget build(BuildContext context) {
-    final scriptureGroups = _groupScriptures(scriptures);
+    final visibleScriptures = _sortScriptures(
+      _filterScriptures(widget.scriptures),
+      _sortOrder,
+    );
+    final scriptureGroups = _groupScriptures(visibleScriptures);
+    final categories = widget.scriptures
+        .map((item) => item.category ?? item.title)
+        .where((item) => item.trim().isNotEmpty)
+        .toSet()
+        .toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         FilledButton.icon(
-          onPressed: scriptures.isEmpty
+          onPressed: widget.scriptures.isEmpty
               ? null
               : () {
-                  if (!isLoggedIn) {
+                  if (!widget.isLoggedIn) {
                     context.push('/login');
                     return;
                   }
                   const ScriptureScreen()._showReminderSheet(
                     context,
-                    ref,
-                    scriptures,
+                    widget.ref,
+                    widget.scriptures,
                   );
                 },
           icon: const Icon(Icons.add_alarm),
@@ -245,7 +266,7 @@ class _ScriptureContent extends StatelessWidget {
         const SizedBox(height: 16),
         Text('Lịch nhắc', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
-        if (!isLoggedIn)
+        if (!widget.isLoggedIn)
           Card(
             child: ListTile(
               leading: const Icon(Icons.lock_outline),
@@ -256,7 +277,7 @@ class _ScriptureContent extends StatelessWidget {
             ),
           )
         else
-          remindersAsync.when(
+          widget.remindersAsync.when(
             loading: () => const _EmptyReminderCard(),
             error: (error, stackTrace) => const _EmptyReminderCard(),
             data: (reminders) => Column(
@@ -273,7 +294,7 @@ class _ScriptureContent extends StatelessWidget {
                       isThreeLine: true,
                       trailing: Switch(
                         value: reminder.active,
-                        onChanged: (value) => ref
+                        onChanged: (value) => widget.ref
                             .read(scriptureReminderProvider.notifier)
                             .toggle(reminder.id, value),
                       ),
@@ -300,7 +321,16 @@ class _ScriptureContent extends StatelessWidget {
         const SizedBox(height: 20),
         Text('Bộ kinh', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
-        if (scriptures.isEmpty)
+        _ScriptureSearchControls(
+          query: _query,
+          filterLabel: _categoryFilter ?? 'Tất cả',
+          sortOrder: _sortOrder,
+          onQueryChanged: (value) => setState(() => _query = value),
+          onFilterPressed: () => _showFilterSheet(categories),
+          onSortChanged: (value) => setState(() => _sortOrder = value),
+        ),
+        const SizedBox(height: 12),
+        if (visibleScriptures.isEmpty)
           const Card(
             child: ListTile(
               leading: Icon(Icons.menu_book_outlined),
@@ -311,6 +341,153 @@ class _ScriptureContent extends StatelessWidget {
           _ScriptureGroupCard(group: group),
           const SizedBox(height: 12),
         ],
+      ],
+    );
+  }
+
+  List<Scripture> _filterScriptures(List<Scripture> items) {
+    final query = _query.trim().toLowerCase();
+    return items.where((item) {
+      final category = item.category ?? '';
+      final matchesQuery =
+          query.isEmpty ||
+          item.title.toLowerCase().contains(query) ||
+          category.toLowerCase().contains(query) ||
+          (item.description ?? '').toLowerCase().contains(query);
+      final matchesCategory =
+          _categoryFilter == null ||
+          category == _categoryFilter ||
+          item.title == _categoryFilter;
+      return matchesQuery && matchesCategory;
+    }).toList();
+  }
+
+  List<Scripture> _sortScriptures(
+    List<Scripture> items,
+    _ScriptureSortOrder order,
+  ) {
+    final sorted = [...items];
+    sorted.sort((a, b) {
+      final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return switch (order) {
+        _ScriptureSortOrder.oldest => aDate.compareTo(bDate),
+        _ScriptureSortOrder.popular => b.viewCount.compareTo(a.viewCount),
+        _ScriptureSortOrder.newest => bDate.compareTo(aDate),
+      };
+    });
+    return sorted;
+  }
+
+  void _showFilterSheet(List<String> categories) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Wrap(
+            runSpacing: 10,
+            children: [
+              Text('Bộ lọc', style: Theme.of(context).textTheme.titleLarge),
+              ListTile(
+                leading: const Icon(Icons.clear_all),
+                title: const Text('Tất cả danh mục'),
+                selected: _categoryFilter == null,
+                onTap: () {
+                  setState(() => _categoryFilter = null);
+                  Navigator.pop(context);
+                },
+              ),
+              for (final category in categories)
+                ListTile(
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(category),
+                  selected: _categoryFilter == category,
+                  onTap: () {
+                    setState(() => _categoryFilter = category);
+                    Navigator.pop(context);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScriptureSearchControls extends StatelessWidget {
+  const _ScriptureSearchControls({
+    required this.query,
+    required this.filterLabel,
+    required this.sortOrder,
+    required this.onQueryChanged,
+    required this.onFilterPressed,
+    required this.onSortChanged,
+  });
+
+  final String query;
+  final String filterLabel;
+  final _ScriptureSortOrder sortOrder;
+  final ValueChanged<String> onQueryChanged;
+  final VoidCallback onFilterPressed;
+  final ValueChanged<_ScriptureSortOrder> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Tìm kiếm bản đọc',
+                ),
+                onChanged: onQueryChanged,
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'Bộ lọc',
+              onPressed: onFilterPressed,
+              icon: const Icon(Icons.tune),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Bộ lọc: $filterLabel',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            DropdownButton<_ScriptureSortOrder>(
+              value: sortOrder,
+              underline: const SizedBox.shrink(),
+              onChanged: (value) {
+                if (value != null) onSortChanged(value);
+              },
+              items: const [
+                DropdownMenuItem(
+                  value: _ScriptureSortOrder.newest,
+                  child: Text('Mới -> cũ'),
+                ),
+                DropdownMenuItem(
+                  value: _ScriptureSortOrder.oldest,
+                  child: Text('Cũ -> mới'),
+                ),
+                DropdownMenuItem(
+                  value: _ScriptureSortOrder.popular,
+                  child: Text('Nhiều lượt xem'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -391,9 +568,24 @@ class _ScriptureListCard extends StatelessWidget {
               ? 'Chưa có dòng kinh'
               : scripture.description ?? '${scripture.lines.length} dòng',
         ),
+        isThreeLine: scripture.lines.isNotEmpty,
         trailing: scripture.lines.isEmpty
             ? const Icon(Icons.info_outline)
-            : const Icon(Icons.chevron_right),
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.chevron_right),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.remove_red_eye_outlined, size: 14),
+                      const SizedBox(width: 3),
+                      Text('${scripture.viewCount}'),
+                    ],
+                  ),
+                ],
+              ),
         onTap: scripture.lines.isEmpty
             ? null
             : () => Navigator.of(context).push(
@@ -482,6 +674,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   @override
   void initState() {
     super.initState();
+    unawaited(apiClient.post('/scriptures/${widget.scripture.id}/view', {}));
     final safeIndex = widget.initialLineIndex.clamp(
       0,
       widget.scripture.lines.length - 1,

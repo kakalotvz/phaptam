@@ -1,18 +1,33 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/network/api_client.dart';
 import '../../shared/widgets/content_cards.dart';
 import '../../shared/widgets/rich_content.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
-class HomeScreen extends ConsumerWidget {
+enum _NewsSortOrder { newest, oldest, popular }
+
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  String _newsQuery = '';
+  String? _newsCategoryFilter;
+  String? _newsSourceFilter;
+  _NewsSortOrder _newsSortOrder = _NewsSortOrder.newest;
+
+  @override
+  Widget build(BuildContext context) {
     final audios = ref.watch(audioListProvider);
     final videos = ref.watch(videoListProvider);
     final news = ref.watch(newsListProvider);
@@ -116,26 +131,59 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 news.when(
-                  data: (items) => items.isEmpty
-                      ? const _EmptyCard(
-                          icon: Icons.article_outlined,
-                          label: 'Chưa có tin tức',
-                        )
-                      : CalmSection(
-                          title: 'Tin Phật giáo',
-                          child: Column(
-                            children: [
-                              for (final item in items)
-                                _NewsListTile(
-                                  item: item,
-                                  onTap: () => _showNewsDetail(context, item),
-                                  onShare: item.shareEnabled
-                                      ? () => _showShareSheet(context, item)
-                                      : null,
+                  data: (items) {
+                    final visibleNews = _sortNews(
+                      _filterNews(items),
+                      _newsSortOrder,
+                    );
+                    final categories = items
+                        .map((item) => item.category)
+                        .toSet()
+                        .toList();
+                    final sources = items
+                        .map((item) => item.source)
+                        .toSet()
+                        .toList();
+                    return items.isEmpty
+                        ? const _EmptyCard(
+                            icon: Icons.article_outlined,
+                            label: 'Chưa có tin tức',
+                          )
+                        : CalmSection(
+                            title: 'Tin Phật giáo',
+                            child: Column(
+                              children: [
+                                _NewsSearchControls(
+                                  query: _newsQuery,
+                                  filterLabel: _newsFilterLabel,
+                                  sortOrder: _newsSortOrder,
+                                  onQueryChanged: (value) =>
+                                      setState(() => _newsQuery = value),
+                                  onFilterPressed: () =>
+                                      _showNewsFilterSheet(categories, sources),
+                                  onSortChanged: (value) =>
+                                      setState(() => _newsSortOrder = value),
                                 ),
-                            ],
-                          ),
-                        ),
+                                const SizedBox(height: 12),
+                                if (visibleNews.isEmpty)
+                                  const Card(
+                                    child: ListTile(
+                                      leading: Icon(Icons.article_outlined),
+                                      title: Text('Chưa có tin tức'),
+                                    ),
+                                  ),
+                                for (final item in visibleNews)
+                                  _NewsListTile(
+                                    item: item,
+                                    onTap: () => _showNewsDetail(context, item),
+                                    onShare: item.shareEnabled
+                                        ? () => _showShareSheet(context, item)
+                                        : null,
+                                  ),
+                              ],
+                            ),
+                          );
+                  },
                   loading: () => const _EmptyCard(
                     icon: Icons.article_outlined,
                     label: 'Chưa có tin tức',
@@ -153,6 +201,112 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  String get _newsFilterLabel {
+    final parts = [?_newsCategoryFilter, ?_newsSourceFilter];
+    return parts.isEmpty ? 'Tất cả' : parts.join(' • ');
+  }
+
+  List<NewsItem> _filterNews(List<NewsItem> items) {
+    final query = _newsQuery.trim().toLowerCase();
+    return items.where((item) {
+      final matchesQuery =
+          query.isEmpty ||
+          item.title.toLowerCase().contains(query) ||
+          item.category.toLowerCase().contains(query) ||
+          item.source.toLowerCase().contains(query) ||
+          item.summary.toLowerCase().contains(query) ||
+          item.content.toLowerCase().contains(query);
+      final matchesCategory =
+          _newsCategoryFilter == null || item.category == _newsCategoryFilter;
+      final matchesSource =
+          _newsSourceFilter == null || item.source == _newsSourceFilter;
+      return matchesQuery && matchesCategory && matchesSource;
+    }).toList();
+  }
+
+  List<NewsItem> _sortNews(List<NewsItem> items, _NewsSortOrder order) {
+    final sorted = [...items];
+    sorted.sort((a, b) {
+      return switch (order) {
+        _NewsSortOrder.oldest => a.publishedAt.compareTo(b.publishedAt),
+        _NewsSortOrder.popular => b.viewCount.compareTo(a.viewCount),
+        _NewsSortOrder.newest => b.publishedAt.compareTo(a.publishedAt),
+      };
+    });
+    return sorted;
+  }
+
+  void _showNewsFilterSheet(List<String> categories, List<String> sources) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(18),
+            shrinkWrap: true,
+            children: [
+              Text('Bộ lọc', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              FilterChip(
+                label: const Text('Tất cả'),
+                selected:
+                    _newsCategoryFilter == null && _newsSourceFilter == null,
+                onSelected: (_) {
+                  setSheetState(() {
+                    _newsCategoryFilter = null;
+                    _newsSourceFilter = null;
+                  });
+                  setState(() {});
+                },
+              ),
+              const SizedBox(height: 12),
+              Text('Danh mục', style: Theme.of(context).textTheme.titleMedium),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final category in categories)
+                    FilterChip(
+                      label: Text(category),
+                      selected: _newsCategoryFilter == category,
+                      onSelected: (_) {
+                        setSheetState(
+                          () => _newsCategoryFilter =
+                              _newsCategoryFilter == category ? null : category,
+                        );
+                        setState(() {});
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text('Nguồn', style: Theme.of(context).textTheme.titleMedium),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final source in sources)
+                    FilterChip(
+                      label: Text(source),
+                      selected: _newsSourceFilter == source,
+                      onSelected: (_) {
+                        setSheetState(
+                          () => _newsSourceFilter = _newsSourceFilter == source
+                              ? null
+                              : source,
+                        );
+                        setState(() {});
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _refreshHomeContent(WidgetRef ref) async {
     refreshPublicContent(ref);
     await Future.wait([
@@ -165,6 +319,7 @@ class HomeScreen extends ConsumerWidget {
   }
 
   void _showNewsDetail(BuildContext context, NewsItem item) {
+    unawaited(apiClient.post('/news/${item.id}/view', {}));
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -347,6 +502,22 @@ class _NewsListTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.remove_red_eye_outlined,
+                          size: 15,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${item.viewCount}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
                     if (onShare != null) ...[
                       const SizedBox(height: 8),
                       IconButton(
@@ -386,6 +557,83 @@ class _NewsListTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _NewsSearchControls extends StatelessWidget {
+  const _NewsSearchControls({
+    required this.query,
+    required this.filterLabel,
+    required this.sortOrder,
+    required this.onQueryChanged,
+    required this.onFilterPressed,
+    required this.onSortChanged,
+  });
+
+  final String query;
+  final String filterLabel;
+  final _NewsSortOrder sortOrder;
+  final ValueChanged<String> onQueryChanged;
+  final VoidCallback onFilterPressed;
+  final ValueChanged<_NewsSortOrder> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Tìm kiếm tin tức',
+                ),
+                onChanged: onQueryChanged,
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'Bộ lọc',
+              onPressed: onFilterPressed,
+              icon: const Icon(Icons.tune),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Bộ lọc: $filterLabel',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            DropdownButton<_NewsSortOrder>(
+              value: sortOrder,
+              underline: const SizedBox.shrink(),
+              onChanged: (value) {
+                if (value != null) onSortChanged(value);
+              },
+              items: const [
+                DropdownMenuItem(
+                  value: _NewsSortOrder.newest,
+                  child: Text('Mới -> cũ'),
+                ),
+                DropdownMenuItem(
+                  value: _NewsSortOrder.oldest,
+                  child: Text('Cũ -> mới'),
+                ),
+                DropdownMenuItem(
+                  value: _NewsSortOrder.popular,
+                  child: Text('Nhiều lượt xem'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

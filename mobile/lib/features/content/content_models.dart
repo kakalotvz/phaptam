@@ -22,6 +22,8 @@ class AudioItem {
     required this.duration,
     required this.thumbnailUrl,
     required this.audioUrl,
+    required this.createdAt,
+    this.viewCount = 0,
     this.description,
   });
 
@@ -31,6 +33,8 @@ class AudioItem {
   final Duration duration;
   final String thumbnailUrl;
   final String audioUrl;
+  final DateTime createdAt;
+  final int viewCount;
   final String? description;
 
   factory AudioItem.fromJson(Map<String, dynamic> json) {
@@ -44,6 +48,10 @@ class AudioItem {
       duration: Duration(seconds: NumberParser.asInt(json['duration'])),
       thumbnailUrl: json['thumbnailUrl'] as String? ?? '',
       audioUrl: json['audioUrl'] as String? ?? '',
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      viewCount: NumberParser.asInt(json['viewCount']),
       description: json['description'] as String?,
     );
   }
@@ -57,6 +65,8 @@ class VideoItem {
     required this.topic,
     required this.thumbnailUrl,
     required this.videoUrl,
+    required this.createdAt,
+    this.viewCount = 0,
     this.description,
   });
 
@@ -66,6 +76,8 @@ class VideoItem {
   final String topic;
   final String thumbnailUrl;
   final String videoUrl;
+  final DateTime createdAt;
+  final int viewCount;
   final String? description;
 
   factory VideoItem.fromJson(Map<String, dynamic> json) {
@@ -79,6 +91,10 @@ class VideoItem {
           : 'Không danh mục',
       thumbnailUrl: json['thumbnailUrl'] as String? ?? '',
       videoUrl: json['videoUrl'] as String? ?? '',
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      viewCount: NumberParser.asInt(json['viewCount']),
       description: json['description'] as String?,
     );
   }
@@ -93,6 +109,7 @@ class NewsItem {
     required this.publishedAt,
     required this.summary,
     required this.content,
+    this.viewCount = 0,
     this.imageUrl,
     this.link,
     this.shareEnabled = true,
@@ -105,6 +122,7 @@ class NewsItem {
   final DateTime publishedAt;
   final String summary;
   final String content;
+  final int viewCount;
   final String? imageUrl;
   final String? link;
   final bool shareEnabled;
@@ -123,6 +141,7 @@ class NewsItem {
           DateTime.now(),
       summary: json['summary'] as String? ?? '',
       content: json['content'] as String? ?? json['summary'] as String? ?? '',
+      viewCount: NumberParser.asInt(json['viewCount']),
       imageUrl: json['imageUrl'] as String?,
       link: json['link'] as String?,
       shareEnabled: json['shareEnabled'] as bool? ?? true,
@@ -217,6 +236,8 @@ class Scripture {
     this.backgroundImageUrl,
     this.categoryId,
     this.category,
+    this.createdAt,
+    this.viewCount = 0,
   });
 
   factory Scripture.fromJson(Map<String, dynamic> json) {
@@ -238,6 +259,10 @@ class Scripture {
       category: category is Map<String, dynamic>
           ? category['name'] as String? ?? 'Đọc kinh'
           : null,
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      viewCount: NumberParser.asInt(json['viewCount']),
       lines: lines,
     );
   }
@@ -248,6 +273,8 @@ class Scripture {
   final String? backgroundImageUrl;
   final String? categoryId;
   final String? category;
+  final DateTime? createdAt;
+  final int viewCount;
   final List<ScriptureLine> lines;
 }
 

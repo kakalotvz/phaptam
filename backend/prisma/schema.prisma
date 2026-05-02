@@ -76,6 +76,7 @@ model Audio {
   thumbnailUrl String?         @map("thumbnail_url")
   categoryId   String          @map("category_id")
   duration     Int
+  viewCount    Int             @default(0) @map("view_count")
   category     AudioCategory   @relation(fields: [categoryId], references: [id])
   playlistItems PlaylistItem[]
   progresses   AudioProgress[]
@@ -91,6 +92,7 @@ model Video {
   thumbnailUrl String?       @map("thumbnail_url")
   categoryId   String        @map("category_id")
   teacher      String?
+  viewCount    Int           @default(0) @map("view_count")
   category     VideoCategory @relation(fields: [categoryId], references: [id])
   histories    History[]
   createdAt    DateTime      @default(now()) @map("created_at")
@@ -219,6 +221,7 @@ model NewsItem {
   sourceName   String?         @map("source_name")
   sourceType   NewsSourceType  @default(RSS) @map("source_type")
   shareEnabled Boolean         @default(true) @map("share_enabled")
+  viewCount    Int             @default(0) @map("view_count")
   publishedAt  DateTime        @default(now()) @map("published_at")
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")
@@ -235,6 +238,7 @@ model Scripture {
   backgroundImageUrl String?    @map("background_image_url")
   categoryId  String?         @map("category_id")
   category    AudioCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  viewCount   Int             @default(0) @map("view_count")
   lines       ScriptureLine[]
   reminders   ScriptureReminder[]
   createdAt   DateTime        @default(now()) @map("created_at")
