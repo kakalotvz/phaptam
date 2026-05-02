@@ -1141,12 +1141,20 @@ function RichTextEditor({
   placeholder,
   compact = false,
   imageUploadKind = 'images/news',
+  parseStoredMarkup = true,
+  pasteAsPlainText = false,
+  resetFormatOnEnter = false,
+  demoteStoredHeadings = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   compact?: boolean;
   imageUploadKind?: Parameters<typeof uploadToR2>[1];
+  parseStoredMarkup?: boolean;
+  pasteAsPlainText?: boolean;
+  resetFormatOnEnter?: boolean;
+  demoteStoredHeadings?: boolean;
 }) {
   const editorMountRef = useRef<HTMLDivElement | null>(null);
   const quillRef = useRef<Quill | null>(null);
@@ -1170,8 +1178,40 @@ function RichTextEditor({
       },
     });
     quillRef.current = quill;
-    quill.clipboard.dangerouslyPasteHTML(0, storedContentToEditorHtml(value));
+    quill.root.setAttribute('spellcheck', 'false');
+    quill.root.setAttribute('autocorrect', 'off');
+    quill.root.setAttribute('autocapitalize', 'off');
+    quill.root.setAttribute('autocomplete', 'off');
+    quill.clipboard.dangerouslyPasteHTML(0, storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings));
     lastHtmlRef.current = quill.root.innerHTML;
+
+    const handlePaste = (event: ClipboardEvent) => {
+      if (!pasteAsPlainText) return;
+      const text = event.clipboardData?.getData('text/plain');
+      if (!text) return;
+      event.preventDefault();
+      const range = quill.getSelection(true);
+      if (range.length) quill.deleteText(range.index, range.length, 'user');
+      quill.insertText(range.index, text, 'user');
+      quill.removeFormat(range.index, text.length, 'silent');
+      quill.setSelection(range.index + text.length, 0, 'silent');
+      syncValue();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!resetFormatOnEnter || event.key !== 'Enter' || event.shiftKey) return;
+      window.setTimeout(() => {
+        const range = quill.getSelection();
+        if (!range) return;
+        quill.formatLine(range.index, 1, { header: false, blockquote: false, list: false, align: false }, 'silent');
+        quill.format('bold', false, 'silent');
+        quill.format('italic', false, 'silent');
+        quill.format('underline', false, 'silent');
+        quill.format('strike', false, 'silent');
+        syncValue();
+      }, 0);
+    };
+    quill.root.addEventListener('paste', handlePaste);
+    quill.root.addEventListener('keydown', handleKeyDown);
 
     quill.on('selection-change', (range) => {
       isFocusedRef.current = range !== null;
@@ -1181,12 +1221,17 @@ function RichTextEditor({
       lastHtmlRef.current = nextHtml;
       onChange(nextHtml);
     });
+
+    return () => {
+      quill.root.removeEventListener('paste', handlePaste);
+      quill.root.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   useEffect(() => {
     const quill = quillRef.current;
     if (!quill || isFocusedRef.current || value === lastHtmlRef.current) return;
-    const nextHtml = storedContentToEditorHtml(value);
+    const nextHtml = storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings);
     const currentHtml = sanitizeEditorHtml(quill.root.innerHTML);
     if (currentHtml !== nextHtml) {
       quill.clipboard.dangerouslyPasteHTML(0, nextHtml);
@@ -1346,6 +1391,22 @@ function RichTextEditor({
   );
 }
 
+function plainTextToHtml(value: string) {
+  const blocks = value.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  return blocks.map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`).join('');
+}
+
+function demoteHeadingsToParagraphs(value: string) {
+  const container = document.createElement('div');
+  container.innerHTML = value;
+  container.querySelectorAll('h1, h2, h3').forEach((heading) => {
+    const paragraph = document.createElement('p');
+    paragraph.innerHTML = heading.innerHTML;
+    heading.replaceWith(paragraph);
+  });
+  return container.innerHTML;
+}
+
 function markupToHtml(value: string) {
   const normalized = normalizeStoredMarkup(value);
   const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
@@ -1376,10 +1437,11 @@ function markupToHtml(value: string) {
     .join('');
 }
 
-function storedContentToEditorHtml(value: string) {
+function storedContentToEditorHtml(value: string, parseStoredMarkup = true, demoteStoredHeadings = false) {
   const trimmed = value.trim();
   if (!trimmed) return '';
-  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) return sanitizeEditorHtml(trimmed);
+  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) return sanitizeEditorHtml(demoteStoredHeadings ? demoteHeadingsToParagraphs(trimmed) : trimmed);
+  if (!parseStoredMarkup) return plainTextToHtml(trimmed);
   return markupToHtml(trimmed);
 }
 
@@ -1613,7 +1675,15 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
           </label>
           <label className="span">
             Nội dung
-            <RichTextEditor value={content} onChange={setContent} placeholder="Viết nội dung tin. Dùng thanh công cụ để định dạng tiêu đề, chữ đậm, danh sách và liên kết." />
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              parseStoredMarkup={false}
+              pasteAsPlainText
+              resetFormatOnEnter
+              demoteStoredHeadings
+              placeholder="Viết nội dung tin. Dùng thanh công cụ để định dạng tiêu đề, chữ đậm, danh sách và liên kết."
+            />
           </label>
           <label className="check-row span">
             <input type="checkbox" checked={shareEnabled} onChange={(event) => setShareEnabled(event.target.checked)} />
