@@ -302,8 +302,7 @@ class _ScriptureContent extends StatelessWidget {
           const Card(
             child: ListTile(
               leading: Icon(Icons.menu_book_outlined),
-              title: Text('Không có bản Đọc Kinh'),
-              subtitle: Text('Thêm bản mới trong admin để hiển thị tại đây.'),
+              title: Text('Chưa có bản Đọc Kinh'),
             ),
           ),
         for (final scripture in scriptures)
@@ -368,6 +367,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<int> _activeIndex = ValueNotifier<int>(0);
   Timer? _timer;
+  Timer? _controlsHideTimer;
   double _speed = 1;
   String _speedMode = 'normal';
   String _repeatMode = 'off';
@@ -376,6 +376,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   String _backgroundUrl = '';
   Duration _elapsed = Duration.zero;
   bool _playing = false;
+  bool _controlsVisible = true;
   DateTime? _lastTick;
   double _fontSize = 24;
 
@@ -391,18 +392,35 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     _activeIndex.value = safeIndex;
     _elapsed = widget.scripture.lines[safeIndex].startTime;
     _backgroundUrl = widget.scripture.backgroundImageUrl ?? '';
-    WidgetsBinding.instance.addPostFrameCallback((_) => _centerLine(safeIndex));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _centerLine(safeIndex, jump: true);
+      _scheduleControlsHide();
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _controlsHideTimer?.cancel();
     _activeIndex.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
+  void _scheduleControlsHide() {
+    _controlsHideTimer?.cancel();
+    _controlsHideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _showControls() {
+    setState(() => _controlsVisible = true);
+    _scheduleControlsHide();
+  }
+
   void _toggle() {
+    _showControls();
     final shouldPlay = !_playing;
     setState(() {
       _playing = shouldPlay;
@@ -503,19 +521,25 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     _centerLine(index);
   }
 
-  void _centerLine(int index) {
+  void _centerLine(int index, {bool jump = false}) {
     if (!_scrollController.hasClients) return;
-    final viewportHeight = _scrollController.position.viewportDimension;
-    final offset =
-        (index * _itemHeight) - (viewportHeight / 2) + (_itemHeight / 2);
-    _scrollController.animateTo(
-      offset.clamp(0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 420),
-      curve: Curves.linear,
-    );
+    final offset = (index * _itemHeight) + (_itemHeight / 2);
+    final target = offset
+        .clamp(0, _scrollController.position.maxScrollExtent)
+        .toDouble();
+    if (jump) {
+      _scrollController.jumpTo(target);
+    } else {
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _jumpToLine(int index) {
+    _showControls();
     setState(() {
       _elapsed = widget.scripture.lines[index].startTime;
       _completedRepeats = 0;
@@ -524,6 +548,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   }
 
   void _restart() {
+    _showControls();
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -555,6 +580,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   }
 
   void _selectSpeed(String value) {
+    _showControls();
     setState(() {
       _speedMode = value;
       if (value == 'slow') _speed = .75;
@@ -564,6 +590,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   }
 
   void _selectRepeat(String value) {
+    _showControls();
     setState(() {
       _repeatMode = value;
       _completedRepeats = 0;
@@ -635,282 +662,344 @@ class _ScriptureReaderState extends State<ScriptureReader> {
         ],
       ),
       extendBodyBehindAppBar: true,
-      body: Stack(
-        children: [
-          if (_backgroundUrl.isNotEmpty)
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _showControls,
+        child: Stack(
+          children: [
+            if (_backgroundUrl.isNotEmpty)
+              Positioned.fill(
+                child: Image.network(
+                  _backgroundUrl,
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox.shrink(),
+                ),
+              ),
             Positioned.fill(
-              child: Image.network(
-                _backgroundUrl,
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                filterQuality: FilterQuality.medium,
-                errorBuilder: (context, error, stackTrace) =>
-                    const SizedBox.shrink(),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _backgroundUrl.isEmpty
+                      ? const Color(0xFF0F0D0A)
+                      : Colors.black.withValues(alpha: .58),
+                ),
               ),
             ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: _backgroundUrl.isEmpty
-                    ? const Color(0xFF0F0D0A)
-                    : Colors.black.withValues(alpha: .58),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: ValueListenableBuilder<int>(
-              valueListenable: _activeIndex,
-              builder: (context, activeIndex, _) {
-                return LayoutBuilder(
-                  builder: (context, constraints) {
-                    return ListView.builder(
-                      controller: _scrollController,
-                      padding: EdgeInsets.fromLTRB(
-                        24,
-                        constraints.maxHeight / 2,
-                        24,
-                        constraints.maxHeight / 2,
-                      ),
-                      itemExtent: _itemHeight,
-                      itemCount: lines.length,
-                      itemBuilder: (context, index) {
-                        final active = index == activeIndex;
-                        return GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => _jumpToLine(index),
-                          child: AnimatedScale(
-                            scale: active ? 1.08 : 1,
-                            duration: const Duration(milliseconds: 180),
-                            child: AnimatedOpacity(
-                              opacity: active ? 1 : .34,
+            Positioned.fill(
+              child: ValueListenableBuilder<int>(
+                valueListenable: _activeIndex,
+                builder: (context, activeIndex, _) {
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      return ListView.builder(
+                        controller: _scrollController,
+                        padding: EdgeInsets.fromLTRB(
+                          24,
+                          constraints.maxHeight / 2,
+                          24,
+                          constraints.maxHeight / 2,
+                        ),
+                        itemExtent: _itemHeight,
+                        itemCount: lines.length,
+                        itemBuilder: (context, index) {
+                          final active = index == activeIndex;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _jumpToLine(index),
+                            child: AnimatedScale(
+                              scale: active ? 1.08 : 1,
                               duration: const Duration(milliseconds: 180),
-                              child: Center(
-                                child: Text(
-                                  lines[index].content,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 4,
-                                  overflow: TextOverflow.fade,
-                                  softWrap: true,
-                                  style: TextStyle(
-                                    color: active
-                                        ? const Color(0xFFFFE8A3)
-                                        : const Color(0xFFFFF8E8),
-                                    fontSize: active
-                                        ? _fontSize + 2
-                                        : _fontSize,
-                                    fontWeight: active
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    height: 1.32,
+                              child: AnimatedOpacity(
+                                opacity: active ? 1 : .34,
+                                duration: const Duration(milliseconds: 180),
+                                child: Center(
+                                  child: Text(
+                                    lines[index].content,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 4,
+                                    overflow: TextOverflow.fade,
+                                    softWrap: true,
+                                    style: TextStyle(
+                                      color: active
+                                          ? const Color(0xFFFFE8A3)
+                                          : const Color(0xFFFFF8E8),
+                                      fontSize: active
+                                          ? _fontSize + 2
+                                          : _fontSize,
+                                      fontWeight: active
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      height: 1.32,
+                                      shadows: active
+                                          ? const [
+                                              Shadow(
+                                                color: Color(0xFFFFE8A3),
+                                                blurRadius: 18,
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: _toggle,
-                            icon: Icon(
-                              _playing ? Icons.pause : Icons.play_arrow,
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: IgnorePointer(
+                  ignoring: !_controlsVisible,
+                  child: AnimatedSlide(
+                    offset: _controlsVisible
+                        ? Offset.zero
+                        : const Offset(0, 1.08),
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedOpacity(
+                      opacity: _controlsVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    onPressed: _toggle,
+                                    icon: Icon(
+                                      _playing ? Icons.pause : Icons.play_arrow,
+                                    ),
+                                    label: Text(_playing ? 'Tạm dừng' : 'Đọc'),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                IconButton.filledTonal(
+                                  tooltip: 'Đọc lại từ đầu',
+                                  onPressed: _restart,
+                                  icon: const Icon(Icons.restart_alt),
+                                ),
+                              ],
                             ),
-                            label: Text(_playing ? 'Tạm dừng' : 'Đọc'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        IconButton.filledTonal(
-                          tooltip: 'Đọc lại từ đầu',
-                          onPressed: _restart,
-                          icon: const Icon(Icons.restart_alt),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 10,
-                      runSpacing: 8,
-                      children: [
-                        PopupMenuButton<String>(
-                          tooltip: 'Chế độ lặp lại',
-                          onSelected: _selectRepeat,
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: 'off',
-                              child: _OptionMenuLabel(
-                                icon: Icons.block,
-                                label: 'Không lặp',
-                                selected: _repeatMode == 'off',
+                            const SizedBox(height: 10),
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: 10,
+                              runSpacing: 8,
+                              children: [
+                                PopupMenuButton<String>(
+                                  tooltip: 'Chế độ lặp lại',
+                                  onSelected: _selectRepeat,
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      value: 'off',
+                                      child: _OptionMenuLabel(
+                                        icon: Icons.block,
+                                        label: 'Không lặp',
+                                        selected: _repeatMode == 'off',
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'three',
+                                      child: _OptionMenuLabel(
+                                        icon: Icons.repeat,
+                                        label: 'Lặp 3 lần',
+                                        selected: _repeatMode == 'three',
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'forever',
+                                      child: _OptionMenuLabel(
+                                        icon: Icons.all_inclusive,
+                                        label: 'Lặp liên tục',
+                                        selected: _repeatMode == 'forever',
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'custom',
+                                      child: _OptionMenuLabel(
+                                        icon: Icons.tune,
+                                        label: 'Tùy chỉnh',
+                                        selected: _repeatMode == 'custom',
+                                      ),
+                                    ),
+                                  ],
+                                  child: _ReaderControlChip(
+                                    icon: Icons.repeat,
+                                    label: _repeatEnabled
+                                        ? _repeatLabel
+                                        : 'Bật lặp',
+                                    selected: _repeatEnabled,
+                                  ),
+                                ),
+                                PopupMenuButton<String>(
+                                  tooltip: 'Tốc độ đọc',
+                                  onSelected: _selectSpeed,
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      value: 'slow',
+                                      child: _SpeedMenuLabel(
+                                        label: 'Chậm',
+                                        speed: '',
+                                        selected: _speedMode == 'slow',
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'normal',
+                                      child: _SpeedMenuLabel(
+                                        label: 'Bình thường',
+                                        speed: '',
+                                        selected: _speedMode == 'normal',
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'fast',
+                                      child: _SpeedMenuLabel(
+                                        label: 'Nhanh',
+                                        speed: '',
+                                        selected: _speedMode == 'fast',
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'custom',
+                                      child: _SpeedMenuLabel(
+                                        label: 'Tùy chỉnh',
+                                        speed: '${_speed.toStringAsFixed(2)}x',
+                                        selected: _speedMode == 'custom',
+                                      ),
+                                    ),
+                                  ],
+                                  child: _ReaderControlChip(
+                                    icon: Icons.speed,
+                                    label: _speedLabel,
+                                  ),
+                                ),
+                                PopupMenuButton<double>(
+                                  tooltip: 'Cỡ chữ',
+                                  onSelected: (value) {
+                                    _showControls();
+                                    setState(() => _fontSize = value);
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback(
+                                          (_) =>
+                                              _centerLine(_activeIndex.value),
+                                        );
+                                  },
+                                  itemBuilder: (context) => [
+                                    for (final option in const [
+                                      20.0,
+                                      24.0,
+                                      28.0,
+                                      32.0,
+                                    ])
+                                      PopupMenuItem(
+                                        value: option,
+                                        child: _SpeedMenuLabel(
+                                          label: option == 20
+                                              ? 'Nhỏ'
+                                              : option == 24
+                                              ? 'Vừa'
+                                              : option == 28
+                                              ? 'Lớn'
+                                              : 'Rất lớn',
+                                          speed: option.toStringAsFixed(0),
+                                          selected: _fontSize == option,
+                                        ),
+                                      ),
+                                  ],
+                                  child: _ReaderControlChip(
+                                    icon: Icons.format_size,
+                                    label: 'Cỡ ${_fontSize.toStringAsFixed(0)}',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_speedMode == 'custom')
+                              Row(
+                                children: [
+                                  Text(
+                                    '${_speed.toStringAsFixed(2)}x',
+                                    style: const TextStyle(
+                                      color: Color(0xFFFFF8E8),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      min: .25,
+                                      max: 3,
+                                      value: _speed,
+                                      onChanged: (value) {
+                                        _showControls();
+                                        setState(() => _speed = value);
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            PopupMenuItem(
-                              value: 'three',
-                              child: _OptionMenuLabel(
-                                icon: Icons.repeat,
-                                label: 'Lặp 3 lần',
-                                selected: _repeatMode == 'three',
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'forever',
-                              child: _OptionMenuLabel(
-                                icon: Icons.all_inclusive,
-                                label: 'Lặp liên tục',
-                                selected: _repeatMode == 'forever',
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'custom',
-                              child: _OptionMenuLabel(
-                                icon: Icons.tune,
-                                label: 'Tùy chỉnh',
-                                selected: _repeatMode == 'custom',
-                              ),
-                            ),
-                          ],
-                          child: _ReaderControlChip(
-                            icon: Icons.repeat,
-                            label: _repeatEnabled ? _repeatLabel : 'Bật lặp',
-                            selected: _repeatEnabled,
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          tooltip: 'Tốc độ đọc',
-                          onSelected: _selectSpeed,
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: 'slow',
-                              child: _SpeedMenuLabel(
-                                label: 'Chậm',
-                                speed: '0.75x',
-                                selected: _speedMode == 'slow',
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'normal',
-                              child: _SpeedMenuLabel(
-                                label: 'Bình thường',
-                                speed: '1.00x',
-                                selected: _speedMode == 'normal',
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'fast',
-                              child: _SpeedMenuLabel(
-                                label: 'Nhanh',
-                                speed: '1.25x',
-                                selected: _speedMode == 'fast',
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'custom',
-                              child: _SpeedMenuLabel(
-                                label: 'Tùy chỉnh',
-                                speed: '${_speed.toStringAsFixed(2)}x',
-                                selected: _speedMode == 'custom',
-                              ),
-                            ),
-                          ],
-                          child: _ReaderControlChip(
-                            icon: Icons.speed,
-                            label: '$_speedLabel ${_speed.toStringAsFixed(2)}x',
-                          ),
-                        ),
-                        PopupMenuButton<double>(
-                          tooltip: 'Cỡ chữ',
-                          onSelected: (value) {
-                            setState(() => _fontSize = value);
-                            WidgetsBinding.instance.addPostFrameCallback(
-                              (_) => _centerLine(_activeIndex.value),
-                            );
-                          },
-                          itemBuilder: (context) => [
-                            for (final option in const [20.0, 24.0, 28.0, 32.0])
-                              PopupMenuItem(
-                                value: option,
-                                child: _SpeedMenuLabel(
-                                  label: option == 20
-                                      ? 'Nhỏ'
-                                      : option == 24
-                                      ? 'Vừa'
-                                      : option == 28
-                                      ? 'Lớn'
-                                      : 'Rất lớn',
-                                  speed: option.toStringAsFixed(0),
-                                  selected: _fontSize == option,
+                            if (_repeatMode == 'custom')
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: TextField(
+                                  keyboardType: TextInputType.number,
+                                  style: const TextStyle(
+                                    color: Color(0xFFFFF8E8),
+                                  ),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Số lần lặp lại',
+                                    labelStyle: TextStyle(
+                                      color: Color(0xFFFFF8E8),
+                                    ),
+                                    filled: true,
+                                  ),
+                                  onChanged: (value) {
+                                    final parsed = int.tryParse(value);
+                                    if (parsed != null && parsed > 0) {
+                                      setState(
+                                        () => _customRepeatCount = parsed,
+                                      );
+                                    }
+                                  },
                                 ),
                               ),
                           ],
-                          child: _ReaderControlChip(
-                            icon: Icons.format_size,
-                            label: 'Cỡ ${_fontSize.toStringAsFixed(0)}',
-                          ),
                         ),
-                      ],
+                      ),
                     ),
-                    if (_speedMode == 'custom')
-                      Row(
-                        children: [
-                          Text(
-                            '${_speed.toStringAsFixed(2)}x',
-                            style: const TextStyle(color: Color(0xFFFFF8E8)),
-                          ),
-                          Expanded(
-                            child: Slider(
-                              min: .25,
-                              max: 3,
-                              value: _speed,
-                              onChanged: (value) =>
-                                  setState(() => _speed = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                    if (_repeatMode == 'custom')
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: TextField(
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Color(0xFFFFF8E8)),
-                          decoration: const InputDecoration(
-                            labelText: 'Số lần lặp lại',
-                            labelStyle: TextStyle(color: Color(0xFFFFF8E8)),
-                            filled: true,
-                          ),
-                          onChanged: (value) {
-                            final parsed = int.tryParse(value);
-                            if (parsed != null && parsed > 0) {
-                              setState(() => _customRepeatCount = parsed);
-                            }
-                          },
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+            if (!_controlsVisible)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 84,
+                child: Center(
+                  child: SafeArea(
+                    top: false,
+                    child: IconButton.filledTonal(
+                      tooltip: 'Mở công cụ',
+                      onPressed: _showControls,
+                      icon: const Icon(Icons.keyboard_arrow_up),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -936,7 +1025,8 @@ class _SpeedMenuLabel extends StatelessWidget {
           Icon(selected ? Icons.check_circle : Icons.circle_outlined, size: 18),
           const SizedBox(width: 10),
           Expanded(child: Text(label)),
-          Text(speed, style: Theme.of(context).textTheme.bodySmall),
+          if (speed.isNotEmpty)
+            Text(speed, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );

@@ -60,10 +60,7 @@ class AudioScreen extends ConsumerWidget {
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.library_music_outlined),
-                    title: Text('Không có audio'),
-                    subtitle: Text(
-                      'Thêm audio trong admin để hiển thị tại đây.',
-                    ),
+                    title: Text('Chưa có audio'),
                   ),
                 )
               else
@@ -114,8 +111,7 @@ class _EmptyAudioList extends StatelessWidget {
         Card(
           child: ListTile(
             leading: Icon(Icons.library_music_outlined),
-            title: Text('Không có audio'),
-            subtitle: Text('Thêm audio trong admin để hiển thị tại đây.'),
+            title: Text('Chưa có audio'),
           ),
         ),
       ],

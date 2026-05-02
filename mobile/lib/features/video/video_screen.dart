@@ -55,10 +55,7 @@ class VideoScreen extends ConsumerWidget {
                   const Card(
                     child: ListTile(
                       leading: Icon(Icons.video_library_outlined),
-                      title: Text('Không có video'),
-                      subtitle: Text(
-                        'Thêm video trong admin để hiển thị tại đây.',
-                      ),
+                      title: Text('Chưa có videos'),
                     ),
                   ),
                 for (final video in items) ...[
@@ -106,8 +103,7 @@ class _EmptyVideoList extends StatelessWidget {
         Card(
           child: ListTile(
             leading: Icon(Icons.video_library_outlined),
-            title: Text('Không có video'),
-            subtitle: Text('Thêm video trong admin để hiển thị tại đây.'),
+            title: Text('Chưa có videos'),
           ),
         ),
       ],

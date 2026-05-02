@@ -273,8 +273,7 @@ class _EmptyMeditationProgram extends StatelessWidget {
     return const Card(
       child: ListTile(
         leading: Icon(Icons.self_improvement),
-        title: Text('Không có bài thiền'),
-        subtitle: Text('Thêm bài thiền trong admin để hiển thị tại đây.'),
+        title: Text('Chưa có bài Thiền'),
       ),
     );
   }

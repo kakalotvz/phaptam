@@ -67,7 +67,7 @@ class HomeScreen extends ConsumerWidget {
                   data: (items) => items.isEmpty
                       ? const _EmptyCard(
                           icon: Icons.headphones_outlined,
-                          label: 'Không có audio',
+                          label: 'Chưa có audio',
                         )
                       : CalmSection(
                           title: 'Nghe tiếp',
@@ -75,11 +75,11 @@ class HomeScreen extends ConsumerWidget {
                         ),
                   loading: () => const _EmptyCard(
                     icon: Icons.headphones_outlined,
-                    label: 'Không có audio',
+                    label: 'Chưa có audio',
                   ),
                   error: (error, stackTrace) => const _EmptyCard(
                     icon: Icons.headphones_outlined,
-                    label: 'Không có audio',
+                    label: 'Chưa có audio',
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -87,7 +87,7 @@ class HomeScreen extends ConsumerWidget {
                   data: (items) => items.isEmpty
                       ? const _EmptyCard(
                           icon: Icons.play_circle_outline,
-                          label: 'Không có video',
+                          label: 'Chưa có videos',
                         )
                       : CalmSection(
                           title: 'Video nổi bật',
@@ -107,11 +107,11 @@ class HomeScreen extends ConsumerWidget {
                         ),
                   loading: () => const _EmptyCard(
                     icon: Icons.play_circle_outline,
-                    label: 'Không có video',
+                    label: 'Chưa có videos',
                   ),
                   error: (error, stackTrace) => const _EmptyCard(
                     icon: Icons.play_circle_outline,
-                    label: 'Không có video',
+                    label: 'Chưa có videos',
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -119,7 +119,7 @@ class HomeScreen extends ConsumerWidget {
                   data: (items) => items.isEmpty
                       ? const _EmptyCard(
                           icon: Icons.article_outlined,
-                          label: 'Không có tin tức',
+                          label: 'Chưa có tin tức',
                         )
                       : CalmSection(
                           title: 'Tin Phật giáo',
@@ -138,7 +138,7 @@ class HomeScreen extends ConsumerWidget {
                         ),
                   loading: () => const _EmptyCard(
                     icon: Icons.article_outlined,
-                    label: 'Không có tin tức',
+                    label: 'Chưa có tin tức',
                   ),
                   error: (error, stackTrace) => const _EmptyCard(
                     icon: Icons.article_outlined,
