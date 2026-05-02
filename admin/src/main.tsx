@@ -1586,14 +1586,18 @@ function BbCodeTextarea({
   placeholder,
   className,
   compact = false,
+  imageUploadKind = 'images/news',
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
   compact?: boolean;
+  imageUploadKind?: Parameters<typeof uploadToR2>[1];
 }) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   function insertBbcode(startTag: string, endTag = '') {
     const input = inputRef.current;
@@ -1625,14 +1629,48 @@ function BbCodeTextarea({
     insertBbcode(`[img]${url}[/img]`);
   }
 
+  async function uploadImage(file?: File) {
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const url = await uploadToR2(file, imageUploadKind);
+      insertBbcode(`[img]${url}[/img]`);
+    } catch (caught) {
+      window.alert(caught instanceof Error ? caught.message : 'Upload ảnh thất bại');
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  }
+
   function insertVideo() {
     const url = window.prompt('Dán link video YouTube hoặc MP4');
     if (!url) return;
     insertBbcode(`[video]${url}[/video]`);
   }
 
+  function clearFormat() {
+    const input = inputRef.current;
+    if (!input) {
+      onChange(stripBbcodeFormatting(value));
+      return;
+    }
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    const hasSelection = end > start;
+    const source = hasSelection ? value.slice(start, end) : value;
+    const cleaned = stripBbcodeFormatting(source);
+    const next = hasSelection ? `${value.slice(0, start)}${cleaned}${value.slice(end)}` : cleaned;
+    onChange(next);
+    window.setTimeout(() => {
+      input.focus();
+      const cursor = hasSelection ? start + cleaned.length : cleaned.length;
+      input.setSelectionRange(cursor, cursor);
+    }, 0);
+  }
+
   return (
-    <>
+    <div className="bbcode-editor">
       <div className={`bbcode-toolbar ${compact ? 'compact' : ''}`} aria-label="Công cụ BBCode">
         <button type="button" onClick={() => insertBbcode('[b]', '[/b]')} title="In đậm">
           <Bold size={16} />
@@ -1658,9 +1696,22 @@ function BbCodeTextarea({
         <button type="button" onClick={insertImage} title="Hình ảnh">
           <ImagePlus size={16} />
         </button>
+        <button type="button" onClick={() => imageInputRef.current?.click()} title="Upload ảnh lên R2">
+          {uploadingImage ? '...' : <Upload size={16} />}
+        </button>
         <button type="button" onClick={insertVideo} title="Video">
           <VideoIcon size={16} />
         </button>
+        <button type="button" onClick={clearFormat} title="Xóa format">
+          <Eraser size={16} />
+        </button>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(event) => void uploadImage(event.target.files?.[0])}
+        />
       </div>
       <textarea
         ref={inputRef}
@@ -1672,8 +1723,61 @@ function BbCodeTextarea({
         autoCapitalize="off"
         placeholder={placeholder}
       />
-    </>
+      <div className={`bbcode-preview ${compact ? 'compact' : ''}`}>
+        <span className="bbcode-preview-label">Xem trước</span>
+        <div dangerouslySetInnerHTML={{ __html: bbcodeToPreviewHtml(value) }} />
+      </div>
+    </div>
   );
+}
+
+function stripBbcodeFormatting(value: string) {
+  return value
+    .replace(/\[(?:\/)?(?:b|i|u|s|quote)\]/gi, '')
+    .replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '$2')
+    .replace(/\[url\](.*?)\[\/url\]/gis, '$1')
+    .replace(/\[img\](.*?)\[\/img\]/gis, '$1')
+    .replace(/\[video\](.*?)\[\/video\]/gis, '$1')
+    .replace(/\*\*(.*?)\*\*/gis, '$1')
+    .replace(/__(.*?)__/gis, '$1')
+    .replace(/~~(.*?)~~/gis, '$1')
+    .replace(/\*(.*?)\*/gis, '$1');
+}
+
+function bbcodeToPreviewHtml(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return '<p class="muted">Chưa có nội dung xem trước.</p>';
+  return normalized
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      const image = block.match(/^\[img\](.*?)\[\/img\]$/i);
+      if (image && isSafeMediaUrl(image[1].trim())) {
+        const url = escapeHtml(image[1].trim());
+        return `<figure><img src="${url}" alt="Hình ảnh" /></figure>`;
+      }
+      const video = block.match(/^\[video\](.*?)\[\/video\]$/i);
+      if (video) return `<div class="preview-video">Video: ${escapeHtml(video[1].trim())}</div>`;
+      const quote = block.match(/^\[quote\]([\s\S]*?)\[\/quote\]$/i);
+      if (quote) return `<blockquote>${bbcodeInlineToHtml(quote[1].trim()).replace(/\n/g, '<br>')}</blockquote>`;
+      const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+      if (lines.length > 0 && lines.every((line) => line.startsWith('- '))) {
+        return `<ul>${lines.map((line) => `<li>${bbcodeInlineToHtml(line.slice(2))}</li>`).join('')}</ul>`;
+      }
+      return `<p>${bbcodeInlineToHtml(block).replace(/\n/g, '<br>')}</p>`;
+    })
+    .join('');
+}
+
+function bbcodeInlineToHtml(value: string) {
+  return escapeHtml(value)
+    .replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>')
+    .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>')
+    .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
+    .replace(/\[s\]([\s\S]*?)\[\/s\]/gi, '<s>$1</s>')
+    .replace(/\[url=(https?:\/\/[^\]]+)\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noreferrer">$2</a>')
+    .replace(/\[url\](https?:\/\/[\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noreferrer">$1</a>');
 }
 
 function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
@@ -2027,6 +2131,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               value={content}
               onChange={setContent}
               compact
+              imageUploadKind="images/quote"
               placeholder="Viết lời nhắc. Có thể in đậm, xuống dòng hoặc gắn liên kết."
             />
           </label>
