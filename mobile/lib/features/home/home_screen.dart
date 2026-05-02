@@ -19,143 +19,160 @@ class HomeScreen extends ConsumerWidget {
     final quotes = ref.watch(dailyQuotesProvider);
     final banners = ref.watch(homeBannersProvider);
 
-    return CustomScrollView(
-      slivers: [
-        SliverAppBar.large(
-          title: const Text('Pháp Tâm'),
-          actions: [
-            IconButton(
-              tooltip: 'Thông báo',
-              onPressed: () {},
-              icon: const Icon(Icons.notifications_none),
-            ),
-          ],
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-          sliver: SliverList.list(
-            children: [
-              quotes.when(
-                data: (items) => items.isEmpty
-                    ? const _EmptyCard(
-                        icon: Icons.notifications_none_outlined,
-                        label: 'Không có lời nhắc hôm nay',
-                      )
-                    : _DailyQuoteCard(quote: items.first),
-                loading: () => const _EmptyCard(
-                  icon: Icons.notifications_none_outlined,
-                  label: 'Không có lời nhắc hôm nay',
-                ),
-                error: (error, stackTrace) => const _EmptyCard(
-                  icon: Icons.notifications_none_outlined,
-                  label: 'Không có lời nhắc hôm nay',
-                ),
-              ),
-              const SizedBox(height: 18),
-              banners.when(
-                data: (items) => items.isEmpty
-                    ? const SizedBox.shrink()
-                    : _BannerStrip(banners: items),
-                loading: () => const SizedBox.shrink(),
-                error: (error, stackTrace) => const SizedBox.shrink(),
-              ),
-              const SizedBox(height: 24),
-              audios.when(
-                data: (items) => items.isEmpty
-                    ? const _EmptyCard(
-                        icon: Icons.headphones_outlined,
-                        label: 'Không có audio',
-                      )
-                    : CalmSection(
-                        title: 'Nghe tiếp',
-                        child: AudioTile(audio: items.first),
-                      ),
-                loading: () => const _EmptyCard(
-                  icon: Icons.headphones_outlined,
-                  label: 'Không có audio',
-                ),
-                error: (error, stackTrace) => const _EmptyCard(
-                  icon: Icons.headphones_outlined,
-                  label: 'Không có audio',
-                ),
-              ),
-              const SizedBox(height: 24),
-              videos.when(
-                data: (items) => items.isEmpty
-                    ? const _EmptyCard(
-                        icon: Icons.play_circle_outline,
-                        label: 'Không có video',
-                      )
-                    : CalmSection(
-                        title: 'Video nổi bật',
-                        child: SizedBox(
-                          height: 228,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: items.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(width: 14),
-                            itemBuilder: (context, index) => SizedBox(
-                              width: 280,
-                              child: VideoCard(video: items[index]),
-                            ),
-                          ),
-                        ),
-                      ),
-                loading: () => const _EmptyCard(
-                  icon: Icons.play_circle_outline,
-                  label: 'Không có video',
-                ),
-                error: (error, stackTrace) => const _EmptyCard(
-                  icon: Icons.play_circle_outline,
-                  label: 'Không có video',
-                ),
-              ),
-              const SizedBox(height: 24),
-              news.when(
-                data: (items) => items.isEmpty
-                    ? const _EmptyCard(
-                        icon: Icons.article_outlined,
-                        label: 'Không có tin tức',
-                      )
-                    : CalmSection(
-                        title: 'Tin Phật giáo',
-                        child: Column(
-                          children: [
-                            for (final item in items)
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(item.title),
-                                subtitle: Text(
-                                  '${item.category} • ${item.source} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
-                                ),
-                                trailing: item.shareEnabled
-                                    ? IconButton(
-                                        tooltip: 'Chia sẻ',
-                                        icon: const Icon(Icons.share_outlined),
-                                        onPressed: () =>
-                                            _showShareSheet(context, item),
-                                      )
-                                    : const Icon(Icons.chevron_right),
-                                onTap: () => _showNewsDetail(context, item),
-                              ),
-                          ],
-                        ),
-                      ),
-                loading: () => const _EmptyCard(
-                  icon: Icons.article_outlined,
-                  label: 'Không có tin tức',
-                ),
-                error: (error, stackTrace) => const _EmptyCard(
-                  icon: Icons.article_outlined,
-                  label: 'Không có tin tức',
-                ),
+    return RefreshIndicator(
+      onRefresh: () => _refreshHomeContent(ref),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverAppBar.large(
+            title: const Text('Pháp Tâm'),
+            actions: [
+              IconButton(
+                tooltip: 'Thông báo',
+                onPressed: () {},
+                icon: const Icon(Icons.notifications_none),
               ),
             ],
           ),
-        ),
-      ],
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+            sliver: SliverList.list(
+              children: [
+                quotes.when(
+                  data: (items) => items.isEmpty
+                      ? const _EmptyCard(
+                          icon: Icons.notifications_none_outlined,
+                          label: 'Không có lời nhắc hôm nay',
+                        )
+                      : _DailyQuoteCard(quote: items.first),
+                  loading: () => const _EmptyCard(
+                    icon: Icons.notifications_none_outlined,
+                    label: 'Không có lời nhắc hôm nay',
+                  ),
+                  error: (error, stackTrace) => const _EmptyCard(
+                    icon: Icons.notifications_none_outlined,
+                    label: 'Không có lời nhắc hôm nay',
+                  ),
+                ),
+                const SizedBox(height: 18),
+                banners.when(
+                  data: (items) => items.isEmpty
+                      ? const SizedBox.shrink()
+                      : _BannerStrip(banners: items),
+                  loading: () => const SizedBox.shrink(),
+                  error: (error, stackTrace) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 24),
+                audios.when(
+                  data: (items) => items.isEmpty
+                      ? const _EmptyCard(
+                          icon: Icons.headphones_outlined,
+                          label: 'Không có audio',
+                        )
+                      : CalmSection(
+                          title: 'Nghe tiếp',
+                          child: AudioTile(audio: items.first),
+                        ),
+                  loading: () => const _EmptyCard(
+                    icon: Icons.headphones_outlined,
+                    label: 'Không có audio',
+                  ),
+                  error: (error, stackTrace) => const _EmptyCard(
+                    icon: Icons.headphones_outlined,
+                    label: 'Không có audio',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                videos.when(
+                  data: (items) => items.isEmpty
+                      ? const _EmptyCard(
+                          icon: Icons.play_circle_outline,
+                          label: 'Không có video',
+                        )
+                      : CalmSection(
+                          title: 'Video nổi bật',
+                          child: SizedBox(
+                            height: 228,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: items.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(width: 14),
+                              itemBuilder: (context, index) => SizedBox(
+                                width: 280,
+                                child: VideoCard(video: items[index]),
+                              ),
+                            ),
+                          ),
+                        ),
+                  loading: () => const _EmptyCard(
+                    icon: Icons.play_circle_outline,
+                    label: 'Không có video',
+                  ),
+                  error: (error, stackTrace) => const _EmptyCard(
+                    icon: Icons.play_circle_outline,
+                    label: 'Không có video',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                news.when(
+                  data: (items) => items.isEmpty
+                      ? const _EmptyCard(
+                          icon: Icons.article_outlined,
+                          label: 'Không có tin tức',
+                        )
+                      : CalmSection(
+                          title: 'Tin Phật giáo',
+                          child: Column(
+                            children: [
+                              for (final item in items)
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(item.title),
+                                  subtitle: Text(
+                                    '${item.category} • ${item.source} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
+                                  ),
+                                  trailing: item.shareEnabled
+                                      ? IconButton(
+                                          tooltip: 'Chia sẻ',
+                                          icon: const Icon(
+                                            Icons.share_outlined,
+                                          ),
+                                          onPressed: () =>
+                                              _showShareSheet(context, item),
+                                        )
+                                      : const Icon(Icons.chevron_right),
+                                  onTap: () => _showNewsDetail(context, item),
+                                ),
+                            ],
+                          ),
+                        ),
+                  loading: () => const _EmptyCard(
+                    icon: Icons.article_outlined,
+                    label: 'Không có tin tức',
+                  ),
+                  error: (error, stackTrace) => const _EmptyCard(
+                    icon: Icons.article_outlined,
+                    label: 'Không tải được tin tức',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _refreshHomeContent(WidgetRef ref) async {
+    refreshPublicContent(ref);
+    await Future.wait([
+      ref.refresh(audioListProvider.future),
+      ref.refresh(videoListProvider.future),
+      ref.refresh(newsListProvider.future),
+      ref.refresh(dailyQuotesProvider.future),
+      ref.refresh(homeBannersProvider.future),
+    ]);
   }
 
   void _showNewsDetail(BuildContext context, NewsItem item) {

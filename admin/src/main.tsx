@@ -1589,6 +1589,7 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [link, setLink] = useState('');
   const [shareEnabled, setShareEnabled] = useState(true);
   const [editingNewsId, setEditingNewsId] = useState('');
+  const contentInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   function editCategory(row: NewsCategory) {
     const name = askText('Tên danh mục', row.name);
@@ -1619,6 +1620,42 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
     setImageUrl('');
     setLink('');
     setShareEnabled(true);
+  }
+
+  function insertNewsBbcode(startTag: string, endTag = '') {
+    const input = contentInputRef.current;
+    if (!input) {
+      setContent((current) => `${current}${startTag}${endTag}`);
+      return;
+    }
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    const selected = content.slice(start, end);
+    const next = `${content.slice(0, start)}${startTag}${selected}${endTag}${content.slice(end)}`;
+    setContent(next);
+    window.setTimeout(() => {
+      input.focus();
+      const cursor = selected ? start + startTag.length + selected.length + endTag.length : start + startTag.length;
+      input.setSelectionRange(cursor, cursor);
+    }, 0);
+  }
+
+  function insertNewsLink() {
+    const url = window.prompt('Dán liên kết https://...');
+    if (!url) return;
+    insertNewsBbcode(`[url=${url}]`, '[/url]');
+  }
+
+  function insertNewsImage() {
+    const url = window.prompt('Dán URL hình ảnh https://...');
+    if (!url) return;
+    insertNewsBbcode(`[img]${url}[/img]`);
+  }
+
+  function insertNewsVideo() {
+    const url = window.prompt('Dán link video YouTube hoặc MP4');
+    if (!url) return;
+    insertNewsBbcode(`[video]${url}[/video]`);
   }
 
   return (
@@ -1694,7 +1731,37 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
           </label>
           <label className="span">
             Nội dung
+            <div className="bbcode-toolbar" aria-label="Công cụ BBCode">
+              <button type="button" onClick={() => insertNewsBbcode('[b]', '[/b]')} title="In đậm">
+                <Bold size={16} />
+              </button>
+              <button type="button" onClick={() => insertNewsBbcode('[i]', '[/i]')} title="In nghiêng">
+                <Italic size={16} />
+              </button>
+              <button type="button" onClick={() => insertNewsBbcode('[u]', '[/u]')} title="Gạch chân">
+                <Underline size={16} />
+              </button>
+              <button type="button" onClick={() => insertNewsBbcode('[s]', '[/s]')} title="Gạch ngang">
+                <Strikethrough size={16} />
+              </button>
+              <button type="button" onClick={() => insertNewsBbcode('[quote]', '[/quote]')} title="Trích dẫn">
+                <Quote size={16} />
+              </button>
+              <button type="button" onClick={() => insertNewsBbcode('\n- ')} title="Danh sách">
+                <List size={16} />
+              </button>
+              <button type="button" onClick={insertNewsLink} title="Liên kết">
+                <Link2 size={16} />
+              </button>
+              <button type="button" onClick={insertNewsImage} title="Hình ảnh">
+                <ImagePlus size={16} />
+              </button>
+              <button type="button" onClick={insertNewsVideo} title="Video">
+                <VideoIcon size={16} />
+              </button>
+            </div>
             <textarea
+              ref={contentInputRef}
               className="news-content-input"
               value={content}
               onChange={(event) => setContent(event.target.value)}

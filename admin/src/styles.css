@@ -291,6 +291,37 @@ main {
   min-height: 150px;
 }
 
+.bbcode-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 10px;
+  background: #f6ead0;
+  border: 1px solid rgba(109, 76, 65, .13);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+}
+
+.bbcode-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  min-height: 34px;
+  padding: 0 10px;
+  color: #4a3831;
+  background: rgba(255, 252, 240, .8);
+  border: 1px solid rgba(109, 76, 65, .14);
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.bbcode-toolbar button:hover {
+  background: #fff8e8;
+}
+
 .news-content-input {
   min-height: 420px;
   resize: vertical;
@@ -298,6 +329,11 @@ main {
   font-size: 16px;
   font-weight: 400;
   line-height: 1.7;
+}
+
+.bbcode-toolbar + .news-content-input {
+  margin-top: 0;
+  border-radius: 0 0 14px 14px;
 }
 
 .field-note {

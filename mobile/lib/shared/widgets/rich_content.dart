@@ -300,8 +300,33 @@ String _normalize(String value) {
         (match) => '[${match.group(1) ?? ''}](${match.group(1) ?? ''})',
       )
       .replaceAllMapped(
+        RegExp(r'\[img\](.*?)\[/img\]', caseSensitive: false, dotAll: true),
+        (match) => '\n\n![Hình ảnh](${(match.group(1) ?? '').trim()})\n\n',
+      )
+      .replaceAllMapped(
+        RegExp(r'\[video\](.*?)\[/video\]', caseSensitive: false, dotAll: true),
+        (match) => '\n\n[[video:${(match.group(1) ?? '').trim()}]]\n\n',
+      )
+      .replaceAllMapped(
+        RegExp(r'\[quote\](.*?)\[/quote\]', caseSensitive: false, dotAll: true),
+        (match) =>
+            '\n\n> ${(match.group(1) ?? '').trim().replaceAll('\n', '\n> ')}\n\n',
+      )
+      .replaceAllMapped(
         RegExp(r'\[b\](.*?)\[/b\]', caseSensitive: false, dotAll: true),
         (match) => '**${match.group(1) ?? ''}**',
+      )
+      .replaceAllMapped(
+        RegExp(r'\[i\](.*?)\[/i\]', caseSensitive: false, dotAll: true),
+        (match) => '*${match.group(1) ?? ''}*',
+      )
+      .replaceAllMapped(
+        RegExp(r'\[u\](.*?)\[/u\]', caseSensitive: false, dotAll: true),
+        (match) => '__${match.group(1) ?? ''}__',
+      )
+      .replaceAllMapped(
+        RegExp(r'\[s\](.*?)\[/s\]', caseSensitive: false, dotAll: true),
+        (match) => '~~${match.group(1) ?? ''}~~',
       )
       .replaceAllMapped(
         RegExp(
@@ -310,6 +335,10 @@ String _normalize(String value) {
           dotAll: true,
         ),
         (match) => '[${match.group(2) ?? ''}](${match.group(1) ?? ''})',
+      )
+      .replaceAllMapped(
+        RegExp(r'\[url\](.*?)\[/url\]', caseSensitive: false, dotAll: true),
+        (match) => '[${match.group(1) ?? ''}](${match.group(1) ?? ''})',
       )
       .replaceAll(RegExp(r'<[^>]+>'), '')
       .trim();
