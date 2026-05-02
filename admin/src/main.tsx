@@ -1153,7 +1153,7 @@ function RichTextEditor({
 
   useEffect(() => {
     if (!editorRef.current || focused) return;
-    const nextHtml = markupToHtml(value);
+    const nextHtml = storedContentToEditorHtml(value);
     if (editorRef.current.innerHTML !== nextHtml) {
       editorRef.current.innerHTML = nextHtml;
     }
@@ -1162,7 +1162,7 @@ function RichTextEditor({
   function syncValue() {
     if (!editorRef.current) return;
     removeEmptyHeadingMarkers();
-    onChange(htmlToMarkup(editorRef.current));
+    onChange(sanitizeEditorHtml(editorRef.current));
   }
 
   function runCommand(command: string, commandValue?: string) {
@@ -1345,6 +1345,13 @@ function markupToHtml(value: string) {
     .join('');
 }
 
+function storedContentToEditorHtml(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) return sanitizeEditorHtml(trimmed);
+  return markupToHtml(trimmed);
+}
+
 function normalizeStoredMarkup(value: string) {
   return value
     .replace(/<b>(.*?)<\/b>/gis, '**$1**')
@@ -1366,63 +1373,81 @@ function inlineMarkupToHtml(value: string) {
     .replace(/\[(.+?)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2">$1</a>');
 }
 
-function htmlToMarkup(root: HTMLElement) {
-  const blocks: string[] = [];
-  root.childNodes.forEach((node) => {
-    const block = blockNodeToMarkup(node);
-    if (block.trim()) blocks.push(block.trim());
+function sanitizeEditorHtml(source: HTMLElement | string) {
+  const container = document.createElement('div');
+  container.innerHTML = typeof source === 'string' ? source : source.innerHTML;
+  const clean = document.createElement('div');
+  Array.from(container.childNodes).forEach((node) => {
+    const sanitized = sanitizeEditorNode(node);
+    if (sanitized) clean.appendChild(sanitized);
   });
-  return blocks.join('\n\n').replace(/^(#{2,3})\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
-}
-
-function blockNodeToMarkup(node: ChildNode): string {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
-  if (!(node instanceof HTMLElement)) return '';
-  const tag = node.tagName.toLowerCase();
-  if (tag === 'h1' || tag === 'h2') {
-    const text = inlineNodesToMarkup(node);
-    if (!text || text === '##' || text === '###') return '';
-    return `## ${text}`;
-  }
-  if (tag === 'h3') {
-    const text = inlineNodesToMarkup(node);
-    if (!text || text === '##' || text === '###') return '';
-    return `### ${text}`;
-  }
-  if (tag === 'blockquote') return inlineNodesToMarkup(node).split('\n').map((line) => `> ${line}`).join('\n');
-  if (tag === 'figure') {
-    const image = node.querySelector('img');
-    if (image?.src) return `![${image.alt || 'Hình ảnh'}](${image.src})`;
-  }
-  if (tag === 'img') return `![${node.getAttribute('alt') || 'Hình ảnh'}](${(node as HTMLImageElement).src})`;
-  if (node.dataset.video) return `[[video:${node.dataset.video}]]`;
-  if (tag === 'ul' || tag === 'ol') {
-    return Array.from(node.querySelectorAll('li'))
-      .map((li, index) => `${tag === 'ol' ? `${index + 1}.` : '-'} ${inlineNodesToMarkup(li)}`)
-      .join('\n');
-  }
-  if (tag === 'div' || tag === 'p') return inlineNodesToMarkup(node);
-  if (tag === 'br') return '\n';
-  return inlineNodesToMarkup(node);
-}
-
-function inlineNodesToMarkup(element: HTMLElement): string {
-  return Array.from(element.childNodes)
-    .map((node) => {
-      if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
-      if (!(node instanceof HTMLElement)) return '';
-      const tag = node.tagName.toLowerCase();
-      if (tag === 'strong' || tag === 'b') return `**${inlineNodesToMarkup(node)}**`;
-      if (tag === 'em' || tag === 'i') return `*${inlineNodesToMarkup(node)}*`;
-      if (tag === 'u') return `__${inlineNodesToMarkup(node)}__`;
-      if (tag === 's' || tag === 'strike') return `~~${inlineNodesToMarkup(node)}~~`;
-      if (tag === 'a') return `[${inlineNodesToMarkup(node)}](${node.getAttribute('href') ?? ''})`;
-      if (tag === 'br') return '\n';
-      return inlineNodesToMarkup(node);
-    })
-    .join('')
-    .replace(/\n{3,}/g, '\n\n')
+  clean.querySelectorAll('h1').forEach((heading) => {
+    const h2 = document.createElement('h2');
+    h2.innerHTML = heading.innerHTML;
+    heading.replaceWith(h2);
+  });
+  return clean.innerHTML
+    .replace(/<h([23])>\s*(?:##|###)?\s*<\/h\1>/gi, '')
+    .replace(/<p>\s*(?:##|###)\s*<\/p>/gi, '')
     .trim();
+}
+
+function sanitizeEditorNode(node: ChildNode): Node | null {
+  if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent ?? '');
+  if (!(node instanceof HTMLElement)) return null;
+
+  const tag = node.tagName.toLowerCase();
+  if (tag === 'script' || tag === 'style') return null;
+
+  if (node.dataset.video) {
+    const url = node.dataset.video.trim();
+    if (!isSafeMediaUrl(url)) return null;
+    const video = document.createElement('div');
+    video.dataset.video = url;
+    video.textContent = `Video: ${url}`;
+    return video;
+  }
+
+  if (tag === 'img') {
+    const src = (node as HTMLImageElement).src || node.getAttribute('src') || '';
+    if (!isSafeMediaUrl(src)) return null;
+    const image = document.createElement('img');
+    image.src = src;
+    image.alt = node.getAttribute('alt') || 'Hình ảnh';
+    return image;
+  }
+
+  const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'figure']);
+  if (!allowedTags.has(tag)) {
+    const fragment = document.createDocumentFragment();
+    Array.from(node.childNodes).forEach((child) => {
+      const sanitized = sanitizeEditorNode(child);
+      if (sanitized) fragment.appendChild(sanitized);
+    });
+    return fragment;
+  }
+
+  const next = document.createElement(tag);
+  if (tag === 'a') {
+    const href = node.getAttribute('href') || '';
+    if (!isSafeMediaUrl(href)) return document.createTextNode(node.textContent ?? '');
+    next.setAttribute('href', href);
+    next.setAttribute('target', '_blank');
+    next.setAttribute('rel', 'noreferrer');
+  }
+
+  Array.from(node.childNodes).forEach((child) => {
+    const sanitized = sanitizeEditorNode(child);
+    if (sanitized) next.appendChild(sanitized);
+  });
+
+  const markerOnly = ['h1', 'h2', 'h3', 'p', 'div'].includes(tag) && ['##', '###'].includes((next.textContent ?? '').trim());
+  if (markerOnly) return null;
+  return next;
+}
+
+function isSafeMediaUrl(value: string) {
+  return /^https?:\/\//i.test(value);
 }
 
 function escapeHtml(value: string) {
