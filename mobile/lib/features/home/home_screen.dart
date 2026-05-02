@@ -36,13 +36,18 @@ class HomeScreen extends ConsumerWidget {
             children: [
               quotes.when(
                 data: (items) => items.isEmpty
-                    ? const SizedBox.shrink()
+                    ? const _EmptyCard(
+                        icon: Icons.notifications_none_outlined,
+                        label: 'Không có lời nhắc hôm nay',
+                      )
                     : _DailyQuoteCard(quote: items.first),
-                loading: () =>
-                    const _LoadingCard(label: 'Đang tải lời nhắc hôm nay...'),
-                error: (error, stackTrace) => _ErrorCard(
-                  label: 'Chưa tải được lời nhắc hôm nay',
-                  onRetry: () => ref.invalidate(dailyQuotesProvider),
+                loading: () => const _EmptyCard(
+                  icon: Icons.notifications_none_outlined,
+                  label: 'Không có lời nhắc hôm nay',
+                ),
+                error: (error, stackTrace) => const _EmptyCard(
+                  icon: Icons.notifications_none_outlined,
+                  label: 'Không có lời nhắc hôm nay',
                 ),
               ),
               const SizedBox(height: 18),
@@ -50,27 +55,36 @@ class HomeScreen extends ConsumerWidget {
                 data: (items) => items.isEmpty
                     ? const SizedBox.shrink()
                     : _BannerStrip(banners: items),
-                loading: () => const _LoadingCard(label: 'Đang tải banner...'),
+                loading: () => const SizedBox.shrink(),
                 error: (error, stackTrace) => const SizedBox.shrink(),
               ),
               const SizedBox(height: 24),
               audios.when(
                 data: (items) => items.isEmpty
-                    ? const SizedBox.shrink()
+                    ? const _EmptyCard(
+                        icon: Icons.headphones_outlined,
+                        label: 'Không có audio',
+                      )
                     : CalmSection(
                         title: 'Nghe tiếp',
                         child: AudioTile(audio: items.first),
                       ),
-                loading: () => const _LoadingCard(label: 'Đang tải audio...'),
-                error: (error, stackTrace) => _ErrorCard(
-                  label: 'Chưa tải được audio',
-                  onRetry: () => ref.invalidate(audioListProvider),
+                loading: () => const _EmptyCard(
+                  icon: Icons.headphones_outlined,
+                  label: 'Không có audio',
+                ),
+                error: (error, stackTrace) => const _EmptyCard(
+                  icon: Icons.headphones_outlined,
+                  label: 'Không có audio',
                 ),
               ),
               const SizedBox(height: 24),
               videos.when(
                 data: (items) => items.isEmpty
-                    ? const SizedBox.shrink()
+                    ? const _EmptyCard(
+                        icon: Icons.play_circle_outline,
+                        label: 'Không có video',
+                      )
                     : CalmSection(
                         title: 'Video nổi bật',
                         child: SizedBox(
@@ -87,16 +101,22 @@ class HomeScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
-                loading: () => const _LoadingCard(label: 'Đang tải video...'),
-                error: (error, stackTrace) => _ErrorCard(
-                  label: 'Chưa tải được video',
-                  onRetry: () => ref.invalidate(videoListProvider),
+                loading: () => const _EmptyCard(
+                  icon: Icons.play_circle_outline,
+                  label: 'Không có video',
+                ),
+                error: (error, stackTrace) => const _EmptyCard(
+                  icon: Icons.play_circle_outline,
+                  label: 'Không có video',
                 ),
               ),
               const SizedBox(height: 24),
               news.when(
                 data: (items) => items.isEmpty
-                    ? const SizedBox.shrink()
+                    ? const _EmptyCard(
+                        icon: Icons.article_outlined,
+                        label: 'Không có tin tức',
+                      )
                     : CalmSection(
                         title: 'Tin Phật giáo',
                         child: Column(
@@ -121,10 +141,13 @@ class HomeScreen extends ConsumerWidget {
                           ],
                         ),
                       ),
-                loading: () => const _LoadingCard(label: 'Đang tải tin tức...'),
-                error: (error, stackTrace) => _ErrorCard(
-                  label: 'Chưa tải được tin tức',
-                  onRetry: () => ref.invalidate(newsListProvider),
+                loading: () => const _EmptyCard(
+                  icon: Icons.article_outlined,
+                  label: 'Không có tin tức',
+                ),
+                error: (error, stackTrace) => const _EmptyCard(
+                  icon: Icons.article_outlined,
+                  label: 'Không có tin tức',
                 ),
               ),
             ],
@@ -262,24 +285,16 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.label, required this.onRetry});
+class _EmptyCard extends StatelessWidget {
+  const _EmptyCard({required this.icon, required this.label});
 
+  final IconData icon;
   final String label;
-  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: ListTile(
-        leading: const Icon(Icons.wifi_off_outlined),
-        title: Text(label),
-        trailing: IconButton(
-          tooltip: 'Tải lại',
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh),
-        ),
-      ),
+      child: ListTile(leading: Icon(icon), title: Text(label)),
     );
   }
 }
@@ -398,32 +413,6 @@ class _BannerStrip extends StatelessWidget {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _LoadingCard extends StatelessWidget {
-  const _LoadingCard({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
-          children: [
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 12),
-            Text(label),
-          ],
-        ),
       ),
     );
   }

@@ -22,14 +22,8 @@ class AudioScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Kinh Phật')),
       body: categories.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _LoadError(
-          message: 'Chưa tải được danh mục audio',
-          onRetry: () {
-            ref.invalidate(audioCategoriesProvider);
-            ref.invalidate(audioListProvider);
-          },
-        ),
+        loading: () => const _EmptyAudioList(),
+        error: (error, stackTrace) => const _EmptyAudioList(),
         data: (items) => RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(audioCategoriesProvider);
@@ -62,16 +56,11 @@ class AudioScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              if (ref.watch(audioListProvider).isLoading)
-                const Padding(
-                  padding: EdgeInsets.only(top: 40),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (audios.isEmpty)
+              if (ref.watch(audioListProvider).isLoading || audios.isEmpty)
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.library_music_outlined),
-                    title: Text('Chưa có audio'),
+                    title: Text('Không có audio'),
                     subtitle: Text(
                       'Thêm audio trong admin để hiển thị tại đây.',
                     ),
@@ -115,26 +104,21 @@ class AudioScreen extends ConsumerWidget {
   }
 }
 
-class _LoadError extends StatelessWidget {
-  const _LoadError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
+class _EmptyAudioList extends StatelessWidget {
+  const _EmptyAudioList();
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Card(
-        child: ListTile(
-          leading: const Icon(Icons.wifi_off_outlined),
-          title: Text(message),
-          trailing: IconButton(
-            tooltip: 'Tải lại',
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 120),
+      children: const [
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.library_music_outlined),
+            title: Text('Không có audio'),
+            subtitle: Text('Thêm audio trong admin để hiển thị tại đây.'),
           ),
         ),
-      ),
+      ],
     );
   }
 }

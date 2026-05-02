@@ -189,22 +189,15 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
               const SizedBox(height: 18),
               programs.when(
                 data: (items) => items.isEmpty
-                    ? const SizedBox.shrink()
+                    ? const _EmptyMeditationProgram()
                     : _ProgramChooser(
                         programs: items,
                         selectedSeconds: remainingSeconds,
                         enabled: !isRunning,
                         onSelected: _selectProgram,
                       ),
-                loading: () => const Padding(
-                  padding: EdgeInsets.only(top: 10),
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                error: (error, stackTrace) => TextButton.icon(
-                  onPressed: () => ref.invalidate(meditationProgramsProvider),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Tải lại bài thiền'),
-                ),
+                loading: () => const _EmptyMeditationProgram(),
+                error: (error, stackTrace) => const _EmptyMeditationProgram(),
               ),
               const Spacer(),
             ],
@@ -245,6 +238,21 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
     }
     await player.setLoopMode(LoopMode.one);
     await player.play();
+  }
+}
+
+class _EmptyMeditationProgram extends StatelessWidget {
+  const _EmptyMeditationProgram();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: ListTile(
+        leading: Icon(Icons.self_improvement),
+        title: Text('Không có bài thiền'),
+        subtitle: Text('Thêm bài thiền trong admin để hiển thị tại đây.'),
+      ),
+    );
   }
 }
 

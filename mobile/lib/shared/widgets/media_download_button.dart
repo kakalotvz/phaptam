@@ -19,14 +19,10 @@ class MediaDownloadButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final downloads = ref.watch(mediaDownloadsProvider);
     return downloads.when(
-      loading: () => const SizedBox.square(
-        dimension: 40,
-        child: Center(
-          child: SizedBox.square(
-            dimension: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
+      loading: () => IconButton(
+        tooltip: 'Tải về để nghe/xem offline',
+        onPressed: null,
+        icon: const Icon(Icons.download_outlined),
       ),
       error: (error, stackTrace) => IconButton(
         tooltip: 'Không đọc được tệp offline',

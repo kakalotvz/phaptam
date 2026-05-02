@@ -19,165 +19,28 @@ class ScriptureScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Đọc kinh')),
       body: scripturesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => ListView(
-          padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
-          children: [
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.wifi_off_outlined),
-                title: const Text('Chưa tải được danh sách Kinh'),
-                subtitle: Text(error.toString()),
-                trailing: IconButton(
-                  tooltip: 'Tải lại',
-                  onPressed: () => ref.invalidate(scriptureListProvider),
-                  icon: const Icon(Icons.refresh),
-                ),
-              ),
-            ),
-          ],
+        loading: () => _ScriptureContent(
+          scriptures: const [],
+          remindersAsync: remindersAsync,
+          isLoggedIn: isLoggedIn,
+          ref: ref,
+        ),
+        error: (error, _) => _ScriptureContent(
+          scriptures: const [],
+          remindersAsync: remindersAsync,
+          isLoggedIn: isLoggedIn,
+          ref: ref,
         ),
         data: (scriptures) => RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(scriptureListProvider);
             await ref.read(scriptureListProvider.future);
           },
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            children: [
-              FilledButton.icon(
-                onPressed: scriptures.isEmpty
-                    ? null
-                    : () {
-                        if (!isLoggedIn) {
-                          context.push('/login');
-                          return;
-                        }
-                        _showReminderSheet(context, ref, scriptures);
-                      },
-                icon: const Icon(Icons.add_alarm),
-                label: const Text('Đặt lịch nhắc tụng kinh'),
-              ),
-              const SizedBox(height: 16),
-              Text('Lịch nhắc', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 10),
-              if (!isLoggedIn)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.lock_outline),
-                    title: const Text('Đăng nhập để đồng bộ lịch nhắc'),
-                    subtitle: const Text(
-                      'Lịch tụng kinh sẽ lưu theo tài khoản của bạn.',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/login'),
-                  ),
-                )
-              else
-                remindersAsync.when(
-                  loading: () => const Card(
-                    child: ListTile(
-                      leading: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      title: Text('Đang tải lịch nhắc...'),
-                    ),
-                  ),
-                  error: (error, stackTrace) => Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.wifi_off_outlined),
-                      title: const Text('Chưa tải được lịch nhắc'),
-                      subtitle: Text(error.toString()),
-                      trailing: IconButton(
-                        tooltip: 'Tải lại',
-                        onPressed: () =>
-                            ref.invalidate(scriptureReminderProvider),
-                        icon: const Icon(Icons.refresh),
-                      ),
-                    ),
-                  ),
-                  data: (reminders) => Column(
-                    children: [
-                      if (reminders.isEmpty)
-                        const Card(
-                          child: ListTile(
-                            leading: Icon(Icons.notifications_none_outlined),
-                            title: Text('Chưa có lịch nhắc'),
-                            subtitle: Text(
-                              'Tạo lịch nhắc để app báo giờ tụng kinh.',
-                            ),
-                          ),
-                        ),
-                      for (final reminder in reminders)
-                        Card(
-                          child: ListTile(
-                            leading: const Icon(
-                              Icons.notifications_active_outlined,
-                            ),
-                            title: Text(reminder.title),
-                            subtitle: Text(
-                              '${_formatTime(reminder.timeOfDay)} • ${reminder.scripture.title}\n${_formatWeekdays(reminder.weekdays)} • ${reminder.resumeMode == ReminderResumeMode.resume ? 'Tiếp tục chỗ dừng' : 'Bắt đầu lại'}',
-                            ),
-                            isThreeLine: true,
-                            trailing: Switch(
-                              value: reminder.active,
-                              onChanged: (value) => ref
-                                  .read(scriptureReminderProvider.notifier)
-                                  .toggle(reminder.id, value),
-                            ),
-                            onTap: () {
-                              final startIndex =
-                                  reminder.resumeMode ==
-                                      ReminderResumeMode.resume
-                                  ? reminder.lastLineIndex
-                                  : 0;
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => ScriptureReader(
-                                    scripture: reminder.scripture,
-                                    reminderId: reminder.id,
-                                    initialLineIndex: startIndex,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 20),
-              Text('Bộ kinh', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 10),
-              if (scriptures.isEmpty)
-                const Card(
-                  child: ListTile(
-                    leading: Icon(Icons.menu_book_outlined),
-                    title: Text('Chưa có bản Đọc Kinh'),
-                    subtitle: Text(
-                      'Thêm bản mới trong trang admin để hiển thị tại đây.',
-                    ),
-                  ),
-                ),
-              for (final scripture in scriptures)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.menu_book_outlined),
-                    title: Text(scripture.title),
-                    subtitle: Text(
-                      scripture.description ?? '${scripture.lines.length} dòng',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ScriptureReader(scripture: scripture),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          child: _ScriptureContent(
+            scriptures: scriptures,
+            remindersAsync: remindersAsync,
+            isLoggedIn: isLoggedIn,
+            ref: ref,
           ),
         ),
       ),
@@ -338,6 +201,143 @@ class ScriptureScreen extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _ScriptureContent extends StatelessWidget {
+  const _ScriptureContent({
+    required this.scriptures,
+    required this.remindersAsync,
+    required this.isLoggedIn,
+    required this.ref,
+  });
+
+  final List<Scripture> scriptures;
+  final AsyncValue<List<ScriptureReminder>> remindersAsync;
+  final bool isLoggedIn;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        FilledButton.icon(
+          onPressed: scriptures.isEmpty
+              ? null
+              : () {
+                  if (!isLoggedIn) {
+                    context.push('/login');
+                    return;
+                  }
+                  const ScriptureScreen()._showReminderSheet(
+                    context,
+                    ref,
+                    scriptures,
+                  );
+                },
+          icon: const Icon(Icons.add_alarm),
+          label: const Text('Đặt lịch nhắc tụng kinh'),
+        ),
+        const SizedBox(height: 16),
+        Text('Lịch nhắc', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 10),
+        if (!isLoggedIn)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.lock_outline),
+              title: const Text('Không có lịch nhắc'),
+              subtitle: const Text('Đăng nhập để đồng bộ lịch tụng kinh.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/login'),
+            ),
+          )
+        else
+          remindersAsync.when(
+            loading: () => const _EmptyReminderCard(),
+            error: (error, stackTrace) => const _EmptyReminderCard(),
+            data: (reminders) => Column(
+              children: [
+                if (reminders.isEmpty) const _EmptyReminderCard(),
+                for (final reminder in reminders)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.notifications_active_outlined),
+                      title: Text(reminder.title),
+                      subtitle: Text(
+                        '${_formatTime(reminder.timeOfDay)} • ${reminder.scripture.title}\n${_formatWeekdays(reminder.weekdays)} • ${reminder.resumeMode == ReminderResumeMode.resume ? 'Tiếp tục chỗ dừng' : 'Bắt đầu lại'}',
+                      ),
+                      isThreeLine: true,
+                      trailing: Switch(
+                        value: reminder.active,
+                        onChanged: (value) => ref
+                            .read(scriptureReminderProvider.notifier)
+                            .toggle(reminder.id, value),
+                      ),
+                      onTap: () {
+                        final startIndex =
+                            reminder.resumeMode == ReminderResumeMode.resume
+                            ? reminder.lastLineIndex
+                            : 0;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ScriptureReader(
+                              scripture: reminder.scripture,
+                              reminderId: reminder.id,
+                              initialLineIndex: startIndex,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 20),
+        Text('Bộ kinh', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 10),
+        if (scriptures.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.menu_book_outlined),
+              title: Text('Không có bản Đọc Kinh'),
+              subtitle: Text('Thêm bản mới trong admin để hiển thị tại đây.'),
+            ),
+          ),
+        for (final scripture in scriptures)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.menu_book_outlined),
+              title: Text(scripture.title),
+              subtitle: Text(
+                scripture.description ?? '${scripture.lines.length} dòng',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ScriptureReader(scripture: scripture),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _EmptyReminderCard extends StatelessWidget {
+  const _EmptyReminderCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: ListTile(
+        leading: Icon(Icons.notifications_none_outlined),
+        title: Text('Không có lịch nhắc'),
+        subtitle: Text('Tạo lịch nhắc để app báo giờ tụng kinh.'),
+      ),
     );
   }
 }

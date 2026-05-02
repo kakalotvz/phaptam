@@ -21,11 +21,8 @@ class VideoScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Pháp thoại')),
       body: videos.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _LoadError(
-          message: 'Chưa tải được video',
-          onRetry: () => ref.invalidate(videoListProvider),
-        ),
+        loading: () => const _EmptyVideoList(),
+        error: (error, stackTrace) => const _EmptyVideoList(),
         data: (items) {
           final teachers = items
               .map((e) => e.teacher)
@@ -58,7 +55,7 @@ class VideoScreen extends ConsumerWidget {
                   const Card(
                     child: ListTile(
                       leading: Icon(Icons.video_library_outlined),
-                      title: Text('Chưa có video'),
+                      title: Text('Không có video'),
                       subtitle: Text(
                         'Thêm video trong admin để hiển thị tại đây.',
                       ),
@@ -99,26 +96,21 @@ class VideoScreen extends ConsumerWidget {
   }
 }
 
-class _LoadError extends StatelessWidget {
-  const _LoadError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
+class _EmptyVideoList extends StatelessWidget {
+  const _EmptyVideoList();
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Card(
-        child: ListTile(
-          leading: const Icon(Icons.wifi_off_outlined),
-          title: Text(message),
-          trailing: IconButton(
-            tooltip: 'Tải lại',
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+      children: const [
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.video_library_outlined),
+            title: Text('Không có video'),
+            subtitle: Text('Thêm video trong admin để hiển thị tại đây.'),
           ),
         ),
-      ),
+      ],
     );
   }
 }
