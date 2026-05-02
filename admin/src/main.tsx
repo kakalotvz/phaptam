@@ -188,6 +188,14 @@ function App() {
     setLoading(true);
     setError('');
     try {
+      const safe = async <T,>(action: () => Promise<T>, fallback: T) => {
+        try {
+          return await action();
+        } catch {
+          return fallback;
+        }
+      };
+
       const [
         overview,
         audioCategories,
@@ -205,21 +213,21 @@ function App() {
         feedback,
         users,
       ] = await Promise.all([
-        api.overview(),
-        api.audioCategories(),
-        api.videoCategories(),
-        api.audios(),
-        api.scriptures(),
-        api.scriptureReminders(),
-        api.videos(),
-        api.meditationPrograms(),
-        api.rss(),
-        api.newsCategories(),
-        api.news(),
-        api.quotes(),
-        api.banners(),
-        api.feedback(),
-        api.users(),
+        safe(() => api.overview(), {}),
+        safe(() => api.audioCategories(), []),
+        safe(() => api.videoCategories(), []),
+        safe(() => api.audios(), []),
+        safe(() => api.scriptures(), []),
+        safe(() => api.scriptureReminders(), []),
+        safe(() => api.videos(), []),
+        safe(() => api.meditationPrograms(), []),
+        safe(() => api.rss(), []),
+        safe(() => api.newsCategories(), []),
+        safe(() => api.news(), []),
+        safe(() => api.quotes(), []),
+        safe(() => api.banners(), []),
+        safe(() => api.feedback(), []),
+        safe(() => api.users(), []),
       ]);
       setData({
         overview,
