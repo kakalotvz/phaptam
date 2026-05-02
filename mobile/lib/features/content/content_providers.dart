@@ -2,25 +2,63 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
 import 'content_models.dart';
-import 'content_repository.dart';
 
-final contentRepositoryProvider = Provider((ref) => ContentRepository());
+final audioCategoriesProvider = FutureProvider<List<AudioCategory>>((
+  ref,
+) async {
+  final items = await apiClient.getList('/categories/audio');
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(AudioCategory.fromJson)
+      .where((item) => item.name.trim().isNotEmpty)
+      .toList();
+});
 
-final audioCategoriesProvider = Provider<List<AudioCategory>>(
-  (ref) => ref.watch(contentRepositoryProvider).audioCategories,
-);
+final audioListProvider = FutureProvider<List<AudioItem>>((ref) async {
+  final items = await apiClient.getList('/audio');
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(AudioItem.fromJson)
+      .where(
+        (item) =>
+            item.title.trim().isNotEmpty && item.audioUrl.trim().isNotEmpty,
+      )
+      .toList();
+});
 
-final audioListProvider = Provider<List<AudioItem>>(
-  (ref) => ref.watch(contentRepositoryProvider).audios,
-);
+final videoListProvider = FutureProvider<List<VideoItem>>((ref) async {
+  final items = await apiClient.getList('/video');
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(VideoItem.fromJson)
+      .where(
+        (item) =>
+            item.title.trim().isNotEmpty && item.videoUrl.trim().isNotEmpty,
+      )
+      .toList();
+});
 
-final videoListProvider = Provider<List<VideoItem>>(
-  (ref) => ref.watch(contentRepositoryProvider).videos,
-);
+final newsListProvider = FutureProvider<List<NewsItem>>((ref) async {
+  final items = await apiClient.getList('/news');
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(NewsItem.fromJson)
+      .where((item) => item.title.trim().isNotEmpty)
+      .toList();
+});
 
-final newsListProvider = Provider<List<NewsItem>>(
-  (ref) => ref.watch(contentRepositoryProvider).news,
-);
+final meditationProgramsProvider = FutureProvider<List<MeditationProgram>>((
+  ref,
+) async {
+  final items = await apiClient.getList('/meditation');
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(MeditationProgram.fromJson)
+      .where(
+        (item) => item.title.trim().isNotEmpty && item.duration.inSeconds > 0,
+      )
+      .toList();
+});
 
 final dailyQuotesProvider = FutureProvider<List<DailyQuote>>((ref) async {
   final items = await apiClient.getList('/quotes');
@@ -58,20 +96,7 @@ final scriptureReminderProvider =
 class ScriptureReminderState extends Notifier<List<ScriptureReminder>> {
   @override
   List<ScriptureReminder> build() {
-    final scriptures =
-        ref.watch(scriptureListProvider).whenOrNull(data: (value) => value) ??
-        const [];
-    if (scriptures.isEmpty) return const [];
-    return [
-      ScriptureReminder(
-        id: 'r1',
-        title: 'Công phu sáng',
-        scripture: scriptures.first,
-        timeOfDay: const Duration(hours: 5, minutes: 30),
-        weekdays: const {1, 2, 3, 4, 5, 6, 7},
-        resumeMode: ReminderResumeMode.resume,
-      ),
-    ];
+    return const [];
   }
 
   void add({
@@ -121,7 +146,9 @@ class SelectedAudioCategory extends Notifier<String?> {
 
 final filteredAudioProvider = Provider<List<AudioItem>>((ref) {
   final selected = ref.watch(selectedAudioCategoryProvider);
-  final items = ref.watch(audioListProvider);
+  final items =
+      ref.watch(audioListProvider).whenOrNull(data: (value) => value) ??
+      const [];
   if (selected == null) return items;
   return items.where((item) => item.category == selected).toList();
 });

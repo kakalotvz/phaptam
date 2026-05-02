@@ -38,10 +38,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   String get title => switch (widget.mode) {
-        AuthMode.login => 'Đăng nhập',
-        AuthMode.register => 'Đăng ký',
-        AuthMode.forgot => 'Quên mật khẩu',
-      };
+    AuthMode.login => 'Đăng nhập',
+    AuthMode.register => 'Đăng ký',
+    AuthMode.forgot => 'Quên mật khẩu',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -63,8 +63,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             isForgot
                 ? 'Nhập email để nhận hướng dẫn đặt lại mật khẩu.'
                 : isRegister
-                    ? 'Tạo tài khoản để lưu yêu thích, playlist và tiến trình nghe.'
-                    : 'Đăng nhập để tiếp tục hành trình tu học của bạn.',
+                ? 'Tạo tài khoản để lưu yêu thích, playlist và tiến trình nghe.'
+                : 'Đăng nhập để tiếp tục hành trình tu học của bạn.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
@@ -113,7 +113,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             TextField(
               controller: passwordController,
               obscureText: true,
-              textInputAction: isRegister ? TextInputAction.next : TextInputAction.done,
+              textInputAction: isRegister
+                  ? TextInputAction.next
+                  : TextInputAction.done,
               decoration: const InputDecoration(
                 labelText: 'Mật khẩu',
                 prefixIcon: Icon(Icons.lock_outline),
@@ -134,7 +136,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: acceptedTerms,
-              onChanged: (value) => setState(() => acceptedTerms = value ?? false),
+              onChanged: (value) =>
+                  setState(() => acceptedTerms = value ?? false),
               title: const Text('Tôi đồng ý với điều khoản sử dụng'),
               controlAffinity: ListTileControlAffinity.leading,
             ),
@@ -143,7 +146,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           FilledButton.icon(
             onPressed: submitting ? null : _submit,
             icon: Icon(isForgot ? Icons.send_outlined : Icons.login),
-            label: Text(submitting ? 'Đang xử lý...' : isForgot ? 'Gửi hướng dẫn' : title),
+            label: Text(
+              submitting
+                  ? 'Đang xử lý...'
+                  : isForgot
+                  ? 'Gửi hướng dẫn'
+                  : title,
+            ),
           ),
           const SizedBox(height: 12),
           if (widget.mode == AuthMode.login)
@@ -182,7 +191,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     setState(() => submitting = true);
     try {
       if (widget.mode == AuthMode.forgot) {
-        await apiClient.post('/auth/forgot-password', {'email': emailController.text.trim()});
+        await apiClient.post('/auth/forgot-password', {
+          'email': emailController.text.trim(),
+        });
       } else if (widget.mode == AuthMode.register) {
         if (passwordController.text != confirmController.text) {
           throw Exception('Mật khẩu nhập lại không khớp');
@@ -199,7 +210,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         }
         final result = await apiClient.post('/auth/register', body);
         apiClient.accessToken = result['accessToken'] as String?;
-        apiClient.currentUserId = (result['user'] as Map<String, dynamic>?)?['id'] as String?;
+        apiClient.currentUserId =
+            (result['user'] as Map<String, dynamic>?)?['id'] as String?;
         ref.read(isLoggedInProvider.notifier).login();
       } else {
         final result = await apiClient.post('/auth/login', {
@@ -207,17 +219,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           'password': passwordController.text,
         });
         apiClient.accessToken = result['accessToken'] as String?;
-        apiClient.currentUserId = (result['user'] as Map<String, dynamic>?)?['id'] as String?;
+        apiClient.currentUserId =
+            (result['user'] as Map<String, dynamic>?)?['id'] as String?;
         ref.read(isLoggedInProvider.notifier).login();
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.mode == AuthMode.forgot ? 'Đã ghi nhận yêu cầu đặt lại mật khẩu.' : 'Đăng nhập thành công.')),
+        SnackBar(
+          content: Text(
+            widget.mode == AuthMode.forgot
+                ? 'Đã ghi nhận yêu cầu đặt lại mật khẩu.'
+                : 'Đăng nhập thành công.',
+          ),
+        ),
       );
       if (widget.mode != AuthMode.forgot) context.go('/profile');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     } finally {
       if (mounted) setState(() => submitting = false);
     }

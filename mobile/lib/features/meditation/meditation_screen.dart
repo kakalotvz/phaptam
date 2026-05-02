@@ -1,15 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class MeditationScreen extends StatefulWidget {
+import '../content/content_models.dart';
+import '../content/content_providers.dart';
+
+class MeditationScreen extends ConsumerStatefulWidget {
   const MeditationScreen({super.key});
 
   @override
-  State<MeditationScreen> createState() => _MeditationScreenState();
+  ConsumerState<MeditationScreen> createState() => _MeditationScreenState();
 }
 
-class _MeditationScreenState extends State<MeditationScreen> {
+class _MeditationScreenState extends ConsumerState<MeditationScreen> {
   static const durations = [5, 10, 15, 30];
   int selectedMinutes = 10;
   int remainingSeconds = 600;
@@ -48,6 +52,7 @@ class _MeditationScreenState extends State<MeditationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final programs = ref.watch(meditationProgramsProvider);
     final minutes = (remainingSeconds ~/ 60).toString().padLeft(2, '0');
     final seconds = (remainingSeconds % 60).toString().padLeft(2, '0');
 
@@ -115,9 +120,9 @@ class _MeditationScreenState extends State<MeditationScreen> {
                     onSelected: isRunning
                         ? null
                         : (_) => setState(() {
-                              customDuration = true;
-                              _applyCustomDuration();
-                            }),
+                            customDuration = true;
+                            _applyCustomDuration();
+                          }),
                   ),
                 ],
               ),
@@ -153,9 +158,9 @@ class _MeditationScreenState extends State<MeditationScreen> {
                       onSelectionChanged: isRunning
                           ? null
                           : (value) => setState(() {
-                                customUnit = value.first;
-                                _applyCustomDuration();
-                              }),
+                              customUnit = value.first;
+                              _applyCustomDuration();
+                            }),
                     ),
                   ],
                 ),
@@ -172,6 +177,26 @@ class _MeditationScreenState extends State<MeditationScreen> {
                 icon: const Icon(Icons.water_drop_outlined),
                 label: const Text('Âm thanh nền'),
               ),
+              const SizedBox(height: 18),
+              programs.when(
+                data: (items) => items.isEmpty
+                    ? const SizedBox.shrink()
+                    : _ProgramChooser(
+                        programs: items,
+                        selectedSeconds: remainingSeconds,
+                        enabled: !isRunning,
+                        onSelected: _selectProgram,
+                      ),
+                loading: () => const Padding(
+                  padding: EdgeInsets.only(top: 10),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                error: (error, stackTrace) => TextButton.icon(
+                  onPressed: () => ref.invalidate(meditationProgramsProvider),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Tải lại bài thiền'),
+                ),
+              ),
               const Spacer(),
             ],
           ),
@@ -184,5 +209,48 @@ class _MeditationScreenState extends State<MeditationScreen> {
     final minutes = customUnit == 'hours' ? customValue * 60 : customValue;
     selectedMinutes = minutes;
     remainingSeconds = minutes * 60;
+  }
+
+  void _selectProgram(MeditationProgram program) {
+    final minutes = (program.duration.inSeconds / 60).ceil().clamp(1, 24 * 60);
+    setState(() {
+      customDuration = false;
+      selectedMinutes = minutes;
+      remainingSeconds = program.duration.inSeconds;
+    });
+  }
+}
+
+class _ProgramChooser extends StatelessWidget {
+  const _ProgramChooser({
+    required this.programs,
+    required this.selectedSeconds,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final List<MeditationProgram> programs;
+  final int selectedSeconds;
+  final bool enabled;
+  final ValueChanged<MeditationProgram> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.center,
+        children: [
+          for (final program in programs)
+            ChoiceChip(
+              label: Text(program.title),
+              selected: selectedSeconds == program.duration.inSeconds,
+              onSelected: enabled ? (_) => onSelected(program) : null,
+            ),
+        ],
+      ),
+    );
   }
 }

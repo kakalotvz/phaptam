@@ -11,40 +11,65 @@ class VideoScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final videos = ref.watch(videoListProvider);
-    final teachers = videos.map((e) => e.teacher).toSet().toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pháp thoại')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final teacher in teachers)
-                FilterChip(
-                  label: Text(teacher),
-                  selected: false,
-                  onSelected: (_) {},
-                ),
-              FilterChip(
-                label: const Text('Chủ đề'),
-                selected: false,
-                onSelected: (_) {},
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          for (final video in videos) ...[
-            InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: () => _showVideoPlayer(context, video),
-              child: VideoCard(video: video),
+      body: videos.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => _LoadError(
+          message: 'Chưa tải được video',
+          onRetry: () => ref.invalidate(videoListProvider),
+        ),
+        data: (items) {
+          final teachers = items
+              .map((e) => e.teacher)
+              .where((teacher) => teacher.trim().isNotEmpty)
+              .toSet()
+              .toList();
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(videoListProvider);
+              await ref.read(videoListProvider.future);
+            },
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+              children: [
+                if (teachers.isNotEmpty)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final teacher in teachers)
+                        FilterChip(
+                          label: Text(teacher),
+                          selected: false,
+                          onSelected: (_) {},
+                        ),
+                    ],
+                  ),
+                if (teachers.isNotEmpty) const SizedBox(height: 18),
+                if (items.isEmpty)
+                  const Card(
+                    child: ListTile(
+                      leading: Icon(Icons.video_library_outlined),
+                      title: Text('Chưa có video'),
+                      subtitle: Text(
+                        'Thêm video trong admin để hiển thị tại đây.',
+                      ),
+                    ),
+                  ),
+                for (final video in items) ...[
+                  InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => _showVideoPlayer(context, video),
+                    child: VideoCard(video: video),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+              ],
             ),
-            const SizedBox(height: 14),
-          ],
-        ],
+          );
+        },
       ),
     );
   }
@@ -55,6 +80,30 @@ class VideoScreen extends ConsumerWidget {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => _VideoPlayerSheet(video: video),
+    );
+  }
+}
+
+class _LoadError extends StatelessWidget {
+  const _LoadError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Card(
+        child: ListTile(
+          leading: const Icon(Icons.wifi_off_outlined),
+          title: Text(message),
+          trailing: IconButton(
+            tooltip: 'Tải lại',
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -75,11 +124,11 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
   Duration? sleepTimer;
 
   String get repeatLabel => switch (repeatMode) {
-        'three' => 'Lặp 3 lần',
-        'custom' => 'Lặp $customRepeatCount lần',
-        'forever' => 'Lặp liên tục',
-        _ => 'Lặp 1 lần',
-      };
+    'three' => 'Lặp 3 lần',
+    'custom' => 'Lặp $customRepeatCount lần',
+    'forever' => 'Lặp liên tục',
+    _ => 'Lặp 1 lần',
+  };
 
   Future<void> pickSleepTimer() async {
     final picked = await showModalBottomSheet<Duration>(
@@ -98,7 +147,8 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
                 ListTile(
                   leading: const Icon(Icons.bedtime_outlined),
                   title: Text('$minutes phút'),
-                  onTap: () => Navigator.pop(context, Duration(minutes: minutes)),
+                  onTap: () =>
+                      Navigator.pop(context, Duration(minutes: minutes)),
                 ),
             ],
           ),
@@ -121,14 +171,21 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
             borderRadius: BorderRadius.circular(22),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: Image.network(video.thumbnailUrl, fit: BoxFit.cover),
+              child: Image.network(
+                video.thumbnailUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Center(child: Icon(Icons.play_circle_outline)),
+              ),
             ),
           ),
           const SizedBox(height: 18),
           Text(
             video.title,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
           Text('${video.teacher} • ${video.topic}'),
@@ -154,7 +211,9 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
                 ],
                 child: Chip(
                   avatar: const Icon(Icons.speed, size: 18),
-                  label: Text('Tốc độ ${speed.toStringAsFixed(speed == 1 ? 1 : 2)}x'),
+                  label: Text(
+                    'Tốc độ ${speed.toStringAsFixed(speed == 1 ? 1 : 2)}x',
+                  ),
                 ),
               ),
               PopupMenuButton<String>(
@@ -162,7 +221,10 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
                 itemBuilder: (context) => const [
                   PopupMenuItem(value: 'once', child: Text('Lặp lại 1 lần')),
                   PopupMenuItem(value: 'three', child: Text('Lặp lại 3 lần')),
-                  PopupMenuItem(value: 'forever', child: Text('Lặp lại liên tục')),
+                  PopupMenuItem(
+                    value: 'forever',
+                    child: Text('Lặp lại liên tục'),
+                  ),
                   PopupMenuItem(value: 'custom', child: Text('Tùy chỉnh')),
                 ],
                 child: Chip(
@@ -172,7 +234,11 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
               ),
               ActionChip(
                 avatar: const Icon(Icons.bedtime_outlined, size: 18),
-                label: Text(sleepTimer == null ? 'Hẹn giờ' : '${sleepTimer!.inMinutes} phút'),
+                label: Text(
+                  sleepTimer == null
+                      ? 'Hẹn giờ'
+                      : '${sleepTimer!.inMinutes} phút',
+                ),
                 onPressed: pickSleepTimer,
               ),
             ],

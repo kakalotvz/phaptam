@@ -16,47 +16,81 @@ class AudioScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Kinh Phật')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 8, 18, 120),
-        children: [
-          SizedBox(
-            height: 44,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: categories.length + 1,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final name = index == 0 ? 'Tất cả' : categories[index - 1].name;
-                final isSelected = index == 0
-                    ? selected == null
-                    : selected == name;
-                return ChoiceChip(
-                  label: Text(name),
-                  selected: isSelected,
-                  onSelected: (_) => ref
-                      .read(selectedAudioCategoryProvider.notifier)
-                      .select(index == 0 ? null : name),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 18),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
-            child: Column(
-              key: ValueKey(selected ?? 'all'),
-              children: [
-                for (final audio in audios) ...[
-                  AudioTile(
-                    audio: audio,
-                    onTap: () => _showPlayer(context, audio),
+      body: categories.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => _LoadError(
+          message: 'Chưa tải được danh mục audio',
+          onRetry: () {
+            ref.invalidate(audioCategoriesProvider);
+            ref.invalidate(audioListProvider);
+          },
+        ),
+        data: (items) => RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(audioCategoriesProvider);
+            ref.invalidate(audioListProvider);
+            await ref.read(audioListProvider.future);
+          },
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 120),
+            children: [
+              SizedBox(
+                height: 44,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: items.length + 1,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final name = index == 0 ? 'Tất cả' : items[index - 1].name;
+                    final isSelected = index == 0
+                        ? selected == null
+                        : selected == name;
+                    return ChoiceChip(
+                      label: Text(name),
+                      selected: isSelected,
+                      onSelected: (_) => ref
+                          .read(selectedAudioCategoryProvider.notifier)
+                          .select(index == 0 ? null : name),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (ref.watch(audioListProvider).isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (audios.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.library_music_outlined),
+                    title: Text('Chưa có audio'),
+                    subtitle: Text(
+                      'Thêm audio trong admin để hiển thị tại đây.',
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                ],
-              ],
-            ),
+                )
+              else
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 260),
+                  child: Column(
+                    key: ValueKey(selected ?? 'all'),
+                    children: [
+                      for (final audio in audios) ...[
+                        AudioTile(
+                          audio: audio,
+                          onTap: () => _showPlayer(context, audio),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -67,6 +101,30 @@ class AudioScreen extends ConsumerWidget {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => _AudioPlayerSheet(audio: audio),
+    );
+  }
+}
+
+class _LoadError extends StatelessWidget {
+  const _LoadError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Card(
+        child: ListTile(
+          leading: const Icon(Icons.wifi_off_outlined),
+          title: Text(message),
+          trailing: IconButton(
+            tooltip: 'Tải lại',
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -88,11 +146,11 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
   Duration? sleepTimer;
 
   String get repeatLabel => switch (repeatMode) {
-        'three' => 'Lặp 3 lần',
-        'custom' => 'Lặp $customRepeatCount lần',
-        'forever' => 'Lặp liên tục',
-        _ => 'Lặp 1 lần',
-      };
+    'three' => 'Lặp 3 lần',
+    'custom' => 'Lặp $customRepeatCount lần',
+    'forever' => 'Lặp liên tục',
+    _ => 'Lặp 1 lần',
+  };
 
   Future<void> pickSleepTimer() async {
     final picked = await showModalBottomSheet<Duration>(
@@ -111,7 +169,8 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
                 ListTile(
                   leading: const Icon(Icons.bedtime_outlined),
                   title: Text('$minutes phút'),
-                  onTap: () => Navigator.pop(context, Duration(minutes: minutes)),
+                  onTap: () =>
+                      Navigator.pop(context, Duration(minutes: minutes)),
                 ),
             ],
           ),
@@ -139,6 +198,8 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
                 width: 180,
                 height: 180,
                 fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.music_note, size: 72),
               ),
             ),
           ),
@@ -200,7 +261,9 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
                 ],
                 child: Chip(
                   avatar: const Icon(Icons.speed, size: 18),
-                  label: Text('Tốc độ ${speed.toStringAsFixed(speed == 1 ? 1 : 2)}x'),
+                  label: Text(
+                    'Tốc độ ${speed.toStringAsFixed(speed == 1 ? 1 : 2)}x',
+                  ),
                 ),
               ),
               PopupMenuButton<String>(
@@ -208,7 +271,10 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
                 itemBuilder: (context) => const [
                   PopupMenuItem(value: 'once', child: Text('Lặp lại 1 lần')),
                   PopupMenuItem(value: 'three', child: Text('Lặp lại 3 lần')),
-                  PopupMenuItem(value: 'forever', child: Text('Lặp lại liên tục')),
+                  PopupMenuItem(
+                    value: 'forever',
+                    child: Text('Lặp lại liên tục'),
+                  ),
                   PopupMenuItem(value: 'custom', child: Text('Tùy chỉnh')),
                 ],
                 child: Chip(
@@ -218,7 +284,11 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
               ),
               ActionChip(
                 avatar: const Icon(Icons.bedtime_outlined, size: 18),
-                label: Text(sleepTimer == null ? 'Hẹn giờ' : '${sleepTimer!.inMinutes} phút'),
+                label: Text(
+                  sleepTimer == null
+                      ? 'Hẹn giờ'
+                      : '${sleepTimer!.inMinutes} phút',
+                ),
                 onPressed: pickSleepTimer,
               ),
             ],

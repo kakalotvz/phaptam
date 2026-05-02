@@ -23,12 +23,17 @@ class ApiClient {
       },
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(response.body.isEmpty ? 'Không tải được dữ liệu' : response.body);
+      throw Exception(
+        response.body.isEmpty ? 'Không tải được dữ liệu' : response.body,
+      );
     }
     return jsonDecode(response.body) as List<dynamic>;
   }
 
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     final response = await _client.post(
       Uri.parse('$baseUrl$path'),
       headers: {
@@ -38,7 +43,9 @@ class ApiClient {
       body: jsonEncode(body),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(response.body.isEmpty ? 'Thao tác thất bại' : response.body);
+      throw Exception(
+        response.body.isEmpty ? 'Thao tác thất bại' : response.body,
+      );
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
   }

@@ -1,6 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Req, UnauthorizedException } from '@nestjs/common';
 import { IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
+import { JwtService } from '@nestjs/jwt';
 import { FavoriteType, FeedbackType } from '@prisma/client';
+import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 
 class PlaylistDto {
@@ -39,18 +41,31 @@ class FeedbackDto {
 
 @Controller()
 export class UserController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
 
-  private readonly mockUserId = 'replace-with-jwt-sub';
+  private async userIdFromRequest(request: Request) {
+    const authorization = request.headers.authorization;
+    const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
+    if (!token) throw new UnauthorizedException('Bạn cần đăng nhập để thực hiện thao tác này');
+    try {
+      const payload = await this.jwt.verifyAsync<{ sub?: string }>(token);
+      if (!payload.sub) throw new UnauthorizedException('Phiên đăng nhập không hợp lệ');
+      return payload.sub;
+    } catch {
+      throw new UnauthorizedException('Phiên đăng nhập không hợp lệ hoặc đã hết hạn');
+    }
+  }
 
   @Post('playlist')
-  createPlaylist(@Body() dto: PlaylistDto) {
-    return this.prisma.playlist.create({ data: { userId: this.mockUserId, name: dto.name } });
+  async createPlaylist(@Req() request: Request, @Body() dto: PlaylistDto) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.playlist.create({ data: { userId, name: dto.name } });
   }
 
   @Get('playlist')
-  playlists() {
-    return this.prisma.playlist.findMany({ where: { userId: this.mockUserId }, include: { items: { include: { audio: true }, orderBy: { orderIndex: 'asc' } } } });
+  async playlists(@Req() request: Request) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.playlist.findMany({ where: { userId }, include: { items: { include: { audio: true }, orderBy: { orderIndex: 'asc' } } } });
   }
 
   @Put('playlist/:id')
@@ -74,30 +89,34 @@ export class UserController {
   }
 
   @Post('favorites')
-  favorite(@Body() dto: FavoriteDto) {
+  async favorite(@Req() request: Request, @Body() dto: FavoriteDto) {
+    const userId = await this.userIdFromRequest(request);
     return this.prisma.favorite.upsert({
-      where: { userId_type_contentId: { userId: this.mockUserId, type: dto.type, contentId: dto.contentId } },
+      where: { userId_type_contentId: { userId, type: dto.type, contentId: dto.contentId } },
       update: {},
-      create: { userId: this.mockUserId, type: dto.type, contentId: dto.contentId },
+      create: { userId, type: dto.type, contentId: dto.contentId },
     });
   }
 
   @Get('favorites')
-  favorites() {
-    return this.prisma.favorite.findMany({ where: { userId: this.mockUserId }, orderBy: { createdAt: 'desc' } });
+  async favorites(@Req() request: Request) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.favorite.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
   }
 
   @Post('history')
-  history(@Body('videoId') videoId: string) {
-    return this.prisma.history.create({ data: { userId: this.mockUserId, videoId } });
+  async history(@Req() request: Request, @Body('videoId') videoId: string) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.history.create({ data: { userId, videoId } });
   }
 
   @Post('audio-progress')
-  progress(@Body() dto: { audioId: string; lastPosition: number }) {
+  async progress(@Req() request: Request, @Body() dto: { audioId: string; lastPosition: number }) {
+    const userId = await this.userIdFromRequest(request);
     return this.prisma.audioProgress.upsert({
-      where: { userId_audioId: { userId: this.mockUserId, audioId: dto.audioId } },
+      where: { userId_audioId: { userId, audioId: dto.audioId } },
       update: { lastPosition: dto.lastPosition },
-      create: { userId: this.mockUserId, audioId: dto.audioId, lastPosition: dto.lastPosition },
+      create: { userId, audioId: dto.audioId, lastPosition: dto.lastPosition },
     });
   }
 

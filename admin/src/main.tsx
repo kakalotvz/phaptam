@@ -98,6 +98,27 @@ function normalizeImportedLines(lines: ScriptureLine[]): EditableScriptureLine[]
     .filter((line) => line.content);
 }
 
+function scriptureDraftSnapshot(draft: {
+  title: string;
+  description: string;
+  backgroundImageUrl: string;
+  categoryId: string;
+  rawText: string;
+  lines: EditableScriptureLine[];
+}) {
+  return JSON.stringify({
+    title: draft.title.trim(),
+    description: draft.description.trim(),
+    backgroundImageUrl: draft.backgroundImageUrl.trim(),
+    categoryId: draft.categoryId,
+    rawText: draft.rawText.trim(),
+    lines: draft.lines.map((line) => ({
+      content: line.content.trim(),
+      start_time: Number(line.start_time || 0),
+    })),
+  });
+}
+
 function downloadScriptureSample() {
   const blob = new Blob([JSON.stringify(scriptureSampleJson, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -262,8 +283,10 @@ function App() {
       await action();
       setNotice(message);
       await load();
+      return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Thao tác thất bại');
+      return false;
     }
   }
 
@@ -476,6 +499,12 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   const [lines, setLines] = useState<EditableScriptureLine[]>([]);
   const autoTimingTimer = useRef<number | undefined>(undefined);
   const autoTimingRequest = useRef(0);
+  const savedDraftRef = useRef(scriptureDraftSnapshot({ title: '', description: '', backgroundImageUrl: '', categoryId: '', rawText: '', lines: [] }));
+  const currentDraft = useMemo(
+    () => scriptureDraftSnapshot({ title, description, backgroundImageUrl, categoryId, rawText, lines }),
+    [title, description, backgroundImageUrl, categoryId, rawText, lines],
+  );
+  const hasUnsavedChanges = currentDraft !== savedDraftRef.current;
 
   useEffect(() => {
     return () => window.clearTimeout(autoTimingTimer.current);
@@ -562,18 +591,33 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   }
 
   function openScripture(scripture: Scripture) {
+    if (!confirmLoseChanges()) return;
     const nextLines = normalizeImportedLines(scripture.lines ?? []);
+    const nextRawText = nextLines.map((line) => line.content).join('\n');
     setSelectedScriptureId(scripture.id);
     setTitle(scripture.title);
     setDescription(scripture.description ?? '');
     setBackgroundImageUrl(scripture.backgroundImageUrl ?? '');
     setCategoryId(scripture.categoryId ?? '');
-    setRawText(nextLines.map((line) => line.content).join('\n'));
+    setRawText(nextRawText);
     setLines(nextLines);
+    savedDraftRef.current = scriptureDraftSnapshot({
+      title: scripture.title,
+      description: scripture.description ?? '',
+      backgroundImageUrl: scripture.backgroundImageUrl ?? '',
+      categoryId: scripture.categoryId ?? '',
+      rawText: nextRawText,
+      lines: nextLines,
+    });
     setScriptureStatus(`Đang mở "${scripture.title}" với ${nextLines.length} dòng.`);
   }
 
-  function newScripture() {
+  function confirmLoseChanges() {
+    if (!hasUnsavedChanges) return true;
+    return window.confirm('Bạn đã thay đổi nội dung, hình ảnh, tiêu đề hoặc danh mục nhưng chưa Lưu. Nếu Hủy hoặc tạo Kinh mới thì các thay đổi này sẽ bị mất.');
+  }
+
+  function resetScriptureForm() {
     setSelectedScriptureId('');
     setTitle('');
     setDescription('');
@@ -581,7 +625,39 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     setCategoryId('');
     setRawText('');
     setLines([]);
+    savedDraftRef.current = scriptureDraftSnapshot({ title: '', description: '', backgroundImageUrl: '', categoryId: '', rawText: '', lines: [] });
     setScriptureStatus('');
+  }
+
+  function newScripture() {
+    if (!confirmLoseChanges()) return;
+    resetScriptureForm();
+  }
+
+  function cancelEdit() {
+    if (!confirmLoseChanges()) return;
+    resetScriptureForm();
+  }
+
+  async function saveScripture() {
+    const saved = await run(
+      () =>
+        (selectedScriptureId ? api.update(`/admin/scripture/${selectedScriptureId}`, {
+          title,
+          description,
+          backgroundImageUrl,
+          categoryId,
+          lines,
+        }) : api.create('/admin/scripture', {
+          title,
+          description,
+          backgroundImageUrl,
+          categoryId,
+          lines,
+        })),
+      selectedScriptureId ? 'Đã cập nhật bản Đọc Kinh' : 'Đã tạo bản Đọc Kinh',
+    );
+    if (saved) savedDraftRef.current = currentDraft;
   }
 
   function updateLine(index: number, patch: Partial<{ content: string; start_time: number }>, shouldRetiming = false) {
@@ -650,10 +726,15 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
                 <strong>Đang chỉnh sửa bản đã lưu</strong>
                 {scriptureStatus && <span>{scriptureStatus}</span>}
               </div>
-              <button className="ghost" type="button" onClick={newScripture}>
-                <Plus size={16} />
-                Kinh mới
-              </button>
+              <div className="action-group">
+                <button className="ghost" type="button" onClick={cancelEdit}>
+                  Hủy
+                </button>
+                <button className="ghost" type="button" onClick={newScripture}>
+                  <Plus size={16} />
+                  Kinh mới
+                </button>
+              </div>
             </div>
           )}
           <label>
@@ -708,25 +789,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               className="primary"
               type="button"
               disabled={scriptureBusy || !title.trim() || lines.length === 0}
-              onClick={() =>
-                run(
-                  () =>
-                    (selectedScriptureId ? api.update(`/admin/scripture/${selectedScriptureId}`, {
-                      title,
-                      description,
-                      backgroundImageUrl,
-                      categoryId,
-                      lines,
-                    }) : api.create('/admin/scripture', {
-                      title,
-                      description,
-                      backgroundImageUrl,
-                      categoryId,
-                      lines,
-                    })),
-                  selectedScriptureId ? 'Đã cập nhật bản Đọc Kinh' : 'Đã tạo bản Đọc Kinh',
-                )
-              }
+              onClick={() => void saveScripture()}
             >
               <Save size={16} />
               {selectedScriptureId ? 'Cập nhật bản đọc' : 'Lưu bản đọc'}
@@ -1614,7 +1677,7 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-type RunAction = (action: () => Promise<unknown>, message: string) => Promise<void>;
+type RunAction = (action: () => Promise<unknown>, message: string) => Promise<boolean>;
 type Field = [name: string, label: string, type?: string, options?: string[][]];
 
 function askText(label: string, current = '') {

@@ -1,6 +1,14 @@
 class AudioCategory {
   const AudioCategory({required this.id, required this.name, this.description});
 
+  factory AudioCategory.fromJson(Map<String, dynamic> json) {
+    return AudioCategory(
+      id: json['id'] as String,
+      name: json['name'] as String? ?? 'Danh mục',
+      description: json['description'] as String?,
+    );
+  }
+
   final String id;
   final String name;
   final String? description;
@@ -24,6 +32,21 @@ class AudioItem {
   final String thumbnailUrl;
   final String audioUrl;
   final String? description;
+
+  factory AudioItem.fromJson(Map<String, dynamic> json) {
+    final category = json['category'];
+    return AudioItem(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'Audio',
+      category: category is Map<String, dynamic>
+          ? category['name'] as String? ?? 'Không danh mục'
+          : 'Không danh mục',
+      duration: Duration(seconds: NumberParser.asInt(json['duration'])),
+      thumbnailUrl: json['thumbnailUrl'] as String? ?? '',
+      audioUrl: json['audioUrl'] as String? ?? '',
+      description: json['description'] as String?,
+    );
+  }
 }
 
 class VideoItem {
@@ -44,6 +67,21 @@ class VideoItem {
   final String thumbnailUrl;
   final String videoUrl;
   final String? description;
+
+  factory VideoItem.fromJson(Map<String, dynamic> json) {
+    final category = json['category'];
+    return VideoItem(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'Video',
+      teacher: json['teacher'] as String? ?? '',
+      topic: category is Map<String, dynamic>
+          ? category['name'] as String? ?? 'Không danh mục'
+          : 'Không danh mục',
+      thumbnailUrl: json['thumbnailUrl'] as String? ?? '',
+      videoUrl: json['videoUrl'] as String? ?? '',
+      description: json['description'] as String?,
+    );
+  }
 }
 
 class NewsItem {
@@ -70,6 +108,55 @@ class NewsItem {
   final String? imageUrl;
   final String? link;
   final bool shareEnabled;
+
+  factory NewsItem.fromJson(Map<String, dynamic> json) {
+    final category = json['category'];
+    return NewsItem(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'Tin tức',
+      category: category is Map<String, dynamic>
+          ? category['name'] as String? ?? 'Tin tức'
+          : 'Tin tức',
+      source: json['sourceName'] as String? ?? 'Pháp Tâm',
+      publishedAt:
+          DateTime.tryParse(json['publishedAt'] as String? ?? '') ??
+          DateTime.now(),
+      summary: json['summary'] as String? ?? '',
+      content: json['content'] as String? ?? json['summary'] as String? ?? '',
+      imageUrl: json['imageUrl'] as String?,
+      link: json['link'] as String?,
+      shareEnabled: json['shareEnabled'] as bool? ?? true,
+    );
+  }
+}
+
+class MeditationProgram {
+  const MeditationProgram({
+    required this.id,
+    required this.title,
+    required this.duration,
+    this.description,
+    this.audioUrl,
+    this.imageUrl,
+  });
+
+  factory MeditationProgram.fromJson(Map<String, dynamic> json) {
+    return MeditationProgram(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'Thiền',
+      description: json['description'] as String?,
+      duration: Duration(seconds: NumberParser.asInt(json['duration'])),
+      audioUrl: json['audioUrl'] as String?,
+      imageUrl: json['imageUrl'] as String?,
+    );
+  }
+
+  final String id;
+  final String title;
+  final String? description;
+  final Duration duration;
+  final String? audioUrl;
+  final String? imageUrl;
 }
 
 class DailyQuote {
@@ -157,6 +244,12 @@ class Scripture {
 
 class NumberParser {
   const NumberParser._();
+
+  static int asInt(Object? value) {
+    if (value is num) return value.round();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
 
   static double asDouble(Object? value) {
     if (value is num) return value.toDouble();

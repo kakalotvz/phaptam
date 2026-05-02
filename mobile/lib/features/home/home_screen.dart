@@ -35,72 +35,96 @@ class HomeScreen extends ConsumerWidget {
           sliver: SliverList.list(
             children: [
               quotes.when(
-                data: (items) => _DailyQuoteCard(
-                  quote: items.isNotEmpty
-                      ? items.first
-                      : const DailyQuote(
-                          id: 'fallback',
-                          content: 'Bình an không phải là nơi không có tiếng động, mà là tâm không bị kéo đi.',
-                        ),
-                ),
-                loading: () => const _LoadingCard(label: 'Đang tải lời nhắc hôm nay...'),
-                error: (error, stackTrace) => const _DailyQuoteCard(
-                  quote: DailyQuote(
-                    id: 'fallback',
-                    content: 'Bình an không phải là nơi không có tiếng động, mà là tâm không bị kéo đi.',
-                  ),
+                data: (items) => items.isEmpty
+                    ? const SizedBox.shrink()
+                    : _DailyQuoteCard(quote: items.first),
+                loading: () =>
+                    const _LoadingCard(label: 'Đang tải lời nhắc hôm nay...'),
+                error: (error, stackTrace) => _ErrorCard(
+                  label: 'Chưa tải được lời nhắc hôm nay',
+                  onRetry: () => ref.invalidate(dailyQuotesProvider),
                 ),
               ),
               const SizedBox(height: 18),
               banners.when(
-                data: (items) => items.isEmpty ? const SizedBox.shrink() : _BannerStrip(banners: items),
+                data: (items) => items.isEmpty
+                    ? const SizedBox.shrink()
+                    : _BannerStrip(banners: items),
                 loading: () => const _LoadingCard(label: 'Đang tải banner...'),
                 error: (error, stackTrace) => const SizedBox.shrink(),
               ),
               const SizedBox(height: 24),
-              CalmSection(
-                title: 'Nghe tiep',
-                child: AudioTile(audio: audios.first),
-              ),
-              const SizedBox(height: 24),
-              CalmSection(
-                title: 'Video noi bat',
-                child: SizedBox(
-                  height: 228,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: videos.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(width: 14),
-                    itemBuilder: (context, index) => SizedBox(
-                      width: 280,
-                      child: VideoCard(video: videos[index]),
-                    ),
-                  ),
+              audios.when(
+                data: (items) => items.isEmpty
+                    ? const SizedBox.shrink()
+                    : CalmSection(
+                        title: 'Nghe tiếp',
+                        child: AudioTile(audio: items.first),
+                      ),
+                loading: () => const _LoadingCard(label: 'Đang tải audio...'),
+                error: (error, stackTrace) => _ErrorCard(
+                  label: 'Chưa tải được audio',
+                  onRetry: () => ref.invalidate(audioListProvider),
                 ),
               ),
               const SizedBox(height: 24),
-              CalmSection(
-                title: 'Tin Phật giáo',
-                child: Column(
-                  children: [
-                    for (final item in news)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(item.title),
-                        subtitle: Text(
-                          '${item.category} • ${item.source} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
+              videos.when(
+                data: (items) => items.isEmpty
+                    ? const SizedBox.shrink()
+                    : CalmSection(
+                        title: 'Video nổi bật',
+                        child: SizedBox(
+                          height: 228,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: items.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(width: 14),
+                            itemBuilder: (context, index) => SizedBox(
+                              width: 280,
+                              child: VideoCard(video: items[index]),
+                            ),
+                          ),
                         ),
-                        trailing: item.shareEnabled
-                            ? IconButton(
-                                tooltip: 'Chia sẻ',
-                                icon: const Icon(Icons.share_outlined),
-                                onPressed: () => _showShareSheet(context, item),
-                              )
-                            : const Icon(Icons.chevron_right),
-                        onTap: () => _showNewsDetail(context, item),
                       ),
-                  ],
+                loading: () => const _LoadingCard(label: 'Đang tải video...'),
+                error: (error, stackTrace) => _ErrorCard(
+                  label: 'Chưa tải được video',
+                  onRetry: () => ref.invalidate(videoListProvider),
+                ),
+              ),
+              const SizedBox(height: 24),
+              news.when(
+                data: (items) => items.isEmpty
+                    ? const SizedBox.shrink()
+                    : CalmSection(
+                        title: 'Tin Phật giáo',
+                        child: Column(
+                          children: [
+                            for (final item in items)
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(item.title),
+                                subtitle: Text(
+                                  '${item.category} • ${item.source} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
+                                ),
+                                trailing: item.shareEnabled
+                                    ? IconButton(
+                                        tooltip: 'Chia sẻ',
+                                        icon: const Icon(Icons.share_outlined),
+                                        onPressed: () =>
+                                            _showShareSheet(context, item),
+                                      )
+                                    : const Icon(Icons.chevron_right),
+                                onTap: () => _showNewsDetail(context, item),
+                              ),
+                          ],
+                        ),
+                      ),
+                loading: () => const _LoadingCard(label: 'Đang tải tin tức...'),
+                error: (error, stackTrace) => _ErrorCard(
+                  label: 'Chưa tải được tin tức',
+                  onRetry: () => ref.invalidate(newsListProvider),
                 ),
               ),
             ],
@@ -127,19 +151,34 @@ class HomeScreen extends ConsumerWidget {
                 if (item.imageUrl != null)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(18),
-                    child: Image.network(item.imageUrl!, height: 190, fit: BoxFit.cover),
+                    child: Image.network(
+                      item.imageUrl!,
+                      height: 190,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 const SizedBox(height: 16),
-                Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  item.title,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 8),
                 Text(
                   '${item.category} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 14),
-                Text(item.summary, style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  item.summary,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 14),
-                Text(item.content, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.55)),
+                Text(
+                  item.content,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(height: 1.55),
+                ),
                 if (item.shareEnabled) ...[
                   const SizedBox(height: 18),
                   FilledButton.icon(
@@ -164,7 +203,8 @@ class HomeScreen extends ConsumerWidget {
       'Facebook': 'https://www.facebook.com/sharer/sharer.php?u=$encodedLink',
       'Zalo': link,
       'Messenger': link,
-      'X': 'https://twitter.com/intent/tweet?text=${Uri.encodeComponent(item.title)}&url=$encodedLink',
+      'X':
+          'https://twitter.com/intent/tweet?text=${Uri.encodeComponent(item.title)}&url=$encodedLink',
     };
 
     showModalBottomSheet<void>(
@@ -185,7 +225,9 @@ class HomeScreen extends ConsumerWidget {
                     if (context.mounted) {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã sao chép nội dung chia sẻ')),
+                        const SnackBar(
+                          content: Text('Đã sao chép nội dung chia sẻ'),
+                        ),
                       );
                     }
                   },
@@ -194,13 +236,19 @@ class HomeScreen extends ConsumerWidget {
                   ListTile(
                     leading: const Icon(Icons.public),
                     title: Text(entry.key),
-                    subtitle: Text(entry.value, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      entry.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     onTap: () async {
                       await Clipboard.setData(ClipboardData(text: entry.value));
                       if (context.mounted) {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Đã sao chép link ${entry.key}')),
+                          SnackBar(
+                            content: Text('Đã sao chép link ${entry.key}'),
+                          ),
                         );
                       }
                     },
@@ -210,6 +258,28 @@ class HomeScreen extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _ErrorCard extends StatelessWidget {
+  const _ErrorCard({required this.label, required this.onRetry});
+
+  final String label;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.wifi_off_outlined),
+        title: Text(label),
+        trailing: IconButton(
+          tooltip: 'Tải lại',
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh),
+        ),
+      ),
     );
   }
 }
@@ -225,7 +295,8 @@ class _DailyQuoteCard extends StatelessWidget {
       duration: const Duration(milliseconds: 650),
       curve: Curves.easeOutCubic,
       tween: Tween(begin: .94, end: 1),
-      builder: (context, value, child) => Transform.scale(scale: value, child: child),
+      builder: (context, value, child) =>
+          Transform.scale(scale: value, child: child),
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -237,7 +308,9 @@ class _DailyQuoteCard extends StatelessWidget {
             if (quote.imageUrl != null && quote.imageUrl!.isNotEmpty)
               Positioned.fill(
                 child: DecoratedBox(
-                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: .38)),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: .38),
+                  ),
                 ),
               ),
             Padding(
@@ -256,17 +329,19 @@ class _DailyQuoteCard extends StatelessWidget {
                   Text(
                     quote.content,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          height: 1.35,
-                          fontWeight: FontWeight.w700,
-                          color: quote.imageUrl == null ? null : Colors.white,
-                        ),
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                      color: quote.imageUrl == null ? null : Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     'Lời nhắc hôm nay',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: quote.imageUrl == null ? null : Colors.white.withValues(alpha: .82),
-                        ),
+                      color: quote.imageUrl == null
+                          ? null
+                          : Colors.white.withValues(alpha: .82),
+                    ),
                   ),
                 ],
               ),
@@ -301,10 +376,14 @@ class _BannerStrip extends StatelessWidget {
                 onTap: banner.link == null || banner.link!.isEmpty
                     ? null
                     : () async {
-                        await Clipboard.setData(ClipboardData(text: banner.link!));
+                        await Clipboard.setData(
+                          ClipboardData(text: banner.link!),
+                        );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Đã sao chép liên kết banner')),
+                            const SnackBar(
+                              content: Text('Đã sao chép liên kết banner'),
+                            ),
                           );
                         }
                       },

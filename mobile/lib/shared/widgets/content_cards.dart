@@ -65,6 +65,8 @@ class AudioTile extends StatelessWidget {
                     width: 64,
                     height: 64,
                     fit: BoxFit.cover,
+                    errorWidget: (context, url, error) =>
+                        const Icon(Icons.music_note, size: 30),
                   ),
                 ),
               ),
@@ -119,6 +121,8 @@ class VideoCard extends StatelessWidget {
             child: CachedNetworkImage(
               imageUrl: video.thumbnailUrl,
               fit: BoxFit.cover,
+              errorWidget: (context, url, error) =>
+                  const Center(child: Icon(Icons.play_circle_outline)),
             ),
           ),
           Padding(
