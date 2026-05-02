@@ -312,14 +312,20 @@ class _ScriptureContent extends StatelessWidget {
               leading: const Icon(Icons.menu_book_outlined),
               title: Text(scripture.title),
               subtitle: Text(
-                scripture.description ?? '${scripture.lines.length} dòng',
+                scripture.lines.isEmpty
+                    ? 'Chưa có dòng kinh'
+                    : scripture.description ?? '${scripture.lines.length} dòng',
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ScriptureReader(scripture: scripture),
-                ),
-              ),
+              trailing: scripture.lines.isEmpty
+                  ? const Icon(Icons.info_outline)
+                  : const Icon(Icons.chevron_right),
+              onTap: scripture.lines.isEmpty
+                  ? null
+                  : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ScriptureReader(scripture: scripture),
+                      ),
+                    ),
             ),
           ),
       ],

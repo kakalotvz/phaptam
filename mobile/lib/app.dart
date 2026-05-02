@@ -5,11 +5,36 @@ import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/content/content_providers.dart';
 
-class PhapTamApp extends ConsumerWidget {
+class PhapTamApp extends ConsumerStatefulWidget {
   const PhapTamApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PhapTamApp> createState() => _PhapTamAppState();
+}
+
+class _PhapTamAppState extends ConsumerState<PhapTamApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      refreshPublicContent(ref);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final darkMode = ref.watch(darkModeProvider);
     return MaterialApp.router(
       title: 'Pháp Tâm',
