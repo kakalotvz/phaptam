@@ -16,14 +16,22 @@ import {
   BookOpenText,
   CalendarClock,
   Clapperboard,
+  Eraser,
   Download,
   FileText,
   Eye,
   Heading2,
+  Heading3,
   Image,
+  ImagePlus,
+  Italic,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   LayoutDashboard,
   Link2,
   List,
+  ListOrdered,
   MessageSquareText,
   Newspaper,
   Pause,
@@ -37,8 +45,12 @@ import {
   Save,
   Settings,
   Share2,
+  Strikethrough,
   Trash2,
+  Underline,
+  Unlink,
   Upload,
+  Video as VideoIcon,
 } from 'lucide-react';
 
 import {
@@ -1126,14 +1138,18 @@ function RichTextEditor({
   onChange,
   placeholder,
   compact = false,
+  imageUploadKind = 'images/news',
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   compact?: boolean;
+  imageUploadKind?: Parameters<typeof uploadToR2>[1];
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [focused, setFocused] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (!editorRef.current || focused) return;
@@ -1154,10 +1170,42 @@ function RichTextEditor({
     syncValue();
   }
 
+  function insertHtml(html: string) {
+    editorRef.current?.focus();
+    document.execCommand('insertHTML', false, html);
+    syncValue();
+  }
+
   function addLink() {
     const url = window.prompt('Dán liên kết https://...');
     if (!url) return;
     runCommand('createLink', url);
+  }
+
+  function addImageUrl() {
+    const url = window.prompt('Dán URL hình ảnh https://...');
+    if (!url) return;
+    runCommand('insertImage', url);
+  }
+
+  async function uploadImage(file?: File) {
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const url = await uploadToR2(file, imageUploadKind);
+      runCommand('insertImage', url);
+    } catch (caught) {
+      window.alert(caught instanceof Error ? caught.message : 'Upload ảnh thất bại');
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  }
+
+  function addVideo() {
+    const url = window.prompt('Dán link video YouTube hoặc MP4');
+    if (!url) return;
+    insertHtml(`<div data-video="${escapeHtml(url)}">Video: ${escapeHtml(url)}</div><p><br></p>`);
   }
 
   return (
@@ -1166,18 +1214,67 @@ function RichTextEditor({
         <button type="button" onClick={() => runCommand('formatBlock', 'h2')} title="Tiêu đề">
           <Heading2 size={16} />
         </button>
+        <button type="button" onClick={() => runCommand('formatBlock', 'h3')} title="Tiêu đề phụ">
+          <Heading3 size={16} />
+        </button>
         <button type="button" onClick={() => runCommand('formatBlock', 'p')} title="Đoạn văn">
           Aa
+        </button>
+        <button type="button" onClick={() => runCommand('formatBlock', 'blockquote')} title="Trích dẫn">
+          <Quote size={16} />
         </button>
         <button type="button" onClick={() => runCommand('bold')} title="In đậm">
           <Bold size={16} />
         </button>
+        <button type="button" onClick={() => runCommand('italic')} title="In nghiêng">
+          <Italic size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('underline')} title="Gạch chân">
+          <Underline size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('strikeThrough')} title="Gạch ngang">
+          <Strikethrough size={16} />
+        </button>
         <button type="button" onClick={() => runCommand('insertUnorderedList')} title="Danh sách">
           <List size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('insertOrderedList')} title="Danh sách số">
+          <ListOrdered size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('justifyLeft')} title="Căn trái">
+          <AlignLeft size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('justifyCenter')} title="Căn giữa">
+          <AlignCenter size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('justifyRight')} title="Căn phải">
+          <AlignRight size={16} />
         </button>
         <button type="button" onClick={addLink} title="Liên kết">
           <Link2 size={16} />
         </button>
+        <button type="button" onClick={() => runCommand('unlink')} title="Xóa liên kết">
+          <Unlink size={16} />
+        </button>
+        <button type="button" onClick={addImageUrl} title="Chèn ảnh bằng URL">
+          <ImagePlus size={16} />
+        </button>
+        <button type="button" onClick={() => imageInputRef.current?.click()} title="Upload ảnh lên R2">
+          {uploadingImage ? '...' : <Upload size={16} />}
+        </button>
+        <button type="button" onClick={addVideo} title="Chèn link video">
+          <VideoIcon size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('removeFormat')} title="Xóa định dạng">
+          <Eraser size={16} />
+        </button>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(event) => void uploadImage(event.target.files?.[0])}
+        />
       </div>
       <div
         ref={editorRef}
@@ -1203,9 +1300,22 @@ function markupToHtml(value: string) {
   return blocks
     .map((block) => {
       if (block.startsWith('## ')) return `<h2>${inlineMarkupToHtml(block.slice(3))}</h2>`;
+      if (block.startsWith('### ')) return `<h3>${inlineMarkupToHtml(block.slice(4))}</h3>`;
+      if (block.startsWith('> ')) return `<blockquote>${inlineMarkupToHtml(block.replace(/^> /gm, ''))}</blockquote>`;
+      if (block.startsWith('![')) {
+        const image = block.match(/^!\[(.*?)\]\((https?:\/\/[^)]+)\)$/);
+        if (image) return `<figure><img src="${escapeHtml(image[2])}" alt="${escapeHtml(image[1])}" /></figure>`;
+      }
+      if (block.startsWith('[[video:')) {
+        const video = block.match(/^\[\[video:(.*?)\]\]$/);
+        if (video) return `<div data-video="${escapeHtml(video[1])}">Video: ${escapeHtml(video[1])}</div>`;
+      }
       const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
       if (lines.every((line) => line.startsWith('- '))) {
         return `<ul>${lines.map((line) => `<li>${inlineMarkupToHtml(line.slice(2))}</li>`).join('')}</ul>`;
+      }
+      if (lines.every((line) => /^\d+\. /.test(line))) {
+        return `<ol>${lines.map((line) => `<li>${inlineMarkupToHtml(line.replace(/^\d+\. /, ''))}</li>`).join('')}</ol>`;
       }
       return `<p>${inlineMarkupToHtml(lines.join('<br>'))}</p>`;
     })
@@ -1227,6 +1337,9 @@ function inlineMarkupToHtml(value: string) {
   const escaped = escapeHtml(value);
   return escaped
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<u>$1</u>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/~~(.+?)~~/g, '<s>$1</s>')
     .replace(/\[(.+?)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2">$1</a>');
 }
 
@@ -1243,10 +1356,18 @@ function blockNodeToMarkup(node: ChildNode): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
   if (!(node instanceof HTMLElement)) return '';
   const tag = node.tagName.toLowerCase();
-  if (tag === 'h1' || tag === 'h2' || tag === 'h3') return `## ${inlineNodesToMarkup(node)}`;
+  if (tag === 'h1' || tag === 'h2') return `## ${inlineNodesToMarkup(node)}`;
+  if (tag === 'h3') return `### ${inlineNodesToMarkup(node)}`;
+  if (tag === 'blockquote') return inlineNodesToMarkup(node).split('\n').map((line) => `> ${line}`).join('\n');
+  if (tag === 'figure') {
+    const image = node.querySelector('img');
+    if (image?.src) return `![${image.alt || 'Hình ảnh'}](${image.src})`;
+  }
+  if (tag === 'img') return `![${node.getAttribute('alt') || 'Hình ảnh'}](${(node as HTMLImageElement).src})`;
+  if (node.dataset.video) return `[[video:${node.dataset.video}]]`;
   if (tag === 'ul' || tag === 'ol') {
     return Array.from(node.querySelectorAll('li'))
-      .map((li) => `- ${inlineNodesToMarkup(li)}`)
+      .map((li, index) => `${tag === 'ol' ? `${index + 1}.` : '-'} ${inlineNodesToMarkup(li)}`)
       .join('\n');
   }
   if (tag === 'div' || tag === 'p') return inlineNodesToMarkup(node);
@@ -1261,6 +1382,9 @@ function inlineNodesToMarkup(element: HTMLElement): string {
       if (!(node instanceof HTMLElement)) return '';
       const tag = node.tagName.toLowerCase();
       if (tag === 'strong' || tag === 'b') return `**${inlineNodesToMarkup(node)}**`;
+      if (tag === 'em' || tag === 'i') return `*${inlineNodesToMarkup(node)}*`;
+      if (tag === 'u') return `__${inlineNodesToMarkup(node)}__`;
+      if (tag === 's' || tag === 'strike') return `~~${inlineNodesToMarkup(node)}~~`;
       if (tag === 'a') return `[${inlineNodesToMarkup(node)}](${node.getAttribute('href') ?? ''})`;
       if (tag === 'br') return '\n';
       return inlineNodesToMarkup(node);
@@ -1620,7 +1744,13 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
           )}
           <label>
             Nội dung
-            <RichTextEditor value={content} onChange={setContent} compact placeholder="Viết lời nhắc. Có thể in đậm, xuống dòng hoặc gắn liên kết." />
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              compact
+              imageUploadKind="images/quote"
+              placeholder="Viết lời nhắc. Có thể in đậm, xuống dòng hoặc gắn liên kết."
+            />
           </label>
           <label>
             Ảnh minh họa

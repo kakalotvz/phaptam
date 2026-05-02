@@ -383,6 +383,45 @@ main {
   padding-left: 22px;
 }
 
+.rich-surface ol {
+  margin: 0 0 14px;
+  padding-left: 24px;
+}
+
+.rich-surface blockquote {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  color: #5d483f;
+  background: rgba(139, 94, 60, .08);
+  border-left: 4px solid #8b5e3c;
+  border-radius: 10px;
+}
+
+.rich-surface figure {
+  margin: 0 0 14px;
+}
+
+.rich-surface img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+.rich-surface [data-video] {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  color: #4a3831;
+  background: #f6ead0;
+  border: 1px solid rgba(109, 76, 65, .16);
+  border-radius: 12px;
+  font-weight: 800;
+}
+
 .rich-surface a {
   color: #7b4b35;
   font-weight: 800;
