@@ -1161,6 +1161,7 @@ function RichTextEditor({
 
   function syncValue() {
     if (!editorRef.current) return;
+    removeEmptyHeadingMarkers();
     onChange(htmlToMarkup(editorRef.current));
   }
 
@@ -1168,6 +1169,24 @@ function RichTextEditor({
     editorRef.current?.focus();
     document.execCommand(command, false, commandValue);
     syncValue();
+  }
+
+  function resetToParagraph() {
+    editorRef.current?.focus();
+    document.execCommand('removeFormat');
+    document.execCommand('formatBlock', false, 'p');
+    document.execCommand('unlink');
+    removeEmptyHeadingMarkers();
+    syncValue();
+  }
+
+  function removeEmptyHeadingMarkers() {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const text = (editor.textContent ?? '').trim();
+    if (text === '##' || text === '###') {
+      editor.innerHTML = '';
+    }
   }
 
   function insertHtml(html: string) {
@@ -1265,7 +1284,7 @@ function RichTextEditor({
         <button type="button" onClick={addVideo} title="Chèn link video">
           <VideoIcon size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('removeFormat')} title="Xóa định dạng">
+        <button type="button" onClick={resetToParagraph} title="Xóa định dạng">
           <Eraser size={16} />
         </button>
         <input
@@ -1285,7 +1304,10 @@ function RichTextEditor({
           setFocused(false);
           syncValue();
         }}
-        onFocus={() => setFocused(true)}
+        onFocus={() => {
+          setFocused(true);
+          removeEmptyHeadingMarkers();
+        }}
         onInput={syncValue}
         suppressContentEditableWarning
       />
@@ -1299,8 +1321,9 @@ function markupToHtml(value: string) {
   if (blocks.length === 0) return '';
   return blocks
     .map((block) => {
-      if (block.startsWith('## ')) return `<h2>${inlineMarkupToHtml(block.slice(3))}</h2>`;
+      if (block === '##' || block === '###') return '';
       if (block.startsWith('### ')) return `<h3>${inlineMarkupToHtml(block.slice(4))}</h3>`;
+      if (block.startsWith('## ')) return `<h2>${inlineMarkupToHtml(block.slice(3))}</h2>`;
       if (block.startsWith('> ')) return `<blockquote>${inlineMarkupToHtml(block.replace(/^> /gm, ''))}</blockquote>`;
       if (block.startsWith('![')) {
         const image = block.match(/^!\[(.*?)\]\((https?:\/\/[^)]+)\)$/);
@@ -1349,15 +1372,23 @@ function htmlToMarkup(root: HTMLElement) {
     const block = blockNodeToMarkup(node);
     if (block.trim()) blocks.push(block.trim());
   });
-  return blocks.join('\n\n');
+  return blocks.join('\n\n').replace(/^(#{2,3})\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function blockNodeToMarkup(node: ChildNode): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
   if (!(node instanceof HTMLElement)) return '';
   const tag = node.tagName.toLowerCase();
-  if (tag === 'h1' || tag === 'h2') return `## ${inlineNodesToMarkup(node)}`;
-  if (tag === 'h3') return `### ${inlineNodesToMarkup(node)}`;
+  if (tag === 'h1' || tag === 'h2') {
+    const text = inlineNodesToMarkup(node);
+    if (!text || text === '##' || text === '###') return '';
+    return `## ${text}`;
+  }
+  if (tag === 'h3') {
+    const text = inlineNodesToMarkup(node);
+    if (!text || text === '##' || text === '###') return '';
+    return `### ${text}`;
+  }
   if (tag === 'blockquote') return inlineNodesToMarkup(node).split('\n').map((line) => `> ${line}`).join('\n');
   if (tag === 'figure') {
     const image = node.querySelector('img');
