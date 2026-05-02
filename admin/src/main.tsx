@@ -412,6 +412,7 @@ function Overview({ data }: { data: DataState }) {
 }
 
 function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingAudio, setEditingAudio] = useState<Audio | null>(null);
   const scriptureCategoryIds = new Set(data.scriptures.map((scripture) => scripture.categoryId).filter(Boolean));
   const audioCategories = data.audioCategories.filter(
     (item) => (item._count?.audios ?? 0) > 0 || !scriptureCategoryIds.has(item.id),
@@ -426,20 +427,7 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
   }
 
   function editAudio(row: Audio) {
-    const title = askText('Tiêu đề', row.title);
-    if (title === undefined) return;
-    const description = askText('Mô tả', row.description ?? '');
-    if (description === undefined) return;
-    const audioUrl = askText('Audio URL', row.audioUrl);
-    if (audioUrl === undefined) return;
-    const thumbnailUrl = askText('Ảnh đại diện URL', row.thumbnailUrl ?? '');
-    if (thumbnailUrl === undefined) return;
-    const duration = askNumber('Thời lượng giây', row.duration);
-    if (duration === undefined) return;
-    void run(
-      () => api.update(`/admin/audio/${row.id}`, compactPayload({ title, description, audioUrl, thumbnailUrl, duration, categoryId: row.categoryId })),
-      'Đã cập nhật audio',
-    );
+    setEditingAudio(row);
   }
 
   return (
@@ -457,10 +445,12 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
             ['description', 'Mô tả'],
             ['audioUrl', 'Tệp audio MP3', 'upload:audio/library'],
             ['thumbnailUrl', 'Ảnh đại diện', 'upload:images/audio'],
-            ['duration', 'Thời lượng giây', 'number'],
             ['categoryId', 'Danh mục', 'select', audioCategories.map((item) => [item.id, item.name])],
           ]}
-          onSubmit={(values) => run(() => api.create('/admin/audio', { ...values, duration: Number(values.duration || 0) }), 'Đã thêm audio')}
+          onSubmit={async (values) => {
+            const duration = await detectMediaDuration(values.audioUrl, 'audio');
+            void run(() => api.create('/admin/audio', { ...values, duration }), 'Đã thêm audio');
+          }}
         />
       </Panel>
       <Panel title="Danh mục audio" className="span">
@@ -490,7 +480,7 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
             ['thumbnailUrl', 'Ảnh'],
             ['title', 'Tiêu đề'],
             [(row: Audio) => row.category?.name ?? '-', 'Danh mục'],
-            [(row: Audio) => `${row.duration}s`, 'Thời lượng'],
+            [(row: Audio) => formatDurationSeconds(row.duration), 'Thời lượng'],
             ['audioUrl', 'Audio URL'],
             [
               (row: Audio) => (
@@ -505,6 +495,23 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
           onDelete={(row) => run(() => api.remove(`/admin/audio/${row.id}`), 'Đã xóa audio')}
         />
       </Panel>
+      {editingAudio && (
+        <AudioEditModal
+          audio={editingAudio}
+          categories={audioCategories}
+          onClose={() => setEditingAudio(null)}
+          onSave={async (values) => {
+            const duration = values.audioUrl === editingAudio.audioUrl
+              ? editingAudio.duration
+              : await detectMediaDuration(values.audioUrl, 'audio');
+            const saved = await run(
+              () => api.update(`/admin/audio/${editingAudio.id}`, compactPayload({ ...values, duration })),
+              'Đã cập nhật audio',
+            );
+            if (saved) setEditingAudio(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1052,6 +1059,8 @@ function ScriptureReminderManager({ data, run }: { data: DataState; run: RunActi
 }
 
 function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+
   function editCategory(row: VideoCategory) {
     const name = askText('Tên danh mục', row.name);
     if (name === undefined) return;
@@ -1061,20 +1070,7 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
   }
 
   function editVideo(row: Video) {
-    const title = askText('Tiêu đề', row.title);
-    if (title === undefined) return;
-    const teacher = askText('Giảng sư', row.teacher ?? '');
-    if (teacher === undefined) return;
-    const description = askText('Mô tả', row.description ?? '');
-    if (description === undefined) return;
-    const videoUrl = askText('Video URL', row.videoUrl);
-    if (videoUrl === undefined) return;
-    const thumbnailUrl = askText('Ảnh đại diện URL', row.thumbnailUrl ?? '');
-    if (thumbnailUrl === undefined) return;
-    void run(
-      () => api.update(`/admin/video/${row.id}`, compactPayload({ title, teacher, description, videoUrl, thumbnailUrl, categoryId: row.categoryId })),
-      'Đã cập nhật video',
-    );
+    setEditingVideo(row);
   }
 
   return (
@@ -1140,6 +1136,179 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
           onDelete={(row) => run(() => api.remove(`/admin/video/${row.id}`), 'Đã xóa video')}
         />
       </Panel>
+      {editingVideo && (
+        <VideoEditModal
+          video={editingVideo}
+          categories={data.videoCategories}
+          onClose={() => setEditingVideo(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/video/${editingVideo.id}`, compactPayload(values)),
+              'Đã cập nhật video',
+            );
+            if (saved) setEditingVideo(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AudioEditModal({
+  audio,
+  categories,
+  onClose,
+  onSave,
+}: {
+  audio: Audio;
+  categories: AudioCategory[];
+  onClose: () => void;
+  onSave: (values: { title: string; description: string; audioUrl: string; thumbnailUrl: string; categoryId: string }) => Promise<void>;
+}) {
+  const [values, setValues] = useState({
+    title: audio.title,
+    description: audio.description ?? '',
+    audioUrl: audio.audioUrl,
+    thumbnailUrl: audio.thumbnailUrl ?? '',
+    categoryId: audio.categoryId,
+  });
+
+  return (
+    <Modal title="Sửa audio" onClose={onClose}>
+      <form
+        className="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave(values);
+        }}
+      >
+        <label>
+          Tiêu đề
+          <input value={values.title} onChange={(event) => setValues({ ...values, title: event.target.value })} required />
+        </label>
+        <label>
+          Mô tả
+          <textarea value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
+        </label>
+        <label>
+          Tệp audio MP3 hoặc URL
+          <UploadField kind="audio/library" value={values.audioUrl} onUploaded={(audioUrl) => setValues({ ...values, audioUrl })} />
+        </label>
+        <label>
+          Ảnh đại diện
+          <UploadField kind="images/audio" value={values.thumbnailUrl} onUploaded={(thumbnailUrl) => setValues({ ...values, thumbnailUrl })} />
+        </label>
+        <label>
+          Danh mục
+          <select value={values.categoryId} onChange={(event) => setValues({ ...values, categoryId: event.target.value })} required>
+            <option value="">Chọn...</option>
+            {categories.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" type="button" onClick={onClose}>
+            Hủy
+          </button>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function VideoEditModal({
+  video,
+  categories,
+  onClose,
+  onSave,
+}: {
+  video: Video;
+  categories: VideoCategory[];
+  onClose: () => void;
+  onSave: (values: { title: string; teacher: string; description: string; videoUrl: string; thumbnailUrl: string; categoryId: string }) => Promise<void>;
+}) {
+  const [values, setValues] = useState({
+    title: video.title,
+    teacher: video.teacher ?? '',
+    description: video.description ?? '',
+    videoUrl: video.videoUrl,
+    thumbnailUrl: video.thumbnailUrl ?? '',
+    categoryId: video.categoryId,
+  });
+
+  return (
+    <Modal title="Sửa video" onClose={onClose}>
+      <form
+        className="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave(values);
+        }}
+      >
+        <label>
+          Tiêu đề
+          <input value={values.title} onChange={(event) => setValues({ ...values, title: event.target.value })} required />
+        </label>
+        <label>
+          Giảng sư
+          <input value={values.teacher} onChange={(event) => setValues({ ...values, teacher: event.target.value })} />
+        </label>
+        <label>
+          Mô tả
+          <textarea value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
+        </label>
+        <label>
+          Tệp video MP4 hoặc URL YouTube
+          <UploadField kind="video/dharma" value={values.videoUrl} onUploaded={(videoUrl) => setValues({ ...values, videoUrl })} />
+        </label>
+        <label>
+          Ảnh đại diện
+          <UploadField kind="images/video" value={values.thumbnailUrl} onUploaded={(thumbnailUrl) => setValues({ ...values, thumbnailUrl })} />
+        </label>
+        <label>
+          Danh mục
+          <select value={values.categoryId} onChange={(event) => setValues({ ...values, categoryId: event.target.value })} required>
+            <option value="">Chọn...</option>
+            {categories.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" type="button" onClick={onClose}>
+            Hủy
+          </button>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="modal-panel" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <h2>{title}</h2>
+          <button className="ghost icon-only" type="button" onClick={onClose} aria-label="Đóng">
+            ×
+          </button>
+        </div>
+        {children}
+      </section>
     </div>
   );
 }
@@ -2404,6 +2573,37 @@ function askNumber(label: string, current: number) {
 
 function compactPayload(values: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+}
+
+function detectMediaDuration(url: string, kind: 'audio' | 'video'): Promise<number> {
+  const cleanUrl = url.trim();
+  if (!cleanUrl) return Promise.resolve(0);
+
+  return new Promise((resolve) => {
+    const media = document.createElement(kind);
+    const timeout = window.setTimeout(() => finish(0), 7000);
+
+    function finish(value: number) {
+      window.clearTimeout(timeout);
+      media.removeAttribute('src');
+      media.load();
+      resolve(Number.isFinite(value) && value > 0 ? Math.round(value) : 0);
+    }
+
+    media.preload = 'metadata';
+    media.onloadedmetadata = () => finish(media.duration);
+    media.onerror = () => finish(0);
+    media.src = cleanUrl;
+  });
+}
+
+function formatDurationSeconds(seconds?: number) {
+  const safe = Math.max(0, Number(seconds || 0));
+  if (safe === 0) return 'Tự nhận khi phát';
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60).toString().padStart(2, '0');
+  const rest = Math.floor(safe % 60).toString().padStart(2, '0');
+  return hours > 0 ? `${hours}:${minutes}:${rest}` : `${minutes}:${rest}`;
 }
 
 function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: Record<string, string>) => void }) {

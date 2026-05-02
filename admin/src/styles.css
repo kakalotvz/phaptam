@@ -912,6 +912,48 @@ th {
   gap: 8px;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(46, 36, 32, .46);
+  backdrop-filter: blur(4px);
+}
+
+.modal-panel {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 22px;
+  background: #fff8e8;
+  border: 1px solid rgba(109, 76, 65, .16);
+  border-radius: 18px;
+  box-shadow: 0 24px 72px rgba(46, 36, 32, .28);
+}
+
+.modal-heading,
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-heading {
+  margin-bottom: 16px;
+}
+
+.modal-heading h2 {
+  margin: 0;
+}
+
+.modal-actions {
+  justify-content: flex-end;
+}
+
 .notice,
 .error,
 .loading,

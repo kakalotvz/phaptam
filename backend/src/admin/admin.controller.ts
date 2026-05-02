@@ -155,8 +155,8 @@ export class AdminController {
   }
 
   @Post('audio')
-  createAudio(@Body() data: { title: string; description?: string; audioUrl: string; thumbnailUrl?: string; categoryId: string; duration: number }) {
-    return this.prisma.audio.create({ data });
+  createAudio(@Body() data: { title: string; description?: string; audioUrl: string; thumbnailUrl?: string; categoryId: string; duration?: number }) {
+    return this.prisma.audio.create({ data: { ...data, duration: Number(data.duration || 0) } });
   }
 
   @Patch('audio/:id')
