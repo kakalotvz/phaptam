@@ -568,7 +568,14 @@ class _ScriptureReaderState extends State<ScriptureReader> {
         children: [
           if (_backgroundUrl.isNotEmpty)
             Positioned.fill(
-              child: Image.network(_backgroundUrl, fit: BoxFit.cover),
+              child: Image.network(
+                _backgroundUrl,
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+                filterQuality: FilterQuality.medium,
+                errorBuilder: (context, error, stackTrace) =>
+                    const SizedBox.shrink(),
+              ),
             ),
           Positioned.fill(
             child: DecoratedBox(

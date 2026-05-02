@@ -153,7 +153,8 @@ export type UploadKind =
   | 'images/video'
   | 'images/banner'
   | 'images/quote'
-  | 'images/news';
+  | 'images/news'
+  | 'images/scripture';
 
 export type PresignedUpload = {
   key: string;
@@ -242,7 +243,7 @@ export const api = {
 };
 
 export async function uploadToR2(file: File, kind: UploadKind): Promise<string> {
-  const normalized = kind.startsWith('images/') ? await convertImageToWebp(file) : file;
+  const normalized = kind.startsWith('images/') ? await convertImageToWebp(file, kind) : file;
   const { uploadUrl, publicUrl } = await api.presignedUrl({
     kind,
     contentType: normalized.type,
@@ -261,12 +262,12 @@ export async function uploadToR2(file: File, kind: UploadKind): Promise<string> 
   return publicUrl;
 }
 
-async function convertImageToWebp(file: File): Promise<File> {
+async function convertImageToWebp(file: File, kind: UploadKind): Promise<File> {
   if (file.type === 'image/webp') return file;
 
   const image = await createImageBitmap(file);
   const canvas = document.createElement('canvas');
-  const maxEdge = file.name.toLowerCase().includes('banner') ? 1200 : 600;
+  const maxEdge = kind === 'images/scripture' ? 1600 : file.name.toLowerCase().includes('banner') ? 1200 : 600;
   const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
   canvas.width = Math.max(1, Math.round(image.width * scale));
   canvas.height = Math.max(1, Math.round(image.height * scale));

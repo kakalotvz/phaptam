@@ -4,7 +4,15 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 
-type MediaKind = 'audio' | 'video' | 'images/audio' | 'images/video' | 'images/banner' | 'images/quote' | 'images/news';
+type MediaKind =
+  | 'audio'
+  | 'video'
+  | 'images/audio'
+  | 'images/video'
+  | 'images/banner'
+  | 'images/quote'
+  | 'images/news'
+  | 'images/scripture';
 
 @Injectable()
 export class R2Service {

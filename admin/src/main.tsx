@@ -633,7 +633,10 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           </label>
           <label>
             Ảnh nền đọc kinh
-            <UploadField kind="images/news" value={backgroundImageUrl} onUploaded={setBackgroundImageUrl} />
+            <UploadField kind="images/scripture" value={backgroundImageUrl} onUploaded={setBackgroundImageUrl} />
+            <small className="field-note">
+              Khuyến nghị 1600x2400 hoặc tỷ lệ 2:3 cho ảnh dọc. App sẽ tự phủ kín màn hình từng thiết bị, ảnh có thể được cắt nhẹ ở mép.
+            </small>
           </label>
           <label className="span">
             Mô tả

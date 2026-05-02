@@ -288,6 +288,14 @@ main {
   min-height: 150px;
 }
 
+.field-note {
+  display: block;
+  margin-top: 8px;
+  color: #80675c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .scripture-actions,
 .preview-toolbar,
 .option-row {
@@ -324,7 +332,11 @@ main {
 .line-editor {
   display: grid;
   gap: 10px;
+  max-height: min(58vh, 620px);
   margin-bottom: 14px;
+  padding-right: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .line-row {
