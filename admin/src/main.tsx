@@ -1561,6 +1561,25 @@ function escapeHtml(value: string) {
     .replace(/"/g, '&quot;');
 }
 
+function newsContentToPlainText(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (!/<\/?[a-z][\s\S]*>/i.test(trimmed)) return trimmed.replace(/^\s*#{1,6}\s+/gm, '');
+
+  const container = document.createElement('div');
+  container.innerHTML = trimmed;
+  container.querySelectorAll('script, style').forEach((node) => node.remove());
+  container.querySelectorAll('br').forEach((node) => node.replaceWith('\n'));
+  container.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, blockquote, li').forEach((node) => {
+    node.appendChild(document.createTextNode('\n\n'));
+  });
+  return (container.textContent ?? '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -1585,7 +1604,7 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
     setSummary(row.summary ?? '');
     setImageUrl(row.imageUrl ?? '');
     setLink(row.link ?? '');
-    setContent(row.content ?? '');
+    setContent(newsContentToPlainText(row.content ?? ''));
     setCategoryId(row.categoryId ?? '');
     setShareEnabled(row.shareEnabled);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1675,14 +1694,14 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
           </label>
           <label className="span">
             Nội dung
-            <RichTextEditor
+            <textarea
+              className="news-content-input"
               value={content}
-              onChange={setContent}
-              parseStoredMarkup={false}
-              pasteAsPlainText
-              resetFormatOnEnter
-              demoteStoredHeadings
-              placeholder="Viết nội dung tin. Dùng thanh công cụ để định dạng tiêu đề, chữ đậm, danh sách và liên kết."
+              onChange={(event) => setContent(event.target.value)}
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
+              placeholder="Viết nội dung tin tức"
             />
           </label>
           <label className="check-row span">
@@ -1697,7 +1716,7 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
               const payload = {
                 title,
                 summary,
-                content,
+                content: newsContentToPlainText(content),
                 imageUrl,
                 link,
                 categoryId,

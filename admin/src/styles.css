@@ -291,6 +291,15 @@ main {
   min-height: 150px;
 }
 
+.news-content-input {
+  min-height: 420px;
+  resize: vertical;
+  white-space: pre-wrap;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.7;
+}
+
 .field-note {
   display: block;
   margin-top: 8px;
