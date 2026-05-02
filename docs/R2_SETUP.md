@@ -56,27 +56,7 @@ Khi có domain thật, nên dùng Custom Domain thay cho `r2.dev`.
 
 Trong bucket -> Settings -> CORS policy, thêm policy cho admin:
 
-```json
-[
-  {
-    "AllowedOrigins": [
-      "http://208.87.132.135:8002"
-    ],
-    "AllowedMethods": [
-      "PUT",
-      "GET",
-      "HEAD"
-    ],
-    "AllowedHeaders": [
-      "*"
-    ],
-    "ExposeHeaders": [
-      "ETag"
-    ],
-    "MaxAgeSeconds": 3600
-  }
-]
-```
+il
 
 Nếu chạy admin local, thêm:
 

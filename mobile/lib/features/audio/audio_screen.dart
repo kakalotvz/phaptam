@@ -83,6 +83,44 @@ class _AudioPlayerSheet extends StatefulWidget {
 class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
   double progress = .32;
   double speed = 1;
+  String repeatMode = 'once';
+  int customRepeatCount = 5;
+  Duration? sleepTimer;
+
+  String get repeatLabel => switch (repeatMode) {
+        'three' => 'Lặp 3 lần',
+        'custom' => 'Lặp $customRepeatCount lần',
+        'forever' => 'Lặp liên tục',
+        _ => 'Lặp 1 lần',
+      };
+
+  Future<void> pickSleepTimer() async {
+    final picked = await showModalBottomSheet<Duration>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.timer_off_outlined),
+                title: const Text('Tắt hẹn giờ'),
+                onTap: () => Navigator.pop(context, Duration.zero),
+              ),
+              for (final minutes in const [10, 15, 30, 60])
+                ListTile(
+                  leading: const Icon(Icons.bedtime_outlined),
+                  title: Text('$minutes phút'),
+                  onTap: () => Navigator.pop(context, Duration(minutes: minutes)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null) return;
+    setState(() => sleepTimer = picked == Duration.zero ? null : picked);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -147,26 +185,58 @@ class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
             ],
           ),
           const SizedBox(height: 18),
-          Row(
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 8,
             children: [
-              Expanded(child: Text('Tốc độ ${speed.toStringAsFixed(1)}x')),
-              DropdownButton<double>(
-                value: speed,
-                items: const [
-                  DropdownMenuItem(value: .75, child: Text('0.75x')),
-                  DropdownMenuItem(value: 1, child: Text('1.0x')),
-                  DropdownMenuItem(value: 1.25, child: Text('1.25x')),
-                  DropdownMenuItem(value: 1.5, child: Text('1.5x')),
+              PopupMenuButton<double>(
+                onSelected: (value) => setState(() => speed = value),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: .75, child: Text('Tốc độ 0.75x')),
+                  PopupMenuItem(value: 1, child: Text('Tốc độ 1.0x')),
+                  PopupMenuItem(value: 1.25, child: Text('Tốc độ 1.25x')),
+                  PopupMenuItem(value: 1.5, child: Text('Tốc độ 1.5x')),
                 ],
-                onChanged: (value) => setState(() => speed = value ?? 1),
+                child: Chip(
+                  avatar: const Icon(Icons.speed, size: 18),
+                  label: Text('Tốc độ ${speed.toStringAsFixed(speed == 1 ? 1 : 2)}x'),
+                ),
               ),
-              TextButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.bedtime_outlined),
-                label: const Text('Hẹn giờ'),
+              PopupMenuButton<String>(
+                onSelected: (value) => setState(() => repeatMode = value),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'once', child: Text('Lặp lại 1 lần')),
+                  PopupMenuItem(value: 'three', child: Text('Lặp lại 3 lần')),
+                  PopupMenuItem(value: 'forever', child: Text('Lặp lại liên tục')),
+                  PopupMenuItem(value: 'custom', child: Text('Tùy chỉnh')),
+                ],
+                child: Chip(
+                  avatar: const Icon(Icons.repeat, size: 18),
+                  label: Text(repeatLabel),
+                ),
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.bedtime_outlined, size: 18),
+                label: Text(sleepTimer == null ? 'Hẹn giờ' : '${sleepTimer!.inMinutes} phút'),
+                onPressed: pickSleepTimer,
               ),
             ],
           ),
+          if (repeatMode == 'custom')
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: TextField(
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Số lần lặp lại'),
+                onChanged: (value) {
+                  final parsed = int.tryParse(value);
+                  if (parsed != null && parsed > 0) {
+                    setState(() => customRepeatCount = parsed);
+                  }
+                },
+              ),
+            ),
         ],
       ),
     );

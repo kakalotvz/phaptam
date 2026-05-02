@@ -13,6 +13,9 @@ class _MeditationScreenState extends State<MeditationScreen> {
   static const durations = [5, 10, 15, 30];
   int selectedMinutes = 10;
   int remainingSeconds = 600;
+  bool customDuration = false;
+  int customValue = 20;
+  String customUnit = 'minutes';
   Timer? timer;
 
   bool get isRunning => timer != null;
@@ -96,17 +99,67 @@ class _MeditationScreenState extends State<MeditationScreen> {
                 children: [
                   for (final value in durations)
                     ChoiceChip(
-                        label: Text('$value phút'),
-                      selected: selectedMinutes == value,
+                      label: Text('$value phút'),
+                      selected: !customDuration && selectedMinutes == value,
                       onSelected: isRunning
                           ? null
                           : (_) => setState(() {
+                              customDuration = false;
                               selectedMinutes = value;
                               remainingSeconds = value * 60;
                             }),
                     ),
+                  ChoiceChip(
+                    label: const Text('Tùy chỉnh'),
+                    selected: customDuration,
+                    onSelected: isRunning
+                        ? null
+                        : (_) => setState(() {
+                              customDuration = true;
+                              _applyCustomDuration();
+                            }),
+                  ),
                 ],
               ),
+              if (customDuration) ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'Thời lượng',
+                          labelStyle: TextStyle(color: Colors.white70),
+                        ),
+                        onChanged: (value) {
+                          final parsed = int.tryParse(value);
+                          if (parsed == null || parsed <= 0) return;
+                          setState(() {
+                            customValue = parsed;
+                            _applyCustomDuration();
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'minutes', label: Text('Phút')),
+                        ButtonSegment(value: 'hours', label: Text('Giờ')),
+                      ],
+                      selected: {customUnit},
+                      onSelectionChanged: isRunning
+                          ? null
+                          : (value) => setState(() {
+                                customUnit = value.first;
+                                _applyCustomDuration();
+                              }),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: toggle,
@@ -125,5 +178,11 @@ class _MeditationScreenState extends State<MeditationScreen> {
         ),
       ),
     );
+  }
+
+  void _applyCustomDuration() {
+    final minutes = customUnit == 'hours' ? customValue * 60 : customValue;
+    selectedMinutes = minutes;
+    remainingSeconds = minutes * 60;
   }
 }
