@@ -244,6 +244,14 @@ String _normalize(String value) {
         (match) => '\n\n[[video:${match.group(1) ?? ''}]]\n\n',
       )
       .replaceAllMapped(
+        RegExp(
+          r"""<iframe[^>]*src=["']([^"']+)["'][^>]*>.*?</iframe>""",
+          caseSensitive: false,
+          dotAll: true,
+        ),
+        (match) => '\n\n[[video:${match.group(1) ?? ''}]]\n\n',
+      )
+      .replaceAllMapped(
         RegExp(r'<li[^>]*>(.*?)</li>', caseSensitive: false, dotAll: true),
         (match) => '\n- ${match.group(1) ?? ''}',
       )

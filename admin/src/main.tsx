@@ -1,6 +1,8 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
+import Quill from 'quill';
+import 'quill/dist/quill.snow.css';
 import '@fontsource/noto-sans/400.css';
 import '@fontsource/noto-sans/500.css';
 import '@fontsource/noto-sans/600.css';
@@ -1146,65 +1148,109 @@ function RichTextEditor({
   compact?: boolean;
   imageUploadKind?: Parameters<typeof uploadToR2>[1];
 }) {
-  const editorRef = useRef<HTMLDivElement | null>(null);
+  const editorMountRef = useRef<HTMLDivElement | null>(null);
+  const quillRef = useRef<Quill | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const editingRef = useRef(false);
+  const lastHtmlRef = useRef('');
+  const isFocusedRef = useRef(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
-    if (!editorRef.current || editingRef.current) return;
+    if (!editorMountRef.current || quillRef.current) return;
+    const quill = new Quill(editorMountRef.current, {
+      theme: 'snow',
+      placeholder,
+      modules: {
+        toolbar: false,
+        keyboard: {
+          bindings: {
+            tab: false,
+          },
+        },
+      },
+    });
+    quillRef.current = quill;
+    quill.clipboard.dangerouslyPasteHTML(0, storedContentToEditorHtml(value));
+    lastHtmlRef.current = quill.root.innerHTML;
+
+    quill.on('selection-change', (range) => {
+      isFocusedRef.current = range !== null;
+    });
+    quill.on('text-change', () => {
+      const nextHtml = quill.root.innerHTML.trim() === '<p><br></p>' ? '' : sanitizeEditorHtml(quill.root.innerHTML);
+      lastHtmlRef.current = nextHtml;
+      onChange(nextHtml);
+    });
+  }, []);
+
+  useEffect(() => {
+    const quill = quillRef.current;
+    if (!quill || isFocusedRef.current || value === lastHtmlRef.current) return;
     const nextHtml = storedContentToEditorHtml(value);
-    if (editorRef.current.innerHTML !== nextHtml) {
-      editorRef.current.innerHTML = nextHtml;
+    const currentHtml = sanitizeEditorHtml(quill.root.innerHTML);
+    if (currentHtml !== nextHtml) {
+      quill.clipboard.dangerouslyPasteHTML(0, nextHtml);
+      lastHtmlRef.current = nextHtml;
     }
   }, [value]);
 
   function syncValue() {
-    if (!editorRef.current) return;
-    removeEmptyHeadingMarkers();
-    onChange(sanitizeEditorHtml(editorRef.current));
+    const quill = quillRef.current;
+    if (!quill) return;
+    const nextHtml = quill.root.innerHTML.trim() === '<p><br></p>' ? '' : sanitizeEditorHtml(quill.root.innerHTML);
+    lastHtmlRef.current = nextHtml;
+    onChange(nextHtml);
   }
 
-  function runCommand(command: string, commandValue?: string) {
-    editorRef.current?.focus();
-    document.execCommand(command, false, commandValue);
+  function runCommand(format: string, commandValue?: string | number | boolean) {
+    const quill = quillRef.current;
+    if (!quill) return;
+    quill.focus();
+    const current = quill.getFormat();
+    quill.format(format, commandValue === undefined ? !current[format] : commandValue);
     syncValue();
   }
 
   function resetToParagraph() {
-    editorRef.current?.focus();
-    document.execCommand('removeFormat');
-    document.execCommand('formatBlock', false, 'p');
-    document.execCommand('unlink');
-    removeEmptyHeadingMarkers();
+    const quill = quillRef.current;
+    if (!quill) return;
+    quill.focus();
+    const range = quill.getSelection(true);
+    const length = range.length || Math.max(0, quill.getLength() - 1);
+    quill.removeFormat(range.length ? range.index : 0, length);
+    quill.formatLine(range.index, length, { header: false, blockquote: false, list: false, align: false });
     syncValue();
   }
 
-  function removeEmptyHeadingMarkers() {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const text = (editor.textContent ?? '').trim();
-    if (text === '##' || text === '###') {
-      editor.innerHTML = '';
-    }
-  }
-
   function insertHtml(html: string) {
-    editorRef.current?.focus();
-    document.execCommand('insertHTML', false, html);
+    const quill = quillRef.current;
+    if (!quill) return;
+    quill.focus();
+    const range = quill.getSelection(true);
+    quill.clipboard.dangerouslyPasteHTML(range.index, html);
     syncValue();
   }
 
   function addLink() {
     const url = window.prompt('Dán liên kết https://...');
     if (!url) return;
-    runCommand('createLink', url);
+    runCommand('link', url);
   }
 
   function addImageUrl() {
     const url = window.prompt('Dán URL hình ảnh https://...');
     if (!url) return;
-    runCommand('insertImage', url);
+    insertEmbed('image', url);
+  }
+
+  function insertEmbed(type: 'image' | 'video', url: string) {
+    const quill = quillRef.current;
+    if (!quill) return;
+    quill.focus();
+    const range = quill.getSelection(true);
+    quill.insertEmbed(range.index, type, url, 'user');
+    quill.setSelection(range.index + 1);
+    syncValue();
   }
 
   async function uploadImage(file?: File) {
@@ -1212,7 +1258,7 @@ function RichTextEditor({
     setUploadingImage(true);
     try {
       const url = await uploadToR2(file, imageUploadKind);
-      runCommand('insertImage', url);
+      insertEmbed('image', url);
     } catch (caught) {
       window.alert(caught instanceof Error ? caught.message : 'Upload ảnh thất bại');
     } finally {
@@ -1224,22 +1270,22 @@ function RichTextEditor({
   function addVideo() {
     const url = window.prompt('Dán link video YouTube hoặc MP4');
     if (!url) return;
-    insertHtml(`<div data-video="${escapeHtml(url)}">Video: ${escapeHtml(url)}</div><p><br></p>`);
+    insertEmbed('video', url);
   }
 
   return (
     <div className={`rich-editor ${compact ? 'compact' : ''}`}>
       <div className="rich-toolbar" aria-label="Công cụ định dạng">
-        <button type="button" onClick={() => runCommand('formatBlock', 'h2')} title="Tiêu đề">
+        <button type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề">
           <Heading2 size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('formatBlock', 'h3')} title="Tiêu đề phụ">
+        <button type="button" onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
           <Heading3 size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('formatBlock', 'p')} title="Đoạn văn">
+        <button type="button" onClick={() => runCommand('header', false)} title="Đoạn văn">
           Aa
         </button>
-        <button type="button" onClick={() => runCommand('formatBlock', 'blockquote')} title="Trích dẫn">
+        <button type="button" onClick={() => runCommand('blockquote')} title="Trích dẫn">
           <Quote size={16} />
         </button>
         <button type="button" onClick={() => runCommand('bold')} title="In đậm">
@@ -1251,28 +1297,28 @@ function RichTextEditor({
         <button type="button" onClick={() => runCommand('underline')} title="Gạch chân">
           <Underline size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('strikeThrough')} title="Gạch ngang">
+        <button type="button" onClick={() => runCommand('strike')} title="Gạch ngang">
           <Strikethrough size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('insertUnorderedList')} title="Danh sách">
+        <button type="button" onClick={() => runCommand('list', 'bullet')} title="Danh sách">
           <List size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('insertOrderedList')} title="Danh sách số">
+        <button type="button" onClick={() => runCommand('list', 'ordered')} title="Danh sách số">
           <ListOrdered size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('justifyLeft')} title="Căn trái">
+        <button type="button" onClick={() => runCommand('align', false)} title="Căn trái">
           <AlignLeft size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('justifyCenter')} title="Căn giữa">
+        <button type="button" onClick={() => runCommand('align', 'center')} title="Căn giữa">
           <AlignCenter size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('justifyRight')} title="Căn phải">
+        <button type="button" onClick={() => runCommand('align', 'right')} title="Căn phải">
           <AlignRight size={16} />
         </button>
         <button type="button" onClick={addLink} title="Liên kết">
           <Link2 size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('unlink')} title="Xóa liên kết">
+        <button type="button" onClick={() => runCommand('link', false)} title="Xóa liên kết">
           <Unlink size={16} />
         </button>
         <button type="button" onClick={addImageUrl} title="Chèn ảnh bằng URL">
@@ -1295,21 +1341,7 @@ function RichTextEditor({
           onChange={(event) => void uploadImage(event.target.files?.[0])}
         />
       </div>
-      <div
-        ref={editorRef}
-        className="rich-surface"
-        contentEditable
-        data-placeholder={placeholder}
-        onBlur={() => {
-          editingRef.current = false;
-          syncValue();
-        }}
-        onFocus={() => {
-          editingRef.current = true;
-          removeEmptyHeadingMarkers();
-        }}
-        suppressContentEditableWarning
-      />
+      <div className="rich-surface quill-surface" ref={editorMountRef} />
     </div>
   );
 }
@@ -1414,6 +1446,16 @@ function sanitizeEditorNode(node: ChildNode): Node | null {
     image.src = src;
     image.alt = node.getAttribute('alt') || 'Hình ảnh';
     return image;
+  }
+
+  if (tag === 'iframe') {
+    const src = node.getAttribute('src') || '';
+    if (!isSafeMediaUrl(src)) return null;
+    const frame = document.createElement('iframe');
+    frame.src = src;
+    frame.setAttribute('allowfullscreen', 'true');
+    frame.setAttribute('frameborder', '0');
+    return frame;
   }
 
   const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'figure']);
