@@ -262,6 +262,28 @@ main {
   grid-column: span 2;
 }
 
+.scripture-form-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  color: #4b352c;
+  background: #f8efd9;
+  border: 1px solid rgba(109, 76, 65, .12);
+  border-radius: 14px;
+}
+
+.scripture-form-heading div {
+  display: grid;
+  gap: 3px;
+}
+
+.scripture-form-heading span {
+  color: #80675c;
+  font-size: 13px;
+}
+
 .scripture-raw {
   min-height: 150px;
 }
@@ -356,6 +378,11 @@ main {
 .speed.active {
   color: #fff8e8;
   background: #8b5e3c;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
 }
 
 .reader-stage {

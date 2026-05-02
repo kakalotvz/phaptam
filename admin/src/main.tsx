@@ -409,10 +409,13 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [selectedScriptureId, setSelectedScriptureId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [scriptureStatus, setScriptureStatus] = useState('');
+  const [scriptureBusy, setScriptureBusy] = useState(false);
   const [rawText, setRawText] = useState('Nam mô A Di Đà Phật\nNguyện đem công đức này\nHướng về khắp tất cả\nĐệ tử và chúng sanh');
   const [lines, setLines] = useState<EditableScriptureLine[]>([
     { content: 'Nam mô A Di Đà Phật', start_time: 0 },
@@ -422,16 +425,34 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   ]);
 
   function splitText() {
-    setLines(linesFromText(rawText));
+    const nextLines = linesFromText(rawText);
+    setLines(nextLines);
+    setScriptureStatus(`Đã tách ${nextLines.length} dòng Kinh.`);
   }
 
   async function autoTiming(sourceLines = lines) {
-    const generated = await api.generateScriptureTiming({ lines: sourceLines.map((line) => line.content) });
-    setLines(generated);
+    const cleanLines = sourceLines.map((line) => line.content.trim()).filter(Boolean);
+    if (cleanLines.length === 0) {
+      setScriptureStatus('Chưa có nội dung để tự tính thời gian.');
+      return;
+    }
+    setScriptureBusy(true);
+    setScriptureStatus(`Đang tự tính thời gian cho ${cleanLines.length} dòng...`);
+    try {
+      const generated = await api.generateScriptureTiming({ lines: cleanLines });
+      setLines(generated);
+      setScriptureStatus(`Đã tự tính thời gian cho ${generated.length} dòng.`);
+    } catch (caught) {
+      setScriptureStatus(caught instanceof Error ? caught.message : 'Không tự tính được thời gian.');
+    } finally {
+      setScriptureBusy(false);
+    }
   }
 
   async function importScriptureFile(file?: File) {
     if (!file) return;
+    setScriptureBusy(true);
+    setScriptureStatus(`Đang đọc tệp ${file.name}...`);
     try {
       const name = file.name.toLowerCase();
       if (name.endsWith('.json')) {
@@ -442,6 +463,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
         setCategoryId(parsed.category_id ?? parsed.categoryId ?? categoryId);
         setRawText(importedLines.map((line) => line.content).join('\n'));
         setLines(importedLines);
+        setScriptureStatus(`Đã nạp ${importedLines.length} dòng từ tệp JSON.`);
         return;
       }
 
@@ -451,8 +473,33 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
       setRawText(text);
       await autoTiming(nextLines);
     } catch (caught) {
-      alert(caught instanceof Error ? caught.message : 'Không đọc được tệp Kinh');
+      setScriptureStatus(caught instanceof Error ? caught.message : 'Không đọc được tệp Kinh');
+    } finally {
+      setScriptureBusy(false);
     }
+  }
+
+  function openScripture(scripture: Scripture) {
+    const nextLines = normalizeImportedLines(scripture.lines ?? []);
+    setSelectedScriptureId(scripture.id);
+    setTitle(scripture.title);
+    setDescription(scripture.description ?? '');
+    setBackgroundImageUrl(scripture.backgroundImageUrl ?? '');
+    setCategoryId(scripture.categoryId ?? '');
+    setRawText(nextLines.map((line) => line.content).join('\n'));
+    setLines(nextLines);
+    setScriptureStatus(`Đang mở "${scripture.title}" với ${nextLines.length} dòng.`);
+  }
+
+  function newScripture() {
+    setSelectedScriptureId('');
+    setTitle('');
+    setDescription('');
+    setBackgroundImageUrl('');
+    setCategoryId('');
+    setRawText('');
+    setLines([]);
+    setScriptureStatus('Đang tạo bản Đọc Kinh mới.');
   }
 
   function updateLine(index: number, patch: Partial<{ content: string; start_time: number }>) {
@@ -477,6 +524,16 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
       </Panel>
       <Panel title="Tạo bản Đọc Kinh">
         <div className="scripture-create">
+          <div className="scripture-form-heading span">
+            <div>
+              <strong>{selectedScriptureId ? 'Đang chỉnh sửa bản đã lưu' : 'Đang tạo bản mới'}</strong>
+              {scriptureStatus && <span>{scriptureStatus}</span>}
+            </div>
+            <button className="ghost" type="button" onClick={newScripture}>
+              <Plus size={16} />
+              Kinh mới
+            </button>
+          </div>
           <label>
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh A Di Đà - bản đọc chậm" />
@@ -509,9 +566,9 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               <FileText size={16} />
               Tách dòng
             </button>
-            <button className="ghost" type="button" onClick={() => void autoTiming()}>
+            <button className="ghost" type="button" disabled={scriptureBusy} onClick={() => void autoTiming()}>
               <RefreshCcw size={16} />
-              Tự tính thời gian
+              {scriptureBusy ? 'Đang xử lý...' : 'Tự tính thời gian'}
             </button>
             <button className="ghost" type="button" onClick={downloadScriptureSample}>
               <Download size={16} />
@@ -525,22 +582,29 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             <button
               className="primary"
               type="button"
+              disabled={scriptureBusy || !title.trim() || lines.length === 0}
               onClick={() =>
                 run(
                   () =>
-                    api.create('/admin/scripture', {
+                    (selectedScriptureId ? api.update(`/admin/scripture/${selectedScriptureId}`, {
                       title,
                       description,
                       backgroundImageUrl,
                       categoryId,
                       lines,
-                    }),
-                  'Đã tạo bản Đọc Kinh',
+                    }) : api.create('/admin/scripture', {
+                      title,
+                      description,
+                      backgroundImageUrl,
+                      categoryId,
+                      lines,
+                    })),
+                  selectedScriptureId ? 'Đã cập nhật bản Đọc Kinh' : 'Đã tạo bản Đọc Kinh',
                 )
               }
             >
               <Save size={16} />
-              Lưu bản đọc
+              {selectedScriptureId ? 'Cập nhật bản đọc' : 'Lưu bản đọc'}
             </button>
           </div>
         </div>
@@ -583,6 +647,14 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             ['title', 'Tiêu đề'],
             [(row: Scripture) => row.category?.name ?? '-', 'Danh mục'],
             [(row: Scripture) => row.lines?.length ?? row._count?.lines ?? 0, 'Số dòng'],
+            [
+              (row: Scripture) => (
+                <button className="ghost" type="button" onClick={() => openScripture(row)}>
+                  Mở
+                </button>
+              ),
+              'Xem/Sửa',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/scripture/${row.id}`), 'Đã xóa bản Đọc Kinh')}
         />

@@ -40,9 +40,15 @@ final homeBannersProvider = FutureProvider<List<HomeBanner>>((ref) async {
       .toList();
 });
 
-final scriptureListProvider = Provider<List<Scripture>>(
-  (ref) => ref.watch(contentRepositoryProvider).scriptures,
-);
+final scriptureListProvider = FutureProvider<List<Scripture>>((ref) async {
+  final items = await apiClient.getList('/scriptures');
+  final remoteScriptures = items
+      .cast<Map<String, dynamic>>()
+      .map(Scripture.fromJson)
+      .where((item) => item.lines.isNotEmpty)
+      .toList();
+  return remoteScriptures;
+});
 
 final scriptureReminderProvider =
     NotifierProvider<ScriptureReminderState, List<ScriptureReminder>>(
@@ -52,7 +58,9 @@ final scriptureReminderProvider =
 class ScriptureReminderState extends Notifier<List<ScriptureReminder>> {
   @override
   List<ScriptureReminder> build() {
-    final scriptures = ref.watch(scriptureListProvider);
+    final scriptures =
+        ref.watch(scriptureListProvider).whenOrNull(data: (value) => value) ??
+        const [];
     if (scriptures.isEmpty) return const [];
     return [
       ScriptureReminder(

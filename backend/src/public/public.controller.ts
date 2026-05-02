@@ -32,6 +32,10 @@ export class PublicController {
         backgroundImageUrl: true,
         categoryId: true,
         category: true,
+        lines: {
+          orderBy: { orderIndex: 'asc' },
+          select: { content: true, startTime: true },
+        },
         _count: { select: { lines: true } },
       },
       take: 30,

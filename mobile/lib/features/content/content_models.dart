@@ -73,11 +73,7 @@ class NewsItem {
 }
 
 class DailyQuote {
-  const DailyQuote({
-    required this.id,
-    required this.content,
-    this.imageUrl,
-  });
+  const DailyQuote({required this.id, required this.content, this.imageUrl});
 
   factory DailyQuote.fromJson(Map<String, dynamic> json) {
     return DailyQuote(
@@ -93,11 +89,7 @@ class DailyQuote {
 }
 
 class HomeBanner {
-  const HomeBanner({
-    required this.id,
-    required this.imageUrl,
-    this.link,
-  });
+  const HomeBanner({required this.id, required this.imageUrl, this.link});
 
   factory HomeBanner.fromJson(Map<String, dynamic> json) {
     return HomeBanner(
@@ -115,6 +107,16 @@ class HomeBanner {
 class ScriptureLine {
   const ScriptureLine({required this.content, required this.startTime});
 
+  factory ScriptureLine.fromJson(Map<String, dynamic> json) {
+    final seconds = NumberParser.asDouble(
+      json['start_time'] ?? json['startTime'],
+    );
+    return ScriptureLine(
+      content: json['content'] as String? ?? '',
+      startTime: Duration(milliseconds: (seconds * 1000).round()),
+    );
+  }
+
   final String content;
   final Duration startTime;
 }
@@ -128,11 +130,39 @@ class Scripture {
     this.backgroundImageUrl,
   });
 
+  factory Scripture.fromJson(Map<String, dynamic> json) {
+    final rawLines = json['lines'];
+    final lines = rawLines is List
+        ? rawLines
+              .whereType<Map<String, dynamic>>()
+              .map(ScriptureLine.fromJson)
+              .where((line) => line.content.trim().isNotEmpty)
+              .toList()
+        : <ScriptureLine>[];
+    return Scripture(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'Bản đọc Kinh',
+      description: json['description'] as String?,
+      backgroundImageUrl: json['backgroundImageUrl'] as String?,
+      lines: lines,
+    );
+  }
+
   final String id;
   final String title;
   final String? description;
   final String? backgroundImageUrl;
   final List<ScriptureLine> lines;
+}
+
+class NumberParser {
+  const NumberParser._();
+
+  static double asDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0;
+    return 0;
+  }
 }
 
 enum ReminderResumeMode { resume, restart }
