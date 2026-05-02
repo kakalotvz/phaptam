@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/widgets/content_cards.dart';
+import '../../shared/widgets/rich_content.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
@@ -191,17 +192,16 @@ class HomeScreen extends ConsumerWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 14),
-                Text(
-                  item.summary,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                if (item.summary.trim().isNotEmpty)
+                  Text(
+                    item.summary,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      height: 1.45,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 const SizedBox(height: 14),
-                Text(
-                  item.content,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyLarge?.copyWith(height: 1.55),
-                ),
+                RichContent(content: item.content),
                 if (item.shareEnabled) ...[
                   const SizedBox(height: 18),
                   FilledButton.icon(
@@ -341,10 +341,11 @@ class _DailyQuoteCard extends StatelessWidget {
                     size: 32,
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    quote.content,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      height: 1.35,
+                  RichContent(
+                    content: quote.content,
+                    compact: true,
+                    baseStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      height: 1.34,
                       fontWeight: FontWeight.w700,
                       color: quote.imageUrl == null ? null : Colors.white,
                     ),

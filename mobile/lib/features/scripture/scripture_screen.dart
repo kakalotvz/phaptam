@@ -365,8 +365,6 @@ class ScriptureReader extends StatefulWidget {
 }
 
 class _ScriptureReaderState extends State<ScriptureReader> {
-  static const double _itemHeight = 72;
-
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<int> _activeIndex = ValueNotifier<int>(0);
   Timer? _timer;
@@ -379,6 +377,9 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   Duration _elapsed = Duration.zero;
   bool _playing = false;
   DateTime? _lastTick;
+  double _fontSize = 24;
+
+  double get _itemHeight => (_fontSize * 3.8).clamp(82, 142);
 
   @override
   void initState() {
@@ -687,13 +688,16 @@ class _ScriptureReaderState extends State<ScriptureReader> {
                                 child: Text(
                                   lines[index].content,
                                   textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 4,
+                                  overflow: TextOverflow.fade,
+                                  softWrap: true,
                                   style: TextStyle(
                                     color: active
                                         ? const Color(0xFFFFE8A3)
                                         : const Color(0xFFFFF8E8),
-                                    fontSize: active ? 25 : 22,
+                                    fontSize: active
+                                        ? _fontSize + 2
+                                        : _fontSize,
                                     fontWeight: active
                                         ? FontWeight.w700
                                         : FontWeight.w500,
@@ -830,6 +834,36 @@ class _ScriptureReaderState extends State<ScriptureReader> {
                           child: _ReaderControlChip(
                             icon: Icons.speed,
                             label: '$_speedLabel ${_speed.toStringAsFixed(2)}x',
+                          ),
+                        ),
+                        PopupMenuButton<double>(
+                          tooltip: 'Cỡ chữ',
+                          onSelected: (value) {
+                            setState(() => _fontSize = value);
+                            WidgetsBinding.instance.addPostFrameCallback(
+                              (_) => _centerLine(_activeIndex.value),
+                            );
+                          },
+                          itemBuilder: (context) => [
+                            for (final option in const [20.0, 24.0, 28.0, 32.0])
+                              PopupMenuItem(
+                                value: option,
+                                child: _SpeedMenuLabel(
+                                  label: option == 20
+                                      ? 'Nhỏ'
+                                      : option == 24
+                                      ? 'Vừa'
+                                      : option == 28
+                                      ? 'Lớn'
+                                      : 'Rất lớn',
+                                  speed: option.toStringAsFixed(0),
+                                  selected: _fontSize == option,
+                                ),
+                              ),
+                          ],
+                          child: _ReaderControlChip(
+                            icon: Icons.format_size,
+                            label: 'Cỡ ${_fontSize.toStringAsFixed(0)}',
                           ),
                         ),
                       ],

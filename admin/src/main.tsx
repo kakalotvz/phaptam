@@ -11,16 +11,19 @@ import '@fontsource/noto-serif/700.css';
 import '@fontsource/noto-serif/800.css';
 import {
   BarChart3,
+  Bold,
   BookAudio,
   BookOpenText,
   CalendarClock,
   Clapperboard,
-  Code2,
   Download,
   FileText,
   Eye,
+  Heading2,
   Image,
   LayoutDashboard,
+  Link2,
+  List,
   MessageSquareText,
   Newspaper,
   Pause,
@@ -1118,32 +1121,172 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
   );
 }
 
-const newsFormatTemplates = [
-  {
-    id: 'announcement',
-    label: 'Thông báo',
-    content: '## Thông báo\n\n**Thời gian:** \n\n**Địa điểm:** \n\nNội dung chính:\n\n- \n- \n\nThông tin liên hệ: ',
-  },
-  {
-    id: 'article',
-    label: 'Bài viết',
-    content: '## Mở đầu\n\n\n## Nội dung chính\n\n\n## Gợi ý thực hành\n\n- \n- \n\n## Kết luận\n\n',
-  },
-  {
-    id: 'event',
-    label: 'Sự kiện',
-    content: '## Chương trình\n\n**Ngày:** \n**Giờ:** \n**Địa điểm:** \n\n### Nội dung\n\n1. \n2. \n3. \n\n### Lưu ý tham dự\n\n',
-  },
-] as const;
+function RichTextEditor({
+  value,
+  onChange,
+  placeholder,
+  compact = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  compact?: boolean;
+}) {
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!editorRef.current || focused) return;
+    const nextHtml = markupToHtml(value);
+    if (editorRef.current.innerHTML !== nextHtml) {
+      editorRef.current.innerHTML = nextHtml;
+    }
+  }, [focused, value]);
+
+  function syncValue() {
+    if (!editorRef.current) return;
+    onChange(htmlToMarkup(editorRef.current));
+  }
+
+  function runCommand(command: string, commandValue?: string) {
+    editorRef.current?.focus();
+    document.execCommand(command, false, commandValue);
+    syncValue();
+  }
+
+  function addLink() {
+    const url = window.prompt('Dán liên kết https://...');
+    if (!url) return;
+    runCommand('createLink', url);
+  }
+
+  return (
+    <div className={`rich-editor ${compact ? 'compact' : ''}`}>
+      <div className="rich-toolbar" aria-label="Công cụ định dạng">
+        <button type="button" onClick={() => runCommand('formatBlock', 'h2')} title="Tiêu đề">
+          <Heading2 size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('formatBlock', 'p')} title="Đoạn văn">
+          Aa
+        </button>
+        <button type="button" onClick={() => runCommand('bold')} title="In đậm">
+          <Bold size={16} />
+        </button>
+        <button type="button" onClick={() => runCommand('insertUnorderedList')} title="Danh sách">
+          <List size={16} />
+        </button>
+        <button type="button" onClick={addLink} title="Liên kết">
+          <Link2 size={16} />
+        </button>
+      </div>
+      <div
+        ref={editorRef}
+        className="rich-surface"
+        contentEditable
+        data-placeholder={placeholder}
+        onBlur={() => {
+          setFocused(false);
+          syncValue();
+        }}
+        onFocus={() => setFocused(true)}
+        onInput={syncValue}
+        suppressContentEditableWarning
+      />
+    </div>
+  );
+}
+
+function markupToHtml(value: string) {
+  const normalized = normalizeStoredMarkup(value);
+  const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  if (blocks.length === 0) return '';
+  return blocks
+    .map((block) => {
+      if (block.startsWith('## ')) return `<h2>${inlineMarkupToHtml(block.slice(3))}</h2>`;
+      const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+      if (lines.every((line) => line.startsWith('- '))) {
+        return `<ul>${lines.map((line) => `<li>${inlineMarkupToHtml(line.slice(2))}</li>`).join('')}</ul>`;
+      }
+      return `<p>${inlineMarkupToHtml(lines.join('<br>'))}</p>`;
+    })
+    .join('');
+}
+
+function normalizeStoredMarkup(value: string) {
+  return value
+    .replace(/<b>(.*?)<\/b>/gis, '**$1**')
+    .replace(/<strong>(.*?)<\/strong>/gis, '**$1**')
+    .replace(/<url=(.*?)>(.*?)<\/url>/gis, '[$2]($1)')
+    .replace(/<url>(.*?)<\/url>/gis, '[$1]($1)')
+    .replace(/\[b\](.*?)\[\/b\]/gis, '**$1**')
+    .replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '[$2]($1)')
+    .replace(/\[url\](.*?)\[\/url\]/gis, '[$1]($1)');
+}
+
+function inlineMarkupToHtml(value: string) {
+  const escaped = escapeHtml(value);
+  return escaped
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[(.+?)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
+function htmlToMarkup(root: HTMLElement) {
+  const blocks: string[] = [];
+  root.childNodes.forEach((node) => {
+    const block = blockNodeToMarkup(node);
+    if (block.trim()) blocks.push(block.trim());
+  });
+  return blocks.join('\n\n');
+}
+
+function blockNodeToMarkup(node: ChildNode): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
+  if (!(node instanceof HTMLElement)) return '';
+  const tag = node.tagName.toLowerCase();
+  if (tag === 'h1' || tag === 'h2' || tag === 'h3') return `## ${inlineNodesToMarkup(node)}`;
+  if (tag === 'ul' || tag === 'ol') {
+    return Array.from(node.querySelectorAll('li'))
+      .map((li) => `- ${inlineNodesToMarkup(li)}`)
+      .join('\n');
+  }
+  if (tag === 'div' || tag === 'p') return inlineNodesToMarkup(node);
+  if (tag === 'br') return '\n';
+  return inlineNodesToMarkup(node);
+}
+
+function inlineNodesToMarkup(element: HTMLElement): string {
+  return Array.from(element.childNodes)
+    .map((node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
+      if (!(node instanceof HTMLElement)) return '';
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'strong' || tag === 'b') return `**${inlineNodesToMarkup(node)}**`;
+      if (tag === 'a') return `[${inlineNodesToMarkup(node)}](${node.getAttribute('href') ?? ''})`;
+      if (tag === 'br') return '\n';
+      return inlineNodesToMarkup(node);
+    })
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
-  const [content, setContent] = useState<string>(newsFormatTemplates[0].content);
+  const [content, setContent] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [link, setLink] = useState('');
   const [shareEnabled, setShareEnabled] = useState(true);
+  const [editingNewsId, setEditingNewsId] = useState('');
 
   function editCategory(row: NewsCategory) {
     const name = askText('Tên danh mục', row.name);
@@ -1154,29 +1297,26 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   }
 
   function editNews(row: NewsItem) {
-    const nextTitle = askText('Tiêu đề', row.title);
-    if (nextTitle === undefined) return;
-    const nextSummary = askText('Tóm tắt', row.summary ?? '');
-    if (nextSummary === undefined) return;
-    const nextImageUrl = askText('Ảnh URL', row.imageUrl ?? '');
-    if (nextImageUrl === undefined) return;
-    const nextLink = askText('Link', row.link ?? '');
-    if (nextLink === undefined) return;
-    const nextContent = askText('Nội dung', row.content ?? '');
-    if (nextContent === undefined) return;
-    void run(
-      () =>
-        api.update(`/admin/news/${row.id}`, {
-          title: nextTitle,
-          summary: nextSummary,
-          imageUrl: nextImageUrl,
-          link: nextLink,
-          content: nextContent,
-          categoryId: row.categoryId,
-          shareEnabled: row.shareEnabled,
-        }),
-      'Đã cập nhật tin tức',
-    );
+    setEditingNewsId(row.id);
+    setTitle(row.title);
+    setSummary(row.summary ?? '');
+    setImageUrl(row.imageUrl ?? '');
+    setLink(row.link ?? '');
+    setContent(row.content ?? '');
+    setCategoryId(row.categoryId ?? '');
+    setShareEnabled(row.shareEnabled);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetNewsForm() {
+    setEditingNewsId('');
+    setTitle('');
+    setSummary('');
+    setContent('');
+    setCategoryId('');
+    setImageUrl('');
+    setLink('');
+    setShareEnabled(true);
   }
 
   return (
@@ -1212,6 +1352,17 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
 
       <Panel title="Tạo tin riêng">
         <div className="news-editor">
+          {editingNewsId && (
+            <div className="scripture-form-heading span">
+              <div>
+                <strong>Đang sửa tin</strong>
+                <span>Nội dung sẽ được cập nhật vào tin đã chọn.</span>
+              </div>
+              <button className="ghost" type="button" onClick={resetNewsForm}>
+                Tạo tin mới
+              </button>
+            </div>
+          )}
           <label>
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Tiêu đề tin tức" />
@@ -1239,18 +1390,9 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
             Link gốc hoặc link chia sẻ
             <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="https://..." />
           </label>
-          <div className="span option-row">
-            <Code2 size={16} />
-            <span>Mẫu format</span>
-            {newsFormatTemplates.map((template) => (
-              <button key={template.id} type="button" className="speed" onClick={() => setContent(template.content)}>
-                {template.label}
-              </button>
-            ))}
-          </div>
           <label className="span">
             Nội dung
-            <textarea className="news-content" value={content} onChange={(event) => setContent(event.target.value)} />
+            <RichTextEditor value={content} onChange={setContent} placeholder="Viết nội dung tin. Dùng thanh công cụ để định dạng tiêu đề, chữ đậm, danh sách và liên kết." />
           </label>
           <label className="check-row span">
             <input type="checkbox" checked={shareEnabled} onChange={(event) => setShareEnabled(event.target.checked)} />
@@ -1260,25 +1402,29 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
           <button
             className="primary"
             type="button"
-            onClick={() =>
-              run(
+            onClick={async () => {
+              const payload = {
+                title,
+                summary,
+                content,
+                imageUrl,
+                link,
+                categoryId,
+                shareEnabled,
+                sourceType: 'MANUAL',
+              };
+              const ok = await run(
                 () =>
-                  api.create('/admin/news', {
-                    title,
-                    summary,
-                    content,
-                    imageUrl,
-                    link,
-                    categoryId,
-                    shareEnabled,
-                    sourceType: 'MANUAL',
-                  }),
-                'Đã tạo tin riêng',
-              )
-            }
+                  editingNewsId
+                    ? api.update(`/admin/news/${editingNewsId}`, payload)
+                    : api.create('/admin/news', payload),
+                editingNewsId ? 'Đã cập nhật tin tức' : 'Đã tạo tin riêng',
+              );
+              if (ok) resetNewsForm();
+            }}
           >
             <Save size={16} />
-            Lưu tin
+            {editingNewsId ? 'Cập nhật tin' : 'Lưu tin'}
           </button>
         </div>
       </Panel>
@@ -1440,21 +1586,64 @@ function RssManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [content, setContent] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [editingQuoteId, setEditingQuoteId] = useState('');
+
   function editQuote(row: QuoteRecord) {
-    const content = askText('Nội dung lời nhắc', row.content);
-    if (content === undefined) return;
-    const imageUrl = askText('Ảnh minh họa URL', row.imageUrl ?? '');
-    if (imageUrl === undefined) return;
-    void run(() => api.update(`/admin/quote/${row.id}`, { content, imageUrl }), 'Đã cập nhật lời nhắc');
+    setEditingQuoteId(row.id);
+    setContent(row.content);
+    setImageUrl(row.imageUrl ?? '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetQuoteForm() {
+    setEditingQuoteId('');
+    setContent('');
+    setImageUrl('');
   }
 
   return (
     <div className="single-column">
       <Panel title="Tạo lời nhắc hằng ngày">
-        <SmartForm
-          fields={[['content', 'Nội dung'], ['imageUrl', 'Ảnh minh họa', 'upload:images/quote']]}
-          onSubmit={(values) => run(() => api.create('/admin/quote', values), 'Đã tạo lời nhắc')}
-        />
+        <div className="quote-editor">
+          {editingQuoteId && (
+            <div className="scripture-form-heading">
+              <div>
+                <strong>Đang sửa lời nhắc</strong>
+                <span>Nội dung sẽ được cập nhật vào lời nhắc đã chọn.</span>
+              </div>
+              <button className="ghost" type="button" onClick={resetQuoteForm}>
+                Tạo lời nhắc mới
+              </button>
+            </div>
+          )}
+          <label>
+            Nội dung
+            <RichTextEditor value={content} onChange={setContent} compact placeholder="Viết lời nhắc. Có thể in đậm, xuống dòng hoặc gắn liên kết." />
+          </label>
+          <label>
+            Ảnh minh họa
+            <UploadField kind="images/quote" value={imageUrl} onUploaded={setImageUrl} />
+          </label>
+          <button
+            className="primary"
+            type="button"
+            onClick={async () => {
+              const ok = await run(
+                () =>
+                  editingQuoteId
+                    ? api.update(`/admin/quote/${editingQuoteId}`, { content, imageUrl })
+                    : api.create('/admin/quote', { content, imageUrl }),
+                editingQuoteId ? 'Đã cập nhật lời nhắc' : 'Đã tạo lời nhắc',
+              );
+              if (ok) resetQuoteForm();
+            }}
+          >
+            <Save size={16} />
+            {editingQuoteId ? 'Cập nhật lời nhắc' : 'Lưu lời nhắc'}
+          </button>
+        </div>
       </Panel>
       <Panel title="Lời nhắc">
         <Table
