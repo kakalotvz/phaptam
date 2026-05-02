@@ -433,7 +433,7 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
           fields={[
             ['title', 'Tiêu đề'],
             ['description', 'Mô tả'],
-            ['audioUrl', 'Tệp audio MP3', 'upload:audio'],
+            ['audioUrl', 'Tệp audio MP3', 'upload:audio/library'],
             ['thumbnailUrl', 'Ảnh đại diện', 'upload:images/audio'],
             ['duration', 'Thời lượng giây', 'number'],
             ['categoryId', 'Danh mục', 'select', data.audioCategories.map((item) => [item.id, item.name])],
@@ -1065,7 +1065,7 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
             ['title', 'Tiêu đề'],
             ['teacher', 'Giảng sư'],
             ['description', 'Mô tả'],
-            ['videoUrl', 'Tệp video MP4 hoặc URL YouTube', 'upload:video'],
+            ['videoUrl', 'Tệp video MP4 hoặc URL YouTube', 'upload:video/dharma'],
             ['thumbnailUrl', 'Ảnh đại diện', 'upload:images/video'],
             ['categoryId', 'Danh mục', 'select', data.videoCategories.map((item) => [item.id, item.name])],
           ]}
@@ -1346,8 +1346,8 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
             ['title', 'Tiêu đề'],
             ['description', 'Mô tả'],
             ['duration', 'Thời lượng giây', 'number'],
-            ['audioUrl', 'Âm thanh nền', 'upload:audio'],
-            ['imageUrl', 'Ảnh nền', 'upload:images/news'],
+            ['audioUrl', 'Âm thanh nền', 'upload:audio/meditation'],
+            ['imageUrl', 'Ảnh nền', 'upload:images/meditation'],
           ]}
           onSubmit={(values) => run(() => api.create('/admin/meditation', { ...values, duration: Number(values.duration || 0), active: true }), 'Đã tạo bài Thiền')}
         />
@@ -1750,7 +1750,7 @@ function UploadField({
   onUploaded: (url: string) => void;
 }) {
   const [uploading, setUploading] = useState(false);
-  const accept = kind === 'audio' ? 'audio/mpeg,.mp3' : kind === 'video' ? 'video/mp4,.mp4' : 'image/*';
+  const accept = kind.startsWith('audio') ? 'audio/mpeg,.mp3' : kind.startsWith('video') ? 'video/mp4,.mp4' : 'image/*';
 
   async function onFileSelected(file?: File) {
     if (!file) return;

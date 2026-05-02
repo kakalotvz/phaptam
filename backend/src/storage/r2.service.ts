@@ -6,13 +6,17 @@ import { randomUUID } from 'crypto';
 
 type MediaKind =
   | 'audio'
+  | 'audio/library'
+  | 'audio/meditation'
   | 'video'
+  | 'video/dharma'
   | 'images/audio'
   | 'images/video'
   | 'images/banner'
   | 'images/quote'
   | 'images/news'
-  | 'images/scripture';
+  | 'images/scripture'
+  | 'images/meditation';
 
 @Injectable()
 export class R2Service {

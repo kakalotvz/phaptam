@@ -1,7 +1,13 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
 
+import '../../core/offline/media_downloads.dart';
 import '../../shared/widgets/content_cards.dart';
+import '../../shared/widgets/media_download_button.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
@@ -62,7 +68,16 @@ class VideoScreen extends ConsumerWidget {
                   InkWell(
                     borderRadius: BorderRadius.circular(18),
                     onTap: () => _showVideoPlayer(context, video),
-                    child: VideoCard(video: video),
+                    child: VideoCard(
+                      video: video,
+                      action: _isDirectVideoUrl(video.videoUrl)
+                          ? MediaDownloadButton(
+                              mediaKey: mediaKey('video', video.id),
+                              title: video.title,
+                              url: video.videoUrl,
+                            )
+                          : null,
+                    ),
                   ),
                   const SizedBox(height: 14),
                 ],
@@ -108,20 +123,22 @@ class _LoadError extends StatelessWidget {
   }
 }
 
-class _VideoPlayerSheet extends StatefulWidget {
+class _VideoPlayerSheet extends ConsumerStatefulWidget {
   const _VideoPlayerSheet({required this.video});
 
   final VideoItem video;
 
   @override
-  State<_VideoPlayerSheet> createState() => _VideoPlayerSheetState();
+  ConsumerState<_VideoPlayerSheet> createState() => _VideoPlayerSheetState();
 }
 
-class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
+class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
   double speed = 1;
   String repeatMode = 'once';
   int customRepeatCount = 5;
   Duration? sleepTimer;
+  VideoPlayerController? controller;
+  bool loading = true;
 
   String get repeatLabel => switch (repeatMode) {
     'three' => 'Lặp 3 lần',
@@ -160,8 +177,61 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    if (_isDirectVideoUrl(widget.video.videoUrl)) {
+      unawaited(_loadVideo());
+    } else {
+      loading = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadVideo() async {
+    final video = widget.video;
+    final source = await ref
+        .read(mediaDownloadsProvider.notifier)
+        .sourceFor(mediaKey('video', video.id), video.videoUrl);
+    final nextController = source == video.videoUrl
+        ? VideoPlayerController.networkUrl(Uri.parse(source))
+        : VideoPlayerController.file(File(source));
+    await nextController.initialize();
+    await nextController.setPlaybackSpeed(speed);
+    if (!mounted) {
+      await nextController.dispose();
+      return;
+    }
+    setState(() {
+      controller = nextController;
+      loading = false;
+    });
+  }
+
+  Future<void> _togglePlayback() async {
+    final player = controller;
+    if (player == null || loading) return;
+    if (player.value.isPlaying) {
+      await player.pause();
+    } else {
+      await player.play();
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     final video = widget.video;
+    final downloads = ref
+        .watch(mediaDownloadsProvider)
+        .whenOrNull(data: (value) => value);
+    final downloaded =
+        downloads?.isDownloaded(mediaKey('video', video.id)) ?? false;
+    final player = controller;
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 8, 22, 32),
       child: Column(
@@ -171,12 +241,23 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
             borderRadius: BorderRadius.circular(22),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: Image.network(
-                video.thumbnailUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Center(child: Icon(Icons.play_circle_outline)),
-              ),
+              child: player != null && player.value.isInitialized
+                  ? VideoPlayer(player)
+                  : Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(
+                          video.thumbnailUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Center(
+                                child: Icon(Icons.play_circle_outline),
+                              ),
+                        ),
+                        if (loading)
+                          const Center(child: CircularProgressIndicator()),
+                      ],
+                    ),
             ),
           ),
           const SizedBox(height: 18),
@@ -188,12 +269,20 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
-          Text('${video.teacher} • ${video.topic}'),
+          Text(
+            downloaded
+                ? '${video.teacher} • ${video.topic} • Bản offline'
+                : '${video.teacher} • ${video.topic}',
+          ),
           const SizedBox(height: 18),
           IconButton.filled(
-            onPressed: () {},
+            onPressed: _isDirectVideoUrl(video.videoUrl)
+                ? _togglePlayback
+                : null,
             iconSize: 34,
-            icon: const Icon(Icons.play_arrow),
+            icon: Icon(
+              player?.value.isPlaying == true ? Icons.pause : Icons.play_arrow,
+            ),
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -202,7 +291,10 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
             runSpacing: 8,
             children: [
               PopupMenuButton<double>(
-                onSelected: (value) => setState(() => speed = value),
+                onSelected: (value) {
+                  setState(() => speed = value);
+                  unawaited(controller?.setPlaybackSpeed(value));
+                },
                 itemBuilder: (context) => const [
                   PopupMenuItem(value: .75, child: Text('Tốc độ 0.75x')),
                   PopupMenuItem(value: 1, child: Text('Tốc độ 1.0x')),
@@ -261,4 +353,9 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
       ),
     );
   }
+}
+
+bool _isDirectVideoUrl(String url) {
+  final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
+  return path.endsWith('.mp4');
 }

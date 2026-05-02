@@ -98,13 +98,19 @@ curl -X POST http://127.0.0.1:13010/api/upload/presigned-url \
 
 Nếu trả về `uploadUrl` và `publicUrl`, backend đã kết nối R2.
 
-Admin hiện hỗ trợ:
+Admin hiện upload media mới theo cây thư mục R2:
 
-- Audio MP3 -> `/audio/{uuid}.mp3`
-- Video MP4 -> `/video/{uuid}.mp4`
+- Audio kinh/pháp âm -> `/audio/library/{uuid}.mp3`
+- Audio thiền/âm nền -> `/audio/meditation/{uuid}.mp3`
+- Video pháp thoại -> `/video/dharma/{uuid}.mp4`
 - Ảnh audio -> `/images/audio/{uuid}.webp`
 - Ảnh video -> `/images/video/{uuid}.webp`
+- Ảnh thiền -> `/images/meditation/{uuid}.webp`
+- Ảnh bản kinh -> `/images/scripture/{uuid}.webp`
+- Ảnh tin tức -> `/images/news/{uuid}.webp`
 - Banner -> `/images/banner/{uuid}.webp`
 - Quote -> `/images/quote/{uuid}.webp`
+
+Backend vẫn nhận `audio` và `video` để không làm hỏng dữ liệu/công cụ cũ, nhưng admin sẽ dùng các nhánh chức năng ở trên cho tệp mới.
 
 Ảnh được chuyển sang WebP trong trình duyệt trước khi upload.

@@ -148,13 +148,17 @@ export type AdminUser = {
 
 export type UploadKind =
   | 'audio'
+  | 'audio/library'
+  | 'audio/meditation'
   | 'video'
+  | 'video/dharma'
   | 'images/audio'
   | 'images/video'
   | 'images/banner'
   | 'images/quote'
   | 'images/news'
-  | 'images/scripture';
+  | 'images/scripture'
+  | 'images/meditation';
 
 export type PresignedUpload = {
   key: string;

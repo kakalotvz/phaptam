@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 
+import '../../core/offline/media_downloads.dart';
+import '../../shared/widgets/media_download_button.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
@@ -21,24 +24,30 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
   int customValue = 20;
   String customUnit = 'minutes';
   Timer? timer;
+  AudioPlayer? backgroundPlayer;
+  MeditationProgram? selectedProgram;
 
   bool get isRunning => timer != null;
 
   @override
   void dispose() {
     timer?.cancel();
+    backgroundPlayer?.dispose();
     super.dispose();
   }
 
-  void toggle() {
+  Future<void> toggle() async {
     if (isRunning) {
       timer?.cancel();
+      await backgroundPlayer?.pause();
       setState(() => timer = null);
       return;
     }
+    await _startBackgroundAudio();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (remainingSeconds <= 1) {
         timer?.cancel();
+        unawaited(backgroundPlayer?.stop());
         setState(() {
           timer = null;
           remainingSeconds = selectedMinutes * 60;
@@ -167,7 +176,7 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
-                onPressed: toggle,
+                onPressed: () => unawaited(toggle()),
                 icon: Icon(isRunning ? Icons.pause : Icons.play_arrow),
                 label: Text(isRunning ? 'Tạm dừng' : 'Bắt đầu'),
               ),
@@ -214,14 +223,32 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
   void _selectProgram(MeditationProgram program) {
     final minutes = (program.duration.inSeconds / 60).ceil().clamp(1, 24 * 60);
     setState(() {
+      selectedProgram = program;
       customDuration = false;
       selectedMinutes = minutes;
       remainingSeconds = program.duration.inSeconds;
     });
   }
+
+  Future<void> _startBackgroundAudio() async {
+    final program = selectedProgram;
+    final audioUrl = program?.audioUrl;
+    if (program == null || audioUrl == null || audioUrl.trim().isEmpty) return;
+    final player = backgroundPlayer ??= AudioPlayer();
+    final source = await ref
+        .read(mediaDownloadsProvider.notifier)
+        .sourceFor(mediaKey('meditation', program.id), audioUrl);
+    if (source == audioUrl) {
+      await player.setUrl(source);
+    } else {
+      await player.setFilePath(source);
+    }
+    await player.setLoopMode(LoopMode.one);
+    await player.play();
+  }
 }
 
-class _ProgramChooser extends StatelessWidget {
+class _ProgramChooser extends ConsumerWidget {
   const _ProgramChooser({
     required this.programs,
     required this.selectedSeconds,
@@ -235,7 +262,7 @@ class _ProgramChooser extends StatelessWidget {
   final ValueChanged<MeditationProgram> onSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
       width: double.infinity,
       child: Wrap(
@@ -244,10 +271,21 @@ class _ProgramChooser extends StatelessWidget {
         alignment: WrapAlignment.center,
         children: [
           for (final program in programs)
-            ChoiceChip(
-              label: Text(program.title),
-              selected: selectedSeconds == program.duration.inSeconds,
-              onSelected: enabled ? (_) => onSelected(program) : null,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ChoiceChip(
+                  label: Text(program.title),
+                  selected: selectedSeconds == program.duration.inSeconds,
+                  onSelected: enabled ? (_) => onSelected(program) : null,
+                ),
+                if (program.audioUrl?.trim().isNotEmpty == true)
+                  MediaDownloadButton(
+                    mediaKey: mediaKey('meditation', program.id),
+                    title: program.title,
+                    url: program.audioUrl!,
+                  ),
+              ],
             ),
         ],
       ),

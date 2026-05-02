@@ -41,10 +41,11 @@ class CalmSection extends StatelessWidget {
 }
 
 class AudioTile extends StatelessWidget {
-  const AudioTile({required this.audio, this.onTap, super.key});
+  const AudioTile({required this.audio, this.onTap, this.trailing, super.key});
 
   final AudioItem audio;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -91,11 +92,12 @@ class AudioTile extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Yêu thích',
-                onPressed: () {},
-                icon: const Icon(Icons.favorite_border),
-              ),
+              trailing ??
+                  IconButton(
+                    tooltip: 'Yêu thích',
+                    onPressed: () {},
+                    icon: const Icon(Icons.favorite_border),
+                  ),
             ],
           ),
         ),
@@ -105,9 +107,10 @@ class AudioTile extends StatelessWidget {
 }
 
 class VideoCard extends StatelessWidget {
-  const VideoCard({required this.video, super.key});
+  const VideoCard({required this.video, this.action, super.key});
 
   final VideoItem video;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -116,14 +119,32 @@ class VideoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: CachedNetworkImage(
-              imageUrl: video.thumbnailUrl,
-              fit: BoxFit.cover,
-              errorWidget: (context, url, error) =>
-                  const Center(child: Icon(Icons.play_circle_outline)),
-            ),
+          Stack(
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: CachedNetworkImage(
+                  imageUrl: video.thumbnailUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (context, url, error) =>
+                      const Center(child: Icon(Icons.play_circle_outline)),
+                ),
+              ),
+              if (action != null)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surface.withValues(alpha: .86),
+                      shape: BoxShape.circle,
+                    ),
+                    child: action,
+                  ),
+                ),
+            ],
           ),
           Padding(
             padding: const EdgeInsets.all(14),

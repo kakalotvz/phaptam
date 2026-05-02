@@ -3,8 +3,33 @@ import { IsIn, IsString } from 'class-validator';
 import { R2Service } from '../storage/r2.service';
 
 class PresignedUrlDto {
-  @IsIn(['audio', 'video', 'images/audio', 'images/video', 'images/banner', 'images/quote', 'images/news', 'images/scripture'])
-  kind!: 'audio' | 'video' | 'images/audio' | 'images/video' | 'images/banner' | 'images/quote' | 'images/news' | 'images/scripture';
+  @IsIn([
+    'audio',
+    'audio/library',
+    'audio/meditation',
+    'video',
+    'video/dharma',
+    'images/audio',
+    'images/video',
+    'images/banner',
+    'images/quote',
+    'images/news',
+    'images/scripture',
+    'images/meditation',
+  ])
+  kind!:
+    | 'audio'
+    | 'audio/library'
+    | 'audio/meditation'
+    | 'video'
+    | 'video/dharma'
+    | 'images/audio'
+    | 'images/video'
+    | 'images/banner'
+    | 'images/quote'
+    | 'images/news'
+    | 'images/scripture'
+    | 'images/meditation';
 
   @IsString()
   contentType!: string;
