@@ -606,16 +606,18 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
       </Panel>
       <Panel title="Tạo bản Đọc Kinh">
         <div className="scripture-create">
-          <div className="scripture-form-heading span">
-            <div>
-              <strong>{selectedScriptureId ? 'Đang chỉnh sửa bản đã lưu' : 'Đang tạo bản mới'}</strong>
-              {scriptureStatus && <span>{scriptureStatus}</span>}
+          {selectedScriptureId && (
+            <div className="scripture-form-heading span">
+              <div>
+                <strong>Đang chỉnh sửa bản đã lưu</strong>
+                {scriptureStatus && <span>{scriptureStatus}</span>}
+              </div>
+              <button className="ghost" type="button" onClick={newScripture}>
+                <Plus size={16} />
+                Kinh mới
+              </button>
             </div>
-            <button className="ghost" type="button" onClick={newScripture}>
-              <Plus size={16} />
-              Kinh mới
-            </button>
-          </div>
+          )}
           <label>
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh A Di Đà - bản đọc chậm" />
@@ -696,7 +698,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
       </Panel>
 
       <div className="scripture-editor">
-        <Panel title="Dòng Kinh">
+        <Panel title="Dòng Kinh" className="scripture-lines-panel">
           <div className="line-editor">
             {lines.map((line, index) => (
               <div className="line-row" key={`${index}-${line.content}`}>

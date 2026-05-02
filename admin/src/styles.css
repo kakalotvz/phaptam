@@ -332,11 +332,23 @@ main {
 .line-editor {
   display: grid;
   gap: 10px;
-  max-height: min(58vh, 620px);
+  height: clamp(260px, 46vh, 520px);
+  max-height: 520px;
   margin-bottom: 14px;
   padding-right: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.scripture-lines-panel {
+  align-self: start;
+}
+
+.scripture-lines-panel .line-editor {
+  border: 1px solid rgba(109, 76, 65, .11);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(246, 234, 208, .28);
 }
 
 .line-row {
