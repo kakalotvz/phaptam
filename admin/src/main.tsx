@@ -1148,16 +1148,16 @@ function RichTextEditor({
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const [focused, setFocused] = useState(false);
+  const editingRef = useRef(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
-    if (!editorRef.current || focused) return;
+    if (!editorRef.current || editingRef.current) return;
     const nextHtml = storedContentToEditorHtml(value);
     if (editorRef.current.innerHTML !== nextHtml) {
       editorRef.current.innerHTML = nextHtml;
     }
-  }, [focused, value]);
+  }, [value]);
 
   function syncValue() {
     if (!editorRef.current) return;
@@ -1301,14 +1301,13 @@ function RichTextEditor({
         contentEditable
         data-placeholder={placeholder}
         onBlur={() => {
-          setFocused(false);
+          editingRef.current = false;
           syncValue();
         }}
         onFocus={() => {
-          setFocused(true);
+          editingRef.current = true;
           removeEmptyHeadingMarkers();
         }}
-        onInput={syncValue}
         suppressContentEditableWarning
       />
     </div>
