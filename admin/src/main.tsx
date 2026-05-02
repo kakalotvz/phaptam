@@ -1322,8 +1322,8 @@ function markupToHtml(value: string) {
   return blocks
     .map((block) => {
       if (block === '##' || block === '###') return '';
-      if (block.startsWith('### ')) return `<h3>${inlineMarkupToHtml(block.slice(4))}</h3>`;
-      if (block.startsWith('## ')) return `<h2>${inlineMarkupToHtml(block.slice(3))}</h2>`;
+      if (block.startsWith('### ')) return `<p>${inlineMarkupToHtml(block.slice(4))}</p>`;
+      if (block.startsWith('## ')) return `<p>${inlineMarkupToHtml(block.slice(3))}</p>`;
       if (block.startsWith('> ')) return `<blockquote>${inlineMarkupToHtml(block.replace(/^> /gm, ''))}</blockquote>`;
       if (block.startsWith('![')) {
         const image = block.match(/^!\[(.*?)\]\((https?:\/\/[^)]+)\)$/);
