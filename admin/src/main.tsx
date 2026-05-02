@@ -18,13 +18,16 @@ import {
   Code2,
   Download,
   FileText,
+  Eye,
   Image,
   LayoutDashboard,
   MessageSquareText,
   Newspaper,
   Pause,
+  Pencil,
   Play,
   Plus,
+  Power,
   ShieldCheck,
   Quote,
   RefreshCcw,
@@ -359,6 +362,31 @@ function Overview({ data }: { data: DataState }) {
 }
 
 function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
+  function editCategory(row: AudioCategory) {
+    const name = askText('Tên danh mục', row.name);
+    if (name === undefined) return;
+    const description = askText('Mô tả', row.description ?? '');
+    if (description === undefined) return;
+    void run(() => api.update(`/admin/audio-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục audio');
+  }
+
+  function editAudio(row: Audio) {
+    const title = askText('Tiêu đề', row.title);
+    if (title === undefined) return;
+    const description = askText('Mô tả', row.description ?? '');
+    if (description === undefined) return;
+    const audioUrl = askText('Audio URL', row.audioUrl);
+    if (audioUrl === undefined) return;
+    const thumbnailUrl = askText('Ảnh đại diện URL', row.thumbnailUrl ?? '');
+    if (thumbnailUrl === undefined) return;
+    const duration = askNumber('Thời lượng giây', row.duration);
+    if (duration === undefined) return;
+    void run(
+      () => api.update(`/admin/audio/${row.id}`, compactPayload({ title, description, audioUrl, thumbnailUrl, duration, categoryId: row.categoryId })),
+      'Đã cập nhật audio',
+    );
+  }
+
   return (
     <div className="two-column">
       <Panel title="Tạo danh mục audio">
@@ -387,6 +415,15 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
             ['name', 'Tên'],
             ['description', 'Mô tả'],
             [(row: AudioCategory) => row._count?.audios ?? 0, 'Số audio'],
+            [
+              (row: AudioCategory) => (
+                <button className="ghost" type="button" onClick={() => editCategory(row)}>
+                  <Pencil size={15} />
+                  Sửa
+                </button>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục')}
         />
@@ -400,6 +437,15 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
             [(row: Audio) => row.category?.name ?? '-', 'Danh mục'],
             [(row: Audio) => `${row.duration}s`, 'Thời lượng'],
             ['audioUrl', 'Audio URL'],
+            [
+              (row: Audio) => (
+                <button className="ghost" type="button" onClick={() => editAudio(row)}>
+                  <Pencil size={15} />
+                  Sửa
+                </button>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/audio/${row.id}`), 'Đã xóa audio')}
         />
@@ -423,6 +469,14 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     { content: 'Hướng về khắp tất cả', start_time: 8 },
     { content: 'Đệ tử và chúng sanh', start_time: 12 },
   ]);
+
+  function editCategory(row: AudioCategory) {
+    const name = askText('Tên danh mục Đọc Kinh', row.name);
+    if (name === undefined) return;
+    const description = askText('Mô tả', row.description ?? '');
+    if (description === undefined) return;
+    void run(() => api.update(`/admin/audio-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục Đọc Kinh');
+  }
 
   function splitText() {
     const nextLines = linesFromText(rawText);
@@ -520,6 +574,26 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
         <SmartForm
           fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
           onSubmit={(values) => run(() => api.create('/admin/audio-category', values), 'Đã tạo danh mục Đọc Kinh')}
+        />
+      </Panel>
+      <Panel title="Danh mục Đọc Kinh">
+        <Table
+          rows={data.audioCategories}
+          columns={[
+            ['name', 'Tên'],
+            ['description', 'Mô tả'],
+            [(row: AudioCategory) => data.scriptures.filter((scripture) => scripture.categoryId === row.id).length, 'Số bản đọc'],
+            [
+              (row: AudioCategory) => (
+                <button className="ghost" type="button" onClick={() => editCategory(row)}>
+                  <Pencil size={15} />
+                  Sửa
+                </button>
+              ),
+              'Thao tác',
+            ],
+          ]}
+          onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục Đọc Kinh')}
         />
       </Panel>
       <Panel title="Tạo bản Đọc Kinh">
@@ -746,6 +820,20 @@ function ScriptureReminderManager({ data, run }: { data: DataState; run: RunActi
     setWeekdays((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value].sort()));
   }
 
+  function editReminder(row: ScriptureReminder) {
+    const title = askText('Tên lời nhắc', row.title);
+    if (title === undefined) return;
+    const timeOfDay = askText('Giờ nhắc HH:mm', row.timeOfDay);
+    if (timeOfDay === undefined) return;
+    const weekdaysText = askText('Ngày nhắc, nhập số cách nhau bởi dấu phẩy (0=CN, 1=T2...)', row.weekdays.join(','));
+    if (weekdaysText === undefined) return;
+    const nextWeekdays = weekdaysText.split(',').map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
+    void run(
+      () => api.update(`/admin/scripture-reminders/${row.id}`, { title, timeOfDay, weekdays: nextWeekdays, resumeMode: row.resumeMode }),
+      'Đã cập nhật lịch nhắc',
+    );
+  }
+
   return (
     <div className="single-column">
       <Panel title="Tạo lịch nhắc tụng kinh">
@@ -796,8 +884,27 @@ function ScriptureReminderManager({ data, run }: { data: DataState; run: RunActi
             [(row: ScriptureReminder) => row.weekdays.map((day) => weekdayOptions.find(([value]) => value === day)?.[1] ?? day).join(', '), 'Ngày'],
             [(row: ScriptureReminder) => (row.resumeMode === 'RESUME' ? 'Tiếp tục' : 'Bắt đầu lại'), 'Chế độ'],
             [(row: ScriptureReminder) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+            [
+              (row: ScriptureReminder) => (
+                <div className="action-group">
+                  <button className="ghost" type="button" onClick={() => editReminder(row)}>
+                    <Pencil size={15} />
+                    Sửa
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => run(() => api.update(`/admin/scripture-reminders/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt lịch nhắc' : 'Đã bật lịch nhắc')}
+                  >
+                    <Power size={15} />
+                    {row.active ? 'Tắt' : 'Bật'}
+                  </button>
+                </div>
+              ),
+              'Thao tác',
+            ],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/scripture-reminder/${row.id}`), 'Đã xóa lịch nhắc')}
+          onDelete={(row) => run(() => api.remove(`/admin/scripture-reminders/${row.id}`), 'Đã xóa lịch nhắc')}
         />
       </Panel>
     </div>
@@ -805,6 +912,31 @@ function ScriptureReminderManager({ data, run }: { data: DataState; run: RunActi
 }
 
 function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
+  function editCategory(row: VideoCategory) {
+    const name = askText('Tên danh mục', row.name);
+    if (name === undefined) return;
+    const description = askText('Mô tả', row.description ?? '');
+    if (description === undefined) return;
+    void run(() => api.update(`/admin/video-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục video');
+  }
+
+  function editVideo(row: Video) {
+    const title = askText('Tiêu đề', row.title);
+    if (title === undefined) return;
+    const teacher = askText('Giảng sư', row.teacher ?? '');
+    if (teacher === undefined) return;
+    const description = askText('Mô tả', row.description ?? '');
+    if (description === undefined) return;
+    const videoUrl = askText('Video URL', row.videoUrl);
+    if (videoUrl === undefined) return;
+    const thumbnailUrl = askText('Ảnh đại diện URL', row.thumbnailUrl ?? '');
+    if (thumbnailUrl === undefined) return;
+    void run(
+      () => api.update(`/admin/video/${row.id}`, compactPayload({ title, teacher, description, videoUrl, thumbnailUrl, categoryId: row.categoryId })),
+      'Đã cập nhật video',
+    );
+  }
+
   return (
     <div className="two-column">
       <Panel title="Tạo danh mục video">
@@ -833,6 +965,15 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
             ['name', 'Tên'],
             ['description', 'Mô tả'],
             [(row: VideoCategory) => row._count?.videos ?? 0, 'Số video'],
+            [
+              (row: VideoCategory) => (
+                <button className="ghost" type="button" onClick={() => editCategory(row)}>
+                  <Pencil size={15} />
+                  Sửa
+                </button>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/video-category/${row.id}`), 'Đã xóa danh mục')}
         />
@@ -846,6 +987,15 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
             ['teacher', 'Giảng sư'],
             [(row: Video) => row.category?.name ?? '-', 'Danh mục'],
             ['videoUrl', 'Video URL'],
+            [
+              (row: Video) => (
+                <button className="ghost" type="button" onClick={() => editVideo(row)}>
+                  <Pencil size={15} />
+                  Sửa
+                </button>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/video/${row.id}`), 'Đã xóa video')}
         />
@@ -881,6 +1031,40 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [link, setLink] = useState('');
   const [shareEnabled, setShareEnabled] = useState(true);
 
+  function editCategory(row: NewsCategory) {
+    const name = askText('Tên danh mục', row.name);
+    if (name === undefined) return;
+    const description = askText('Mô tả', row.description ?? '');
+    if (description === undefined) return;
+    void run(() => api.update(`/admin/news-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục tin');
+  }
+
+  function editNews(row: NewsItem) {
+    const nextTitle = askText('Tiêu đề', row.title);
+    if (nextTitle === undefined) return;
+    const nextSummary = askText('Tóm tắt', row.summary ?? '');
+    if (nextSummary === undefined) return;
+    const nextImageUrl = askText('Ảnh URL', row.imageUrl ?? '');
+    if (nextImageUrl === undefined) return;
+    const nextLink = askText('Link', row.link ?? '');
+    if (nextLink === undefined) return;
+    const nextContent = askText('Nội dung', row.content ?? '');
+    if (nextContent === undefined) return;
+    void run(
+      () =>
+        api.update(`/admin/news/${row.id}`, {
+          title: nextTitle,
+          summary: nextSummary,
+          imageUrl: nextImageUrl,
+          link: nextLink,
+          content: nextContent,
+          categoryId: row.categoryId,
+          shareEnabled: row.shareEnabled,
+        }),
+      'Đã cập nhật tin tức',
+    );
+  }
+
   return (
     <div className="single-column">
       <div className="two-column">
@@ -897,6 +1081,15 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
               ['name', 'Tên'],
               ['description', 'Mô tả'],
               [(row: NewsCategory) => row._count?.items ?? 0, 'Số tin'],
+              [
+                (row: NewsCategory) => (
+                  <button className="ghost" type="button" onClick={() => editCategory(row)}>
+                    <Pencil size={15} />
+                    Sửa
+                  </button>
+                ),
+                'Thao tác',
+              ],
             ]}
             onDelete={(row) => run(() => api.remove(`/admin/news-category/${row.id}`), 'Đã xóa danh mục tin')}
           />
@@ -986,6 +1179,25 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
             [(row: NewsItem) => (row.sourceType === 'MANUAL' ? 'Tin riêng' : 'RSS'), 'Nguồn'],
             [(row: NewsItem) => (row.shareEnabled ? 'Cho phép' : 'Tắt'), 'Chia sẻ'],
             [(row: NewsItem) => new Date(row.publishedAt).toLocaleDateString('vi-VN'), 'Ngày đăng'],
+            [
+              (row: NewsItem) => (
+                <div className="action-group">
+                  <button className="ghost" type="button" onClick={() => editNews(row)}>
+                    <Pencil size={15} />
+                    Sửa
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => run(() => api.update(`/admin/news/${row.id}`, { shareEnabled: !row.shareEnabled }), row.shareEnabled ? 'Đã tắt chia sẻ' : 'Đã bật chia sẻ')}
+                  >
+                    <Share2 size={15} />
+                    {row.shareEnabled ? 'Tắt chia sẻ' : 'Bật chia sẻ'}
+                  </button>
+                </div>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/news/${row.id}`), 'Đã xóa tin')}
         />
@@ -995,6 +1207,23 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
+  function editMeditation(row: MeditationProgram) {
+    const title = askText('Tiêu đề', row.title);
+    if (title === undefined) return;
+    const description = askText('Mô tả', row.description ?? '');
+    if (description === undefined) return;
+    const duration = askNumber('Thời lượng giây', row.duration);
+    if (duration === undefined) return;
+    const audioUrl = askText('Âm thanh nền URL', row.audioUrl ?? '');
+    if (audioUrl === undefined) return;
+    const imageUrl = askText('Ảnh nền URL', row.imageUrl ?? '');
+    if (imageUrl === undefined) return;
+    void run(
+      () => api.update(`/admin/meditation/${row.id}`, { title, description, duration, audioUrl, imageUrl }),
+      'Đã cập nhật bài Thiền',
+    );
+  }
+
   return (
     <div className="single-column">
       <Panel title="Tạo bài Thiền">
@@ -1018,6 +1247,25 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
             ['description', 'Mô tả'],
             [(row: MeditationProgram) => `${row.duration}s`, 'Thời lượng'],
             [(row: MeditationProgram) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+            [
+              (row: MeditationProgram) => (
+                <div className="action-group">
+                  <button className="ghost" type="button" onClick={() => editMeditation(row)}>
+                    <Pencil size={15} />
+                    Sửa
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => run(() => api.update(`/admin/meditation/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt bài Thiền' : 'Đã bật bài Thiền')}
+                  >
+                    <Power size={15} />
+                    {row.active ? 'Tắt' : 'Bật'}
+                  </button>
+                </div>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/meditation/${row.id}`), 'Đã xóa bài Thiền')}
         />
@@ -1027,6 +1275,14 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function RssManager({ data, run }: { data: DataState; run: RunAction }) {
+  function editRss(row: RssSource) {
+    const name = askText('Tên website', row.name);
+    if (name === undefined) return;
+    const url = askText('RSS URL', row.url);
+    if (url === undefined) return;
+    void run(() => api.update(`/admin/rss/${row.id}`, { name, url }), 'Đã cập nhật RSS');
+  }
+
   return (
     <div className="single-column">
       <Panel title="Thêm nguồn RSS">
@@ -1042,6 +1298,25 @@ function RssManager({ data, run }: { data: DataState; run: RunAction }) {
             ['name', 'Tên'],
             ['url', 'URL'],
             [(row: RssSource) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+            [
+              (row: RssSource) => (
+                <div className="action-group">
+                  <button className="ghost" type="button" onClick={() => editRss(row)}>
+                    <Pencil size={15} />
+                    Sửa
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => run(() => api.update(`/admin/rss/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt RSS' : 'Đã bật RSS')}
+                  >
+                    <Power size={15} />
+                    {row.active ? 'Tắt' : 'Bật'}
+                  </button>
+                </div>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/rss/${row.id}`), 'Đã xóa RSS')}
         />
@@ -1051,6 +1326,14 @@ function RssManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
+  function editQuote(row: QuoteRecord) {
+    const content = askText('Nội dung lời nhắc', row.content);
+    if (content === undefined) return;
+    const imageUrl = askText('Ảnh minh họa URL', row.imageUrl ?? '');
+    if (imageUrl === undefined) return;
+    void run(() => api.update(`/admin/quote/${row.id}`, { content, imageUrl }), 'Đã cập nhật lời nhắc');
+  }
+
   return (
     <div className="single-column">
       <Panel title="Tạo lời nhắc hằng ngày">
@@ -1066,6 +1349,25 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             ['imageUrl', 'Ảnh'],
             ['content', 'Nội dung'],
             [(row: QuoteRecord) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+            [
+              (row: QuoteRecord) => (
+                <div className="action-group">
+                  <button className="ghost" type="button" onClick={() => editQuote(row)}>
+                    <Pencil size={15} />
+                    Sửa
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => run(() => api.update(`/admin/quote/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt lời nhắc' : 'Đã bật lời nhắc')}
+                  >
+                    <Power size={15} />
+                    {row.active ? 'Tắt' : 'Bật'}
+                  </button>
+                </div>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/quote/${row.id}`), 'Đã xóa lời nhắc')}
         />
@@ -1075,6 +1377,14 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
+  function editBanner(row: Banner) {
+    const imageUrl = askText('Ảnh banner URL', row.imageUrl);
+    if (imageUrl === undefined) return;
+    const link = askText('Liên kết', row.link ?? '');
+    if (link === undefined) return;
+    void run(() => api.update(`/admin/banner/${row.id}`, { imageUrl, link }), 'Đã cập nhật banner');
+  }
+
   return (
     <div className="single-column">
       <Panel title="Tạo banner">
@@ -1090,6 +1400,25 @@ function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
             ['imageUrl', 'Ảnh'],
             ['link', 'Liên kết'],
             [(row: Banner) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+            [
+              (row: Banner) => (
+                <div className="action-group">
+                  <button className="ghost" type="button" onClick={() => editBanner(row)}>
+                    <Pencil size={15} />
+                    Sửa
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => run(() => api.update(`/admin/banner/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt banner' : 'Đã bật banner')}
+                  >
+                    <Power size={15} />
+                    {row.active ? 'Tắt' : 'Bật'}
+                  </button>
+                </div>
+              ),
+              'Thao tác',
+            ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/banner/${row.id}`), 'Đã xóa banner')}
         />
@@ -1180,6 +1509,10 @@ function UserManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
+  function viewFeedback(row: Feedback) {
+    window.alert(`${row.type}\n${row.user?.username || row.user?.email || row.user?.name || 'Khách/không xác định'}\n\n${row.content}`);
+  }
+
   return (
     <Panel title="Góp ý và báo lỗi từ người dùng">
       <Table
@@ -1189,6 +1522,15 @@ function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
           [(row: Feedback) => row.user?.username || row.user?.email || row.user?.name || 'Khách/không xác định', 'Người góp ý'],
           ['content', 'Nội dung'],
           [(row: Feedback) => new Date(row.createdAt).toLocaleString('vi-VN'), 'Thời gian'],
+          [
+            (row: Feedback) => (
+              <button className="ghost" type="button" onClick={() => viewFeedback(row)}>
+                <Eye size={15} />
+                Xem
+              </button>
+            ),
+            'Thao tác',
+          ],
         ]}
         onDelete={(row) => run(() => api.remove(`/admin/feedback/${row.id}`), 'Đã xóa góp ý')}
       />
@@ -1223,6 +1565,21 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
 
 type RunAction = (action: () => Promise<unknown>, message: string) => Promise<void>;
 type Field = [name: string, label: string, type?: string, options?: string[][]];
+
+function askText(label: string, current = '') {
+  return window.prompt(label, current) ?? undefined;
+}
+
+function askNumber(label: string, current: number) {
+  const value = window.prompt(label, String(current));
+  if (value === null) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function compactPayload(values: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+}
 
 function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: Record<string, string>) => void }) {
   const initial = useMemo(() => Object.fromEntries(fields.map(([name]) => [name, ''])), [fields]);
@@ -1349,7 +1706,13 @@ function Table<T extends { id: string }>({
               })}
               {onDelete && (
                 <td className="actions">
-                  <button className="danger" onClick={() => onDelete(row)}>
+                  <button
+                    className="danger"
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Xóa mục này? Thao tác này không thể hoàn tác.')) onDelete(row);
+                    }}
+                  >
                     <Trash2 size={15} />
                     Xóa
                   </button>

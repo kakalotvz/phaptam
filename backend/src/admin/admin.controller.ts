@@ -298,6 +298,11 @@ export class AdminController {
     });
   }
 
+  @Get('scripture-reminders')
+  scriptureRemindersAlias() {
+    return this.scriptureReminders();
+  }
+
   @Post('scripture-reminder')
   createScriptureReminder(
     @Body()
@@ -323,6 +328,11 @@ export class AdminController {
       },
       include: { scripture: { select: { id: true, title: true } }, user: { select: { id: true, email: true, name: true } } },
     });
+  }
+
+  @Post('scripture-reminders')
+  createScriptureReminderAlias(@Body() data: Parameters<AdminController['createScriptureReminder']>[0]) {
+    return this.createScriptureReminder(data);
   }
 
   @Patch('scripture-reminder/:id')
@@ -356,9 +366,22 @@ export class AdminController {
     });
   }
 
+  @Patch('scripture-reminders/:id')
+  updateScriptureReminderAlias(
+    @Param('id') id: string,
+    @Body() data: Parameters<AdminController['updateScriptureReminder']>[1],
+  ) {
+    return this.updateScriptureReminder(id, data);
+  }
+
   @Delete('scripture-reminder/:id')
   deleteScriptureReminder(@Param('id') id: string) {
     return this.prisma.scriptureReminder.delete({ where: { id } });
+  }
+
+  @Delete('scripture-reminders/:id')
+  deleteScriptureReminderAlias(@Param('id') id: string) {
+    return this.deleteScriptureReminder(id);
   }
 
   @Get('video')

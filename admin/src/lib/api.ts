@@ -208,7 +208,21 @@ export const api = {
   rss: () => request<RssSource[]>('/admin/rss'),
   newsCategories: () => request<NewsCategory[]>('/admin/news-category'),
   news: () => request<NewsItem[]>('/admin/news'),
-  scriptureReminders: () => request<ScriptureReminder[]>('/admin/scripture-reminder'),
+  scriptureReminders: async () => {
+    try {
+      return await request<ScriptureReminder[]>('/admin/scripture-reminder');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        try {
+          return await request<ScriptureReminder[]>('/admin/scripture-reminders');
+        } catch (fallbackError) {
+          if (fallbackError instanceof Error && fallbackError.message.includes('404')) return [];
+          throw fallbackError;
+        }
+      }
+      throw error;
+    }
+  },
   quotes: () => request<Quote[]>('/admin/quote'),
   banners: () => request<Banner[]>('/admin/banner'),
   meditationPrograms: () => request<MeditationProgram[]>('/admin/meditation'),
