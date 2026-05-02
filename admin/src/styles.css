@@ -518,6 +518,12 @@ textarea {
   outline: none;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: rgba(106, 86, 78, .46);
+  font-weight: 500;
+}
+
 textarea {
   min-height: 92px;
   resize: vertical;

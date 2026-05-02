@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
 import '@fontsource/noto-sans/400.css';
@@ -62,6 +62,8 @@ import {
 import './styles.css';
 
 type EditableScriptureLine = { content: string; start_time: number };
+
+const scriptureRawPlaceholder = 'Nam mô A Di Đà Phật\nNguyện đem công đức này\nHướng về khắp tất cả\nĐệ tử và chúng sanh';
 
 const scriptureSampleJson = {
   title: 'Kinh A Di Đà - bản đọc mẫu',
@@ -470,13 +472,14 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   const [categoryId, setCategoryId] = useState('');
   const [scriptureStatus, setScriptureStatus] = useState('');
   const [scriptureBusy, setScriptureBusy] = useState(false);
-  const [rawText, setRawText] = useState('Nam mô A Di Đà Phật\nNguyện đem công đức này\nHướng về khắp tất cả\nĐệ tử và chúng sanh');
-  const [lines, setLines] = useState<EditableScriptureLine[]>([
-    { content: 'Nam mô A Di Đà Phật', start_time: 0 },
-    { content: 'Nguyện đem công đức này', start_time: 4 },
-    { content: 'Hướng về khắp tất cả', start_time: 8 },
-    { content: 'Đệ tử và chúng sanh', start_time: 12 },
-  ]);
+  const [rawText, setRawText] = useState('');
+  const [lines, setLines] = useState<EditableScriptureLine[]>([]);
+  const autoTimingTimer = useRef<number | undefined>(undefined);
+  const autoTimingRequest = useRef(0);
+
+  useEffect(() => {
+    return () => window.clearTimeout(autoTimingTimer.current);
+  }, []);
 
   function editCategory(row: AudioCategory) {
     const name = askText('Tên danh mục Đọc Kinh', row.name);
@@ -490,25 +493,42 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     const nextLines = linesFromText(rawText);
     setLines(nextLines);
     setScriptureStatus(`Đã tách ${nextLines.length} dòng Kinh.`);
+    scheduleLineTiming(nextLines);
   }
 
-  async function autoTiming(sourceLines = lines) {
+  async function autoTiming(sourceLines = lines, options: { quiet?: boolean } = {}) {
+    const requestId = ++autoTimingRequest.current;
     const cleanLines = sourceLines.map((line) => line.content.trim()).filter(Boolean);
     if (cleanLines.length === 0) {
-      setScriptureStatus('Chưa có nội dung để tự tính thời gian.');
+      if (!options.quiet) setScriptureStatus('Chưa có nội dung để tự tính thời gian.');
       return;
     }
     setScriptureBusy(true);
-    setScriptureStatus(`Đang tự tính thời gian cho ${cleanLines.length} dòng...`);
+    if (!options.quiet) setScriptureStatus(`Đang tự tính thời gian cho ${cleanLines.length} dòng...`);
     try {
       const generated = await api.generateScriptureTiming({ lines: cleanLines });
+      if (requestId !== autoTimingRequest.current) return;
       setLines(generated);
+      setRawText(generated.map((line) => line.content).join('\n'));
       setScriptureStatus(`Đã tự tính thời gian cho ${generated.length} dòng.`);
     } catch (caught) {
       setScriptureStatus(caught instanceof Error ? caught.message : 'Không tự tính được thời gian.');
     } finally {
       setScriptureBusy(false);
     }
+  }
+
+  function syncRawFromLines(nextLines: EditableScriptureLine[]) {
+    setRawText(nextLines.map((line) => line.content).join('\n'));
+  }
+
+  function scheduleLineTiming(nextLines: EditableScriptureLine[]) {
+    window.clearTimeout(autoTimingTimer.current);
+    const cleanLines = nextLines.map((line) => line.content.trim()).filter(Boolean);
+    if (cleanLines.length === 0) return;
+    autoTimingTimer.current = window.setTimeout(() => {
+      void autoTiming(nextLines, { quiet: true });
+    }, 650);
   }
 
   async function importScriptureFile(file?: File) {
@@ -561,11 +581,14 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     setCategoryId('');
     setRawText('');
     setLines([]);
-    setScriptureStatus('Đang tạo bản Đọc Kinh mới.');
+    setScriptureStatus('');
   }
 
-  function updateLine(index: number, patch: Partial<{ content: string; start_time: number }>) {
-    setLines(lines.map((line, current) => (current === index ? { ...line, ...patch } : line)));
+  function updateLine(index: number, patch: Partial<{ content: string; start_time: number }>, shouldRetiming = false) {
+    const nextLines = lines.map((line, current) => (current === index ? { ...line, ...patch } : line));
+    setLines(nextLines);
+    syncRawFromLines(nextLines);
+    if (shouldRetiming) scheduleLineTiming(nextLines);
   }
 
   function moveLine(index: number, direction: -1 | 1) {
@@ -574,6 +597,21 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     const next = [...lines];
     [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
     setLines(next);
+    syncRawFromLines(next);
+    scheduleLineTiming(next);
+  }
+
+  function addLine() {
+    const nextLines = [...lines, { content: '', start_time: lines.length ? lines[lines.length - 1].start_time + 4 : 0 }];
+    setLines(nextLines);
+    syncRawFromLines(nextLines);
+  }
+
+  function removeLine(index: number) {
+    const nextLines = lines.filter((_, current) => current !== index);
+    setLines(nextLines);
+    syncRawFromLines(nextLines);
+    scheduleLineTiming(nextLines);
   }
 
   return (
@@ -646,7 +684,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           </label>
           <label className="span">
             Dán nội dung Kinh, mỗi câu một dòng
-            <textarea className="scripture-raw" value={rawText} onChange={(event) => setRawText(event.target.value)} />
+            <textarea className="scripture-raw" value={rawText} placeholder={scriptureRawPlaceholder} onChange={(event) => setRawText(event.target.value)} />
           </label>
           <div className="scripture-actions span">
             <button className="ghost" type="button" onClick={splitText}>
@@ -703,7 +741,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             {lines.map((line, index) => (
               <div className="line-row" key={`${index}-${line.content}`}>
                 <span>{index + 1}</span>
-                <textarea value={line.content} onChange={(event) => updateLine(index, { content: event.target.value })} />
+                <textarea value={line.content} onChange={(event) => updateLine(index, { content: event.target.value }, true)} />
                 <input type="number" min="0" step="0.1" value={line.start_time} onChange={(event) => updateLine(index, { start_time: Number(event.target.value) })} />
                 <button className="ghost icon-only" type="button" onClick={() => moveLine(index, -1)} aria-label="Đưa dòng lên">
                   ↑
@@ -711,13 +749,13 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
                 <button className="ghost icon-only" type="button" onClick={() => moveLine(index, 1)} aria-label="Đưa dòng xuống">
                   ↓
                 </button>
-                <button className="danger icon-only" type="button" onClick={() => setLines(lines.filter((_, current) => current !== index))} aria-label="Xóa dòng">
+                <button className="danger icon-only" type="button" onClick={() => removeLine(index)} aria-label="Xóa dòng">
                   <Trash2 size={15} />
                 </button>
               </div>
             ))}
           </div>
-          <button className="ghost" type="button" onClick={() => setLines([...lines, { content: '', start_time: lines.length ? lines[lines.length - 1].start_time + 4 : 0 }])}>
+          <button className="ghost" type="button" onClick={addLine}>
             <Plus size={16} />
             Thêm dòng
           </button>
