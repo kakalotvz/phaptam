@@ -1027,39 +1027,67 @@ th {
   }
 }
 
-/* ===== Editor image/video alignment ===== */
-/*
- * Image và Video là inline nodes, nằm bên trong <p>.
- * Canh lề được điều khiển bởi text-align của <p> cha.
- * VD: <p style="text-align:center"><img .../></p> → ảnh ở giữa
- */
-.modern-editor-surface p {
-  /* Đảm bảo paragraph bao quanh inline image hiển thị đúng */
-  line-height: 1.6;
+/* ===== Editor formatting ===== */
+.modern-editor-surface sup {
+  font-size: 0.65em;
+  vertical-align: super;
+  line-height: 0;
+  color: #8b5e3c; /* Thêm chút màu để phân biệt */
 }
 
+/* ===== Editor image/video alignment ===== */
 .modern-editor-surface img,
 .modern-editor-surface video,
 .modern-editor-surface iframe {
   max-width: 100%;
   height: auto;
-  vertical-align: middle;
   cursor: pointer;
+  transition: transform 0.2s;
+  display: inline-block; /* Mặc định là inline để dễ viết văn bản xung quanh */
+}
+
+/* Khi có thuộc tính canh lề, chuyển thành block để margin: auto có tác dụng */
+.modern-editor-surface img[data-text-align],
+.modern-editor-surface video[data-text-align],
+.modern-editor-surface iframe[data-text-align] {
+  display: block;
+}
+
+.modern-editor-surface img[data-text-align="left"],
+.modern-editor-surface video[data-text-align="left"],
+.modern-editor-surface iframe[data-text-align="left"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.modern-editor-surface img[data-text-align="center"],
+.modern-editor-surface video[data-text-align="center"],
+.modern-editor-surface iframe[data-text-align="center"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.modern-editor-surface img[data-text-align="right"],
+.modern-editor-surface video[data-text-align="right"],
+.modern-editor-surface iframe[data-text-align="right"] {
+  margin-left: auto;
+  margin-right: 0;
 }
 
 /* Hiệu ứng khi click chọn (NodeSelection) */
 .modern-editor-surface img.ProseMirror-selectednode,
 .modern-editor-surface video.ProseMirror-selectednode,
 .modern-editor-surface iframe.ProseMirror-selectednode {
-  outline: 3px solid #8b5e3c;
+  outline: 3px solid #4f46e5;
   outline-offset: 2px;
   border-radius: 4px;
+  box-shadow: 0 0 15px rgba(79, 70, 229, 0.3);
 }
 
 /* Kích thước giới hạn */
 .modern-editor-surface img {
   max-height: 480px;
-  border-radius: 6px;
+  border-radius: 8px;
   object-fit: contain;
 }
 
@@ -1067,11 +1095,6 @@ th {
   width: min(100%, 640px);
   height: 360px;
   border: none;
-  border-radius: 8px;
-}
-
-.modern-editor-surface video {
-  max-height: 360px;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 

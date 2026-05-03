@@ -1523,7 +1523,13 @@ const VideoEmbedExtension = TiptapNode.create({
     return {
       src: {
         default: null,
-        parseHTML: (element) => element.getAttribute('src') || element.getAttribute('data-video'),
+      },
+      textAlign: {
+        default: 'left',
+        renderHTML: (attributes) => ({
+          'data-text-align': attributes.textAlign,
+        }),
+        parseHTML: (element) => element.getAttribute('data-text-align') || 'left',
       },
     };
   },
@@ -1583,7 +1589,7 @@ function RichTextEditor({
         inline: true,
       }),
       TextAlignExtension.configure({
-        types: ['heading', 'paragraph'],
+        types: ['heading', 'paragraph', 'image', 'videoEmbed'],
       }),
       PlaceholderExtension.configure({
         placeholder: placeholder ?? '',
