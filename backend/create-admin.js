@@ -4,13 +4,13 @@ const prisma = new PrismaClient();
 
 async function run() {
   console.log('Đang khởi tạo tài khoản Admin...');
-  const email = 'admin@phaptam.vn';
-  const username = 'admin_pt';
-  const password = '123';
+  const email = 'leminhkhoa25794@gmail.com';
+  const username = 'admin';
+  const password = 'Minhkho@94';
   const hash = await bcrypt.hash(password, 12);
 
   const existing = await prisma.user.findFirst({ where: { email } });
-  
+
   if (existing) {
     await prisma.user.update({
       where: { id: existing.id },
