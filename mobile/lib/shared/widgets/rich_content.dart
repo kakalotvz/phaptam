@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class RichContent extends StatelessWidget {
   const RichContent({
@@ -252,6 +254,22 @@ String _normalize(String value) {
         (match) => '\n\n[[video:${match.group(1) ?? ''}]]\n\n',
       )
       .replaceAllMapped(
+        RegExp(
+          r"""<video[^>]*src=["']([^"']+)["'][^>]*>.*?</video>""",
+          caseSensitive: false,
+          dotAll: true,
+        ),
+        (match) => '\n\n[[video:${match.group(1) ?? ''}]]\n\n',
+      )
+      .replaceAllMapped(
+        RegExp(
+          r"""<video[^>]*>.*?<source[^>]*src=["']([^"']+)["'][^>]*>.*?</video>""",
+          caseSensitive: false,
+          dotAll: true,
+        ),
+        (match) => '\n\n[[video:${match.group(1) ?? ''}]]\n\n',
+      )
+      .replaceAllMapped(
         RegExp(r'<li[^>]*>(.*?)</li>', caseSensitive: false, dotAll: true),
         (match) => '\n- ${match.group(1) ?? ''}',
       )
@@ -399,6 +417,8 @@ List<InlineSpan> _inlineSpans(String value, BuildContext context) {
             decoration: TextDecoration.underline,
             fontWeight: FontWeight.w700,
           ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () => _openExternalUrl(linkUrl),
         ),
       );
     }
@@ -418,30 +438,43 @@ class _VideoLinkCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.play_circle_outline,
-            color: Theme.of(context).colorScheme.primary,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => _openExternalUrl(url),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Icon(
+                Icons.play_circle_outline,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  url,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const Icon(Icons.open_in_new, size: 18),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              url,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
+}
+
+Future<void> _openExternalUrl(String value) async {
+  final uri = Uri.tryParse(value.trim());
+  if (uri == null || !uri.hasScheme) return;
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
 }

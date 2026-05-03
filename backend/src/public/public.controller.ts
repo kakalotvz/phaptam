@@ -44,6 +44,8 @@ export class PublicController {
         backgroundImageUrl: true,
         categoryId: true,
         category: true,
+        viewCount: true,
+        createdAt: true,
         lines: {
           orderBy: { orderIndex: 'asc' },
           select: { content: true, startTime: true },

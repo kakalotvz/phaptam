@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/network/api_client.dart';
@@ -13,6 +16,16 @@ import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
 enum _VideoSortOrder { newest, oldest, popular }
+
+void showVideoPlayer(BuildContext context, VideoItem video) {
+  unawaited(apiClient.post('/video/${video.id}/view', {}));
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) => _VideoPlayerSheet(video: video),
+  );
+}
 
 class VideoScreen extends ConsumerStatefulWidget {
   const VideoScreen({super.key});
@@ -206,13 +219,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
   }
 
   void _showVideoPlayer(BuildContext context, VideoItem video) {
-    unawaited(apiClient.post('/video/${video.id}/view', {}));
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => _VideoPlayerSheet(video: video),
-    );
+    showVideoPlayer(context, video);
   }
 }
 
@@ -326,6 +333,7 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
   int customRepeatCount = 5;
   Duration? sleepTimer;
   VideoPlayerController? controller;
+  ChewieController? chewieController;
   bool loading = true;
 
   String get repeatLabel => switch (repeatMode) {
@@ -376,6 +384,7 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
 
   @override
   void dispose() {
+    chewieController?.dispose();
     controller?.dispose();
     super.dispose();
   }
@@ -394,21 +403,62 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
       await nextController.dispose();
       return;
     }
+    final colorScheme = Theme.of(context).colorScheme;
+    final nextChewieController = ChewieController(
+      videoPlayerController: nextController,
+      autoPlay: true,
+      allowFullScreen: true,
+      allowMuting: true,
+      allowPlaybackSpeedChanging: false,
+      showControls: true,
+      materialProgressColors: ChewieProgressColors(
+        playedColor: colorScheme.primary,
+        handleColor: colorScheme.primary,
+        bufferedColor: colorScheme.primaryContainer,
+        backgroundColor: colorScheme.surfaceContainerHighest,
+      ),
+      optionsTranslation: OptionsTranslation(
+        playbackSpeedButtonText: 'Tốc độ',
+        subtitlesButtonText: 'Phụ đề',
+        cancelButtonText: 'Hủy',
+      ),
+      additionalOptions: (context) => [
+        OptionItem(
+          onTap: (_) => _shareVideo(),
+          iconData: Icons.share_outlined,
+          title: 'Chia sẻ',
+        ),
+        OptionItem(
+          onTap: (_) => _enterPictureInPicture(),
+          iconData: Icons.picture_in_picture_alt,
+          title: 'Xem trong nền PiP',
+        ),
+        OptionItem(
+          onTap: (_) {
+            final player = controller;
+            if (player == null) return;
+            final next = player.value.position - const Duration(seconds: 10);
+            unawaited(player.seekTo(next < Duration.zero ? Duration.zero : next));
+          },
+          iconData: Icons.replay_10,
+          title: 'Tua lại 10 giây',
+        ),
+        OptionItem(
+          onTap: (_) {
+            final player = controller;
+            if (player == null) return;
+            unawaited(player.seekTo(player.value.position + const Duration(seconds: 10)));
+          },
+          iconData: Icons.forward_10,
+          title: 'Tua tới 10 giây',
+        ),
+      ],
+    );
     setState(() {
       controller = nextController;
+      chewieController = nextChewieController;
       loading = false;
     });
-  }
-
-  Future<void> _togglePlayback() async {
-    final player = controller;
-    if (player == null || loading) return;
-    if (player.value.isPlaying) {
-      await player.pause();
-    } else {
-      await player.play();
-    }
-    if (mounted) setState(() {});
   }
 
   @override
@@ -420,6 +470,7 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
     final downloaded =
         downloads?.isDownloaded(mediaKey('video', video.id)) ?? false;
     final player = controller;
+    final chewie = chewieController;
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 8, 22, 32),
       child: Column(
@@ -429,8 +480,18 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
             borderRadius: BorderRadius.circular(22),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: player != null && player.value.isInitialized
-                  ? VideoPlayer(player)
+              child: player != null && player.value.isInitialized && chewie != null
+                  ? GestureDetector(
+                      onDoubleTapDown: (details) {
+                        final width = MediaQuery.sizeOf(context).width;
+                        final offset = details.localPosition.dx < width / 2
+                            ? const Duration(seconds: -10)
+                            : const Duration(seconds: 10);
+                        final next = player.value.position + offset;
+                        unawaited(player.seekTo(next < Duration.zero ? Duration.zero : next));
+                      },
+                      child: Chewie(controller: chewie),
+                    )
                   : Stack(
                       fit: StackFit.expand,
                       children: [
@@ -461,16 +522,6 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
             downloaded
                 ? '${video.teacher} • ${video.topic} • Bản offline'
                 : '${video.teacher} • ${video.topic}',
-          ),
-          const SizedBox(height: 18),
-          IconButton.filled(
-            onPressed: _isDirectVideoUrl(video.videoUrl)
-                ? _togglePlayback
-                : null,
-            iconSize: 34,
-            icon: Icon(
-              player?.value.isPlaying == true ? Icons.pause : Icons.play_arrow,
-            ),
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -540,6 +591,16 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
         ],
       ),
     );
+  }
+
+  void _shareVideo() {
+    final text = '${widget.video.title}\n${widget.video.videoUrl}\n\nChia sẻ từ ứng dụng Pháp Tâm';
+    unawaited(SharePlus.instance.share(ShareParams(text: text)));
+  }
+
+  void _enterPictureInPicture() {
+    const channel = MethodChannel('phaptam/pip');
+    unawaited(channel.invokeMethod<bool>('enter'));
   }
 }
 

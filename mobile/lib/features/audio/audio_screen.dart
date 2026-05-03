@@ -13,6 +13,16 @@ import '../content/content_providers.dart';
 
 enum _AudioSortOrder { newest, oldest, popular }
 
+void showAudioPlayer(BuildContext context, AudioItem audio) {
+  unawaited(apiClient.post('/audio/${audio.id}/view', {}));
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) => _AudioPlayerSheet(audio: audio),
+  );
+}
+
 class AudioScreen extends ConsumerStatefulWidget {
   const AudioScreen({super.key});
 
@@ -179,13 +189,7 @@ class _AudioScreenState extends ConsumerState<AudioScreen> {
   }
 
   void _showPlayer(BuildContext context, AudioItem audio) {
-    unawaited(apiClient.post('/audio/${audio.id}/view', {}));
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => _AudioPlayerSheet(audio: audio),
-    );
+    showAudioPlayer(context, audio);
   }
 }
 

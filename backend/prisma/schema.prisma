@@ -200,6 +200,15 @@ model RssSource {
   updatedAt DateTime @updatedAt @map("updated_at")
 }
 
+model AppSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
+
 model NewsCategory {
   id          String     @id @default(uuid())
   name        String

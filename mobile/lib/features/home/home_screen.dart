@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/network/api_client.dart';
 import '../../shared/widgets/content_cards.dart';
 import '../../shared/widgets/rich_content.dart';
+import '../audio/audio_screen.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
+import '../video/video_screen.dart';
 
 enum _NewsSortOrder { newest, oldest, popular }
 
@@ -86,7 +90,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         )
                       : CalmSection(
                           title: 'Nghe tiếp',
-                          child: AudioTile(audio: items.first),
+                          child: AudioTile(
+                            audio: items.first,
+                            onTap: () => showAudioPlayer(context, items.first),
+                            onFavorite: () => _favoriteAudio(context, ref, items.first),
+                          ),
                         ),
                   loading: () => const _EmptyCard(
                     icon: Icons.headphones_outlined,
@@ -115,7 +123,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   const SizedBox(width: 14),
                               itemBuilder: (context, index) => SizedBox(
                                 width: 280,
-                                child: VideoCard(video: items[index]),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: () => showVideoPlayer(context, items[index]),
+                                  child: VideoCard(video: items[index]),
+                                ),
                               ),
                             ),
                           ),
@@ -381,68 +393,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _showShareSheet(BuildContext context, NewsItem item) {
     final link = item.link ?? 'Pháp Tâm - ${item.title}';
-    final shareText = '${item.title}\n$link';
-    final encodedLink = Uri.encodeComponent(link);
-    final platforms = {
-      'Facebook': 'https://www.facebook.com/sharer/sharer.php?u=$encodedLink',
-      'Zalo': link,
-      'Messenger': link,
-      'X':
-          'https://twitter.com/intent/tweet?text=${Uri.encodeComponent(item.title)}&url=$encodedLink',
-    };
-
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Wrap(
-              runSpacing: 8,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.copy),
-                  title: const Text('Sao chép nội dung chia sẻ'),
-                  subtitle: Text(item.title),
-                  onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: shareText));
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã sao chép nội dung chia sẻ'),
-                        ),
-                      );
-                    }
-                  },
-                ),
-                for (final entry in platforms.entries)
-                  ListTile(
-                    leading: const Icon(Icons.public),
-                    title: Text(entry.key),
-                    subtitle: Text(
-                      entry.value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () async {
-                      await Clipboard.setData(ClipboardData(text: entry.value));
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Đã sao chép link ${entry.key}'),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
+    unawaited(
+      SharePlus.instance.share(
+        ShareParams(
+          text: '${item.title}\n$link\n\nChia sẻ từ ứng dụng Pháp Tâm',
+          subject: item.title,
+        ),
+      ),
     );
+  }
+
+  Future<void> _favoriteAudio(BuildContext context, WidgetRef ref, AudioItem audio) async {
+    if (!ref.read(isLoggedInProvider)) {
+      context.push('/login');
+      return;
+    }
+    try {
+      await apiClient.post('/favorites', {
+        'type': 'AUDIO',
+        'contentId': audio.id,
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã thêm vào yêu thích')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    }
   }
 }
 
@@ -501,22 +483,6 @@ class _NewsListTile extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.remove_red_eye_outlined,
-                          size: 15,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${item.viewCount}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
                     ),
                     if (onShare != null) ...[
                       const SizedBox(height: 8),

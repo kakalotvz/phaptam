@@ -28,6 +28,7 @@ import {
   ImagePlus,
   Italic,
   AlignCenter,
+  AlignJustify,
   AlignLeft,
   AlignRight,
   LayoutDashboard,
@@ -58,6 +59,7 @@ import {
 import {
   api,
   AdminUser,
+  AppSettings,
   Audio,
   AudioCategory,
   Banner,
@@ -168,6 +170,7 @@ type Section = 'overview' | 'audio' | 'scripture' | 'reminder' | 'video' | 'medi
 
 type DataState = {
   overview: Record<string, number>;
+  settings: AppSettings;
   audioCategories: AudioCategory[];
   videoCategories: VideoCategory[];
   audios: Audio[];
@@ -186,6 +189,7 @@ type DataState = {
 
 const emptyData: DataState = {
   overview: {},
+  settings: { contentPageSize: 10 },
   audioCategories: [],
   videoCategories: [],
   audios: [],
@@ -218,6 +222,8 @@ const nav = [
   { id: 'settings', label: 'Cấu hình', icon: Settings },
 ] as const;
 
+const SettingsContext = React.createContext<AppSettings>({ contentPageSize: 10 });
+
 function App() {
   const [section, setSection] = useState<Section>('overview');
   const [data, setData] = useState<DataState>(emptyData);
@@ -239,6 +245,7 @@ function App() {
 
       const [
         overview,
+        settings,
         audioCategories,
         videoCategories,
         audios,
@@ -255,6 +262,7 @@ function App() {
         users,
       ] = await Promise.all([
         safe(() => api.overview(), {}),
+        safe(() => api.settings(), { contentPageSize: 10 }),
         safe(() => api.audioCategories(), []),
         safe(() => api.videoCategories(), []),
         safe(() => api.audios(), []),
@@ -272,6 +280,7 @@ function App() {
       ]);
       setData({
         overview,
+        settings,
         audioCategories,
         videoCategories,
         audios,
@@ -313,6 +322,7 @@ function App() {
   }, []);
 
   return (
+    <SettingsContext.Provider value={data.settings}>
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
@@ -374,6 +384,7 @@ function App() {
         )}
       </main>
     </div>
+    </SettingsContext.Provider>
   );
 }
 
@@ -482,6 +493,7 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
             ['title', 'Tiêu đề'],
             [(row: Audio) => row.category?.name ?? '-', 'Danh mục'],
             [(row: Audio) => formatDurationSeconds(row.duration), 'Thời lượng'],
+            [(row: Audio) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
             ['audioUrl', 'Audio URL'],
             [
               (row: Audio) => (
@@ -869,6 +881,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             ['title', 'Tiêu đề'],
             [(row: Scripture) => row.category?.name ?? '-', 'Danh mục'],
             [(row: Scripture) => row.lines?.length ?? row._count?.lines ?? 0, 'Số dòng'],
+            [(row: Scripture) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
             [
               (row: Scripture) => (
                 <button className="ghost" type="button" onClick={() => openScripture(row)}>
@@ -1123,6 +1136,7 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
             ['title', 'Tiêu đề'],
             ['teacher', 'Giảng sư'],
             [(row: Video) => row.category?.name ?? '-', 'Danh mục'],
+            [(row: Video) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
             ['videoUrl', 'Video URL'],
             [
               (row: Video) => (
@@ -1494,6 +1508,10 @@ function RichTextEditor({
   function addVideo() {
     const url = window.prompt('Dán link video YouTube hoặc MP4');
     if (!url) return;
+    if (/\.mp4(?:\?|#|$)/i.test(url)) {
+      insertHtml(`<video controls src="${escapeHtml(url)}"></video>`);
+      return;
+    }
     insertEmbed('video', url);
   }
 
@@ -1539,6 +1557,9 @@ function RichTextEditor({
         <button type="button" onClick={() => runCommand('align', 'right')} title="Căn phải">
           <AlignRight size={16} />
         </button>
+        <button type="button" onClick={() => runCommand('align', 'justify')} title="Căn đều">
+          <AlignJustify size={16} />
+        </button>
         <button type="button" onClick={addLink} title="Liên kết">
           <Link2 size={16} />
         </button>
@@ -1566,6 +1587,10 @@ function RichTextEditor({
         />
       </div>
       <div className="rich-surface quill-surface" ref={editorMountRef} />
+      <div className={`rich-preview ${compact ? 'compact' : ''}`}>
+        <span className="bbcode-preview-label">Xem trước</span>
+        <div dangerouslySetInnerHTML={{ __html: value ? sanitizeEditorHtml(value) : '<p class="muted">Chưa có nội dung xem trước.</p>' }} />
+      </div>
     </div>
   );
 }
@@ -1699,6 +1724,15 @@ function sanitizeEditorNode(node: ChildNode): Node | null {
     return frame;
   }
 
+  if (tag === 'video') {
+    const src = node.getAttribute('src') || node.querySelector('source')?.getAttribute('src') || '';
+    if (!isSafeMediaUrl(src)) return null;
+    const video = document.createElement('video');
+    video.src = src;
+    video.controls = true;
+    return video;
+  }
+
   const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'figure']);
   if (!allowedTags.has(tag)) {
     const fragment = document.createDocumentFragment();
@@ -1710,6 +1744,10 @@ function sanitizeEditorNode(node: ChildNode): Node | null {
   }
 
   const next = document.createElement(tag);
+  const alignClass = Array.from(node.classList).find((className) => /^ql-align-(center|right|justify)$/.test(className));
+  const textAlign = node.style.textAlign;
+  if (alignClass) next.classList.add(alignClass);
+  if (['center', 'right', 'justify'].includes(textAlign)) next.style.textAlign = textAlign;
   if (tag === 'a') {
     const href = node.getAttribute('href') || '';
     if (!isSafeMediaUrl(href)) return document.createTextNode(node.textContent ?? '');
@@ -1977,13 +2015,13 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
     void run(() => api.update(`/admin/news-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục tin');
   }
 
-  function editNews(row: NewsItem) {
+function editNews(row: NewsItem) {
     setEditingNewsId(row.id);
     setTitle(row.title);
     setSummary(row.summary ?? '');
     setImageUrl(row.imageUrl ?? '');
     setLink(row.link ?? '');
-    setContent(newsContentToPlainText(row.content ?? ''));
+    setContent(row.content ?? '');
     setCategoryId(row.categoryId ?? '');
     setShareEnabled(row.shareEnabled);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2073,11 +2111,11 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
           </label>
           <label className="span">
             Nội dung
-            <BbCodeTextarea
-              className="news-content-input"
+            <RichTextEditor
               value={content}
               onChange={setContent}
               placeholder="Viết nội dung tin tức"
+              imageUploadKind="images/news"
             />
           </label>
           <label className="check-row span">
@@ -2092,7 +2130,7 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
               const payload = {
                 title,
                 summary,
-                content: newsContentToPlainText(content),
+                content,
                 imageUrl,
                 link,
                 categoryId,
@@ -2124,6 +2162,7 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
             [(row: NewsItem) => row.category?.name ?? '-', 'Danh mục'],
             [(row: NewsItem) => (row.sourceType === 'MANUAL' ? 'Tin riêng' : 'RSS'), 'Nguồn'],
             [(row: NewsItem) => (row.shareEnabled ? 'Cho phép' : 'Tắt'), 'Chia sẻ'],
+            [(row: NewsItem) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
             [(row: NewsItem) => new Date(row.publishedAt).toLocaleDateString('vi-VN'), 'Ngày đăng'],
             [
               (row: NewsItem) => (
@@ -2306,7 +2345,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
           )}
           <label>
             Nội dung
-            <BbCodeTextarea
+            <RichTextEditor
               value={content}
               onChange={setContent}
               compact
@@ -2535,6 +2574,8 @@ function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
 
 function SettingsPanel({ onSaved }: { onSaved: () => void }) {
   const [value, setValue] = useState(getApiBaseUrl());
+  const settings = React.useContext(SettingsContext);
+  const [contentPageSize, setContentPageSize] = useState(String(settings.contentPageSize));
   const [usage, setUsage] = useState<R2Usage | null>(null);
   const [usageError, setUsageError] = useState('');
 
@@ -2550,6 +2591,10 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
   useEffect(() => {
     void loadUsage();
   }, []);
+
+  useEffect(() => {
+    setContentPageSize(String(settings.contentPageSize));
+  }, [settings.contentPageSize]);
 
   return (
     <div className="single-column">
@@ -2570,6 +2615,32 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
           <button className="primary" type="submit">
             <Save size={16} />
             Lưu cấu hình
+          </button>
+        </form>
+      </Panel>
+      <Panel title="Cấu hình hiển thị">
+        <form
+          className="form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await api.updateSettings({ contentPageSize: Number(contentPageSize) });
+            void onSaved();
+          }}
+        >
+          <label>
+            Số bài mỗi trang
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={contentPageSize}
+              onChange={(event) => setContentPageSize(event.target.value)}
+            />
+            <span className="field-note">Áp dụng chung cho các bảng danh sách trong toàn bộ menu quản trị.</span>
+          </label>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu số bài mỗi trang
           </button>
         </form>
       </Panel>
@@ -2769,50 +2840,82 @@ function Table<T extends { id: string }>({
   columns: Array<[keyof T | ((row: T) => React.ReactNode), string]>;
   onDelete?: (row: T) => void;
 }) {
+  const { contentPageSize } = React.useContext(SettingsContext);
+  const pageSize = Math.max(1, Number(contentPageSize || 10));
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const visibleRows = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [pageSize, rows.length]);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+
   if (rows.length === 0) return <div className="empty">Chưa có dữ liệu.</div>;
 
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {columns.map(([, label]) => (
-              <th key={label}>{label}</th>
-            ))}
-            {onDelete && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              {columns.map(([field, label]) => {
-                const value = typeof field === 'function' ? field(row) : (row[field] as React.ReactNode);
-                const isImage = typeof value === 'string' && /^https?:\/\//.test(value) && label === 'Ảnh';
-                return (
-                  <td key={label}>
-                    {isImage ? <img className="table-image" src={value} alt="" /> : value || '-'}
-                  </td>
-                );
-              })}
-              {onDelete && (
-                <td className="actions">
-                  <button
-                    className="danger"
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm('Xóa mục này? Thao tác này không thể hoàn tác.')) onDelete(row);
-                    }}
-                  >
-                    <Trash2 size={15} />
-                    Xóa
-                  </button>
-                </td>
-              )}
+    <>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {columns.map(([, label]) => (
+                <th key={label}>{label}</th>
+              ))}
+              {onDelete && <th />}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {visibleRows.map((row) => (
+              <tr key={row.id}>
+                {columns.map(([field, label]) => {
+                  const value = typeof field === 'function' ? field(row) : (row[field] as React.ReactNode);
+                  const isImage = typeof value === 'string' && /^https?:\/\//.test(value) && label === 'Ảnh';
+                  return (
+                    <td key={label}>
+                      {isImage ? <img className="table-image" src={value} alt="" /> : value || '-'}
+                    </td>
+                  );
+                })}
+                {onDelete && (
+                  <td className="actions">
+                    <button
+                      className="danger"
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm('Xóa mục này? Thao tác này không thể hoàn tác.')) onDelete(row);
+                      }}
+                    >
+                      <Trash2 size={15} />
+                      Xóa
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {pageCount > 1 && (
+        <div className="pagination">
+          <span>
+            Trang {safePage}/{pageCount} • {rows.length.toLocaleString('vi-VN')} mục
+          </span>
+          <div>
+            <button className="ghost" type="button" disabled={safePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+              Trước
+            </button>
+            <button className="ghost" type="button" disabled={safePage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>
+              Sau
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

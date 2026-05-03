@@ -41,11 +41,20 @@ class CalmSection extends StatelessWidget {
 }
 
 class AudioTile extends StatelessWidget {
-  const AudioTile({required this.audio, this.onTap, this.trailing, super.key});
+  const AudioTile({
+    required this.audio,
+    this.onTap,
+    this.trailing,
+    this.onFavorite,
+    this.favoriteSelected = false,
+    super.key,
+  });
 
   final AudioItem audio;
   final VoidCallback? onTap;
   final Widget? trailing;
+  final VoidCallback? onFavorite;
+  final bool favoriteSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -89,16 +98,16 @@ class AudioTile extends StatelessWidget {
                       '${audio.category} • ${_formatDuration(audio.duration)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    const SizedBox(height: 6),
-                    _ViewCount(count: audio.viewCount),
                   ],
                 ),
               ),
               trailing ??
                   IconButton(
                     tooltip: 'Yêu thích',
-                    onPressed: () {},
-                    icon: const Icon(Icons.favorite_border),
+                    onPressed: onFavorite,
+                    icon: Icon(
+                      favoriteSelected ? Icons.favorite : Icons.favorite_border,
+                    ),
                   ),
             ],
           ),
@@ -166,35 +175,11 @@ class VideoCard extends StatelessWidget {
                   '${video.teacher} • ${video.topic}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                const SizedBox(height: 6),
-                _ViewCount(count: video.viewCount),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ViewCount extends StatelessWidget {
-  const _ViewCount({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.remove_red_eye_outlined,
-          size: 15,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 4),
-        Text('$count', style: Theme.of(context).textTheme.bodySmall),
-      ],
     );
   }
 }

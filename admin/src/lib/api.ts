@@ -22,6 +22,7 @@ export type Audio = {
   thumbnailUrl?: string;
   categoryId: string;
   duration: number;
+  viewCount: number;
   category?: AudioCategory;
 };
 
@@ -39,6 +40,7 @@ export type Scripture = {
   description?: string;
   backgroundImageUrl?: string;
   categoryId?: string;
+  viewCount: number;
   category?: AudioCategory;
   lines: ScriptureLine[];
   _count?: { lines: number };
@@ -52,6 +54,7 @@ export type Video = {
   thumbnailUrl?: string;
   categoryId: string;
   teacher?: string;
+  viewCount: number;
   category?: VideoCategory;
 };
 
@@ -81,6 +84,7 @@ export type NewsItem = {
   sourceName?: string;
   sourceType: 'RSS' | 'MANUAL';
   shareEnabled: boolean;
+  viewCount: number;
   publishedAt: string;
 };
 
@@ -178,6 +182,10 @@ export type R2Usage = {
   };
 };
 
+export type AppSettings = {
+  contentPageSize: number;
+};
+
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
 
 export function defaultApiBaseUrl() {
@@ -212,6 +220,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   overview: () => request<Record<string, number>>('/admin/overview'),
+  settings: () => request<AppSettings>('/admin/settings'),
+  updateSettings: (data: Partial<AppSettings>) =>
+    request<AppSettings>('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   audioCategories: () => request<AudioCategory[]>('/admin/audio-category'),
   videoCategories: () => request<VideoCategory[]>('/admin/video-category'),
   audios: () => request<Audio[]>('/admin/audio'),

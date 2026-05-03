@@ -55,6 +55,27 @@ export class AdminController {
     };
   }
 
+  @Get('settings')
+  async settings() {
+    return {
+      contentPageSize: await this.contentPageSize(),
+    };
+  }
+
+  @Patch('settings')
+  async updateSettings(@Body() data: { contentPageSize?: number }) {
+    if (data.contentPageSize !== undefined) {
+      const pageSize = this.normalizePageSize(data.contentPageSize);
+      await this.prisma.appSetting.upsert({
+        where: { key: 'contentPageSize' },
+        update: { value: String(pageSize) },
+        create: { key: 'contentPageSize', value: String(pageSize) },
+      });
+    }
+
+    return this.settings();
+  }
+
   @Get('r2/usage')
   r2Usage() {
     return this.r2.usage();
@@ -634,6 +655,17 @@ export class AdminController {
 
   private async deleteReplacedR2Media(pairs: Array<[string | null | undefined, string | null | undefined]>) {
     await this.r2.deletePublicUrls(pairs.filter(([previous, next]) => next !== undefined && previous !== next).map(([previous]) => previous));
+  }
+
+  private async contentPageSize() {
+    const setting = await this.prisma.appSetting.findUnique({ where: { key: 'contentPageSize' } });
+    return this.normalizePageSize(setting?.value ?? 10);
+  }
+
+  private normalizePageSize(value: unknown) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 10;
+    return Math.min(100, Math.max(1, Math.round(parsed)));
   }
 }
 

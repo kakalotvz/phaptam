@@ -571,21 +571,7 @@ class _ScriptureListCard extends StatelessWidget {
         isThreeLine: scripture.lines.isNotEmpty,
         trailing: scripture.lines.isEmpty
             ? const Icon(Icons.info_outline)
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.chevron_right),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.remove_red_eye_outlined, size: 14),
-                      const SizedBox(width: 3),
-                      Text('${scripture.viewCount}'),
-                    ],
-                  ),
-                ],
-              ),
+            : const Icon(Icons.chevron_right),
         onTap: scripture.lines.isEmpty
             ? null
             : () => Navigator.of(context).push(
