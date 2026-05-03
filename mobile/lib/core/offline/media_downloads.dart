@@ -55,6 +55,7 @@ class DownloadedMedia {
     required this.url,
     required this.path,
     required this.downloadedAt,
+    required this.sizeBytes,
   });
 
   final String key;
@@ -62,16 +63,20 @@ class DownloadedMedia {
   final String url;
   final String path;
   final DateTime downloadedAt;
+  final int sizeBytes;
 
   factory DownloadedMedia.fromJson(Map<String, dynamic> json) {
+    final path = json['path'] as String? ?? '';
     return DownloadedMedia(
       key: json['key'] as String? ?? '',
       title: json['title'] as String? ?? '',
       url: json['url'] as String? ?? '',
-      path: json['path'] as String? ?? '',
+      path: path,
       downloadedAt:
           DateTime.tryParse(json['downloadedAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
+      sizeBytes:
+          NumberParser.asInt(json['sizeBytes']) ?? _fileSizeIfExists(path),
     );
   }
 
@@ -82,6 +87,7 @@ class DownloadedMedia {
       'url': url,
       'path': path,
       'downloadedAt': downloadedAt.toIso8601String(),
+      'sizeBytes': sizeBytes,
     };
   }
 }
@@ -177,6 +183,7 @@ class MediaDownloadController extends AsyncNotifier<MediaDownloadState> {
 
     if (await target.exists()) await target.delete();
     await temp.rename(target.path);
+    final sizeBytes = await target.length();
 
     final latest = state.value ?? current;
     final items = Map<String, DownloadedMedia>.from(latest.items)
@@ -186,6 +193,7 @@ class MediaDownloadController extends AsyncNotifier<MediaDownloadState> {
         url: url,
         path: target.path,
         downloadedAt: DateTime.now(),
+        sizeBytes: sizeBytes > 0 ? sizeBytes : received,
       );
     final nextProgress = Map<String, double>.from(latest.progress)..remove(key);
     await _writeIndex(items);
@@ -198,15 +206,24 @@ class MediaDownloadController extends AsyncNotifier<MediaDownloadState> {
     );
   }
 
-  Future<void> remove(String key) async {
+  Future<void> remove(String key, {bool deleteRemote = false}) async {
     final current = state.value ?? await future;
     final item = current.items[key];
-    if (item == null) return;
-    final file = File(item.path);
-    if (await file.exists()) await file.delete();
-    final items = Map<String, DownloadedMedia>.from(current.items)..remove(key);
-    await _writeIndex(items);
-    state = AsyncData(current.copyWith(items: items));
+    if (item != null) {
+      final file = File(item.path);
+      if (await file.exists()) await file.delete();
+      final items = Map<String, DownloadedMedia>.from(current.items)
+        ..remove(key);
+      await _writeIndex(items);
+      state = AsyncData(current.copyWith(items: items));
+    }
+    if (deleteRemote) await deleteRemoteDownload(key);
+  }
+
+  Future<void> deleteRemoteDownload(String key) async {
+    final parts = _partsForKey(key);
+    if (parts == null || apiClient.accessToken == null) return;
+    await apiClient.delete('/me/downloads/${parts.$1}/${parts.$2}');
   }
 
   Future<void> _syncRemoteDownload({
@@ -291,6 +308,25 @@ Future<void> markDownloadRestorePromptSeen() async {
 
 String _safeFileName(String value) {
   return value.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+}
+
+int _fileSizeIfExists(String path) {
+  if (path.isEmpty) return 0;
+  try {
+    final file = File(path);
+    return file.existsSync() ? file.lengthSync() : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+class NumberParser {
+  static int? asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.round();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
 }
 
 String _extensionFor(String url) {

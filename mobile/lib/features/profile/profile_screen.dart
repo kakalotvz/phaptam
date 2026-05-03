@@ -449,22 +449,28 @@ class _DownloadedMediaScreenState extends ConsumerState<DownloadedMediaScreen> {
                       item: item,
                       selected: _selected.contains(item.mediaKey),
                       downloaded: false,
+                      sizeBytes: 0,
                       onSelected: _toggleSelected,
                       onDownload: _running ? null : () => _download([item]),
+                      onDelete: _running ? null : () => _delete(item),
                     ),
                     error: (error, stackTrace) => _DownloadListTile(
                       item: item,
                       selected: _selected.contains(item.mediaKey),
                       downloaded: false,
+                      sizeBytes: 0,
                       onSelected: _toggleSelected,
                       onDownload: _running ? null : () => _download([item]),
+                      onDelete: _running ? null : () => _delete(item),
                     ),
                     data: (state) => _DownloadListTile(
                       item: item,
                       selected: _selected.contains(item.mediaKey),
                       downloaded: state.isDownloaded(item.mediaKey),
+                      sizeBytes: state.items[item.mediaKey]?.sizeBytes ?? 0,
                       onSelected: _toggleSelected,
                       onDownload: _running ? null : () => _download([item]),
+                      onDelete: _running ? null : () => _delete(item),
                     ),
                   ),
               ],
@@ -522,6 +528,39 @@ class _DownloadedMediaScreenState extends ConsumerState<DownloadedMediaScreen> {
       }
     }
   }
+
+  Future<void> _delete(RemoteDownload item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa khỏi danh sách đã tải?'),
+        content: const Text(
+          'Tệp offline trên thiết bị sẽ bị xóa để giải phóng dung lượng. Mục này cũng sẽ được xóa khỏi danh sách đã tải của tài khoản.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref
+        .read(mediaDownloadsProvider.notifier)
+        .remove(item.mediaKey, deleteRemote: true);
+    ref.invalidate(downloadManifestProvider);
+    setState(() => _selected.remove(item.mediaKey));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã xóa khỏi danh sách đã tải')),
+      );
+    }
+  }
 }
 
 class _DownloadListTile extends StatelessWidget {
@@ -529,15 +568,19 @@ class _DownloadListTile extends StatelessWidget {
     required this.item,
     required this.selected,
     required this.downloaded,
+    required this.sizeBytes,
     required this.onSelected,
     required this.onDownload,
+    required this.onDelete,
   });
 
   final RemoteDownload item;
   final bool selected;
   final bool downloaded;
+  final int sizeBytes;
   final void Function(String key, bool selected) onSelected;
   final VoidCallback? onDownload;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -554,19 +597,33 @@ class _DownloadListTile extends StatelessWidget {
           ],
         ),
         title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Text(
-          downloaded ? 'Đã có trên thiết bị' : 'Chưa tải trên thiết bị này',
-        ),
-        trailing: IconButton(
-          tooltip: downloaded ? 'Đã tải' : 'Tải mục này',
-          onPressed: downloaded ? null : onDownload,
-          icon: Icon(
-            downloaded ? Icons.download_done : Icons.download_outlined,
-          ),
+        subtitle: Text(_downloadStatus(downloaded, sizeBytes)),
+        trailing: Wrap(
+          spacing: 2,
+          children: [
+            IconButton(
+              tooltip: downloaded ? 'Đã tải' : 'Tải mục này',
+              onPressed: downloaded ? null : onDownload,
+              icon: Icon(
+                downloaded ? Icons.download_done : Icons.download_outlined,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Xóa khỏi danh sách đã tải',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+String _downloadStatus(bool downloaded, int sizeBytes) {
+  if (!downloaded) return 'Chưa tải trên thiết bị này';
+  final size = _formatBytes(sizeBytes);
+  return size.isEmpty ? 'Đã có trên thiết bị' : 'Đã có trên thiết bị • $size';
 }
 
 Map<String, List<RemoteDownload>> _groupDownloads(List<RemoteDownload> items) {
@@ -593,6 +650,19 @@ IconData _downloadIcon(String type) {
     'meditation' => Icons.self_improvement_outlined,
     _ => Icons.download_outlined,
   };
+}
+
+String _formatBytes(int bytes) {
+  if (bytes <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  var value = bytes.toDouble();
+  var index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  final digits = value >= 10 || index == 0 ? 0 : 1;
+  return '${value.toStringAsFixed(digits)} ${units[index]}';
 }
 
 Future<void> _downloadRemoteItems(
