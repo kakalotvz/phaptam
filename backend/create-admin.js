@@ -25,7 +25,6 @@ async function run() {
         name: 'Quản trị viên',
         passwordHash: hash,
         role: 'ADMIN',
-        acceptedTerms: true,
       },
     });
     console.log(`Đã tạo tài khoản mới:\nEmail: ${email}\nMật khẩu: ${password}`);
