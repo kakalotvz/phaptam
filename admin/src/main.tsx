@@ -1368,26 +1368,20 @@ function RichTextEditor({
   placeholder,
   compact = false,
   imageUploadKind = 'images/news',
-  parseStoredMarkup = true,
-  demoteStoredHeadings = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   compact?: boolean;
   imageUploadKind?: Parameters<typeof uploadToR2>[1];
-  parseStoredMarkup?: boolean;
-  pasteAsPlainText?: boolean;
-  resetFormatOnEnter?: boolean;
-  demoteStoredHeadings?: boolean;
 }) {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const lastHtmlRef = useRef('');
+  const lastEmitHtmlRef = useRef('');
   const [uploadingImage, setUploadingImage] = useState(false);
-  const initialContent = useMemo(
-    () => storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings),
-    [],
-  );
+
+  // Parse existing content ONLY ONCE on mount
+  const initialContent = useMemo(() => parseInitialEditorContent(value), []);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -1417,56 +1411,33 @@ function RichTextEditor({
         class: 'rich-surface',
         spellcheck: 'false',
       },
-      handlePaste(view, event) {
-        const text = event.clipboardData?.getData('text/plain') ?? '';
-        if (!text) return false;
-        event.preventDefault();
-        const { state, dispatch } = view;
-        const slice = state.schema.nodeFromJSON({
-          type: 'doc',
-          content: plainTextToTiptapBlocks(text),
-        }).slice(0);
-        dispatch(state.tr.replaceSelection(slice).scrollIntoView());
-        return true;
-      },
-      handleClick(view) {
-        if (!view.state.doc.textContent.trim()) {
-          const { state, dispatch } = view;
-          const paragraph = state.schema.nodes.paragraph;
-          if (paragraph) dispatch(state.tr.setBlockType(0, state.doc.content.size, paragraph).scrollIntoView());
-        }
-        window.setTimeout(() => normalizeAccidentalHeading(editor), 0);
-        return false;
-      },
-    },
-    onFocus({ editor: nextEditor }) {
-      resetEmptyEditorBlock(nextEditor);
-      normalizeAccidentalHeading(nextEditor);
     },
     onUpdate({ editor: nextEditor }) {
-      const nextHtml = sanitizeEditorHtml(nextEditor.getHTML());
-      lastHtmlRef.current = nextHtml;
+      const nextHtml = nextEditor.getHTML();
+      lastEmitHtmlRef.current = nextHtml;
       onChange(nextHtml);
     },
   });
 
+  // Handle external value changes (like selecting a different news item)
   useEffect(() => {
-    if (!editor || editor.isFocused || value === lastHtmlRef.current) return;
-    const nextHtml = storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings);
-    const currentHtml = sanitizeEditorHtml(editor.getHTML());
-    if (currentHtml !== nextHtml) {
-      editor.commands.setContent(nextHtml, { emitUpdate: false });
-      lastHtmlRef.current = nextHtml;
+    if (!editor || editor.isFocused) return;
+    if (value === lastEmitHtmlRef.current) return;
+    
+    // If value changed externally, parse it and update editor
+    const newHtml = parseInitialEditorContent(value);
+    if (editor.getHTML() !== newHtml) {
+      editor.commands.setContent(newHtml, { emitUpdate: false });
+      lastEmitHtmlRef.current = newHtml;
     }
-  }, [value, editor, parseStoredMarkup, demoteStoredHeadings]);
+  }, [value, editor]);
 
   function runCommand(format: string, commandValue?: string | number | boolean) {
     if (!editor) return;
-    normalizeAccidentalHeading(editor);
     const chain = editor.chain().focus();
     if (format === 'header') {
-      if (commandValue === 2 && !editor.isEmpty) chain.toggleHeading({ level: 2 }).run();
-      else if (commandValue === 3 && !editor.isEmpty) chain.toggleHeading({ level: 3 }).run();
+      if (commandValue === 2) chain.toggleHeading({ level: 2 }).run();
+      else if (commandValue === 3) chain.toggleHeading({ level: 3 }).run();
       else chain.setParagraph().run();
       return;
     }
@@ -1529,19 +1500,19 @@ function RichTextEditor({
   }
 
   const hasEditorContent = Boolean(editor && !editor.isEmpty);
-  const h2Active = isHeadingActive(editor, 2);
-  const h3Active = isHeadingActive(editor, 3);
+  const h2Active = Boolean(editor?.isActive('heading', { level: 2 }));
+  const h3Active = Boolean(editor?.isActive('heading', { level: 3 }));
 
   return (
     <div className={`rich-editor ${compact ? 'compact' : ''}`}>
       <div className="rich-toolbar" aria-label="Công cụ định dạng" onMouseDown={(event) => event.preventDefault()}>
-        <button type="button" className={hasEditorContent && h2Active ? 'active' : ''} onClick={() => runCommand('header', 2)} title="Tiêu đề">
+        <button type="button" className={h2Active ? 'active' : ''} onClick={() => runCommand('header', 2)} title="Tiêu đề">
           <Heading2 size={16} />
         </button>
-        <button type="button" className={hasEditorContent && h3Active ? 'active' : ''} onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
+        <button type="button" className={h3Active ? 'active' : ''} onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
           <Heading3 size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('header', false)} title="Đoạn văn">
+        <button type="button" className={editor?.isActive('paragraph') ? 'active' : ''} onClick={() => runCommand('header', false)} title="Đoạn văn">
           Aa
         </button>
         <button type="button" className={editor?.isActive('blockquote') ? 'active' : ''} onClick={() => runCommand('blockquote')} title="Trích dẫn">
@@ -1565,19 +1536,19 @@ function RichTextEditor({
         <button type="button" className={editor?.isActive('orderedList') ? 'active' : ''} onClick={() => runCommand('list', 'ordered')} title="Danh sách số">
           <ListOrdered size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('align', false)} title="Căn trái">
+        <button type="button" className={editor?.isActive({ textAlign: 'left' }) ? 'active' : ''} onClick={() => runCommand('align', false)} title="Căn trái">
           <AlignLeft size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('align', 'center')} title="Căn giữa">
+        <button type="button" className={editor?.isActive({ textAlign: 'center' }) ? 'active' : ''} onClick={() => runCommand('align', 'center')} title="Căn giữa">
           <AlignCenter size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('align', 'right')} title="Căn phải">
+        <button type="button" className={editor?.isActive({ textAlign: 'right' }) ? 'active' : ''} onClick={() => runCommand('align', 'right')} title="Căn phải">
           <AlignRight size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('align', 'justify')} title="Căn đều">
+        <button type="button" className={editor?.isActive({ textAlign: 'justify' }) ? 'active' : ''} onClick={() => runCommand('align', 'justify')} title="Căn đều">
           <AlignJustify size={16} />
         </button>
-        <button type="button" onClick={addLink} title="Liên kết">
+        <button type="button" className={editor?.isActive('link') ? 'active' : ''} onClick={addLink} title="Liên kết">
           <Link2 size={16} />
         </button>
         <button type="button" onClick={() => runCommand('link', false)} title="Xóa liên kết">
@@ -1608,84 +1579,29 @@ function RichTextEditor({
   );
 }
 
-function plainTextToHtml(value: string) {
-  const normalized = value
-    .replace(/\r\n/g, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/\u00a0/g, ' ');
-  const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
-  return blocks.map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`).join('');
-}
+function parseInitialEditorContent(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) return trimmed;
 
-function resetEmptyEditorBlock(editor: ReturnType<typeof useEditor>) {
-  if (!editor || !editor.isEmpty) return;
-  editor.commands.setParagraph();
-}
+  const normalized = trimmed
+    .replace(/<b>(.*?)<\/b>/gis, '**$1**')
+    .replace(/<strong>(.*?)<\/strong>/gis, '**$1**')
+    .replace(/<url=(.*?)>(.*?)<\/url>/gis, '[$2]($1)')
+    .replace(/<url>(.*?)<\/url>/gis, '[$1]($1)')
+    .replace(/\[b\](.*?)\[\/b\]/gis, '**$1**')
+    .replace(/\[i\](.*?)\[\/i\]/gis, '*$1*')
+    .replace(/\[u\](.*?)\[\/u\]/gis, '__$1__')
+    .replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '[$2]($1)')
+    .replace(/\[url\](.*?)\[\/url\]/gis, '[$1]($1)');
 
-function isHeadingActive(editor: ReturnType<typeof useEditor>, level: 2 | 3) {
-  if (!editor || editor.isEmpty || !editor.isActive('heading', { level })) return false;
-  return getCurrentBlockText(editor).length <= 120;
-}
-
-function normalizeAccidentalHeading(editor: ReturnType<typeof useEditor>) {
-  if (!editor || editor.isEmpty || !editor.isActive('heading')) return;
-  if (getCurrentBlockText(editor).length <= 120) return;
-  editor.commands.setParagraph();
-}
-
-function getCurrentBlockText(editor: ReturnType<typeof useEditor>) {
-  if (!editor) return '';
-  return editor.state.selection.$from.parent.textContent.trim();
-}
-
-function plainTextToTiptapBlocks(value: string) {
-  const normalized = value
-    .replace(/\r\n/g, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/\u00a0/g, ' ');
-  const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
-  if (blocks.length === 0) return [{ type: 'paragraph' }];
-  return blocks.map((block) => ({
-    type: 'paragraph',
-    content: block.split('\n').flatMap((line, index) => {
-      const content: Array<{ type: string; text?: string }> = [];
-      if (index > 0) content.push({ type: 'hardBreak' });
-      if (line) content.push({ type: 'text', text: line });
-      return content;
-    }),
-  }));
-}
-
-function demoteHeadingsToParagraphs(value: string) {
-  const container = document.createElement('div');
-  container.innerHTML = value;
-  container.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
-    const paragraph = document.createElement('p');
-    paragraph.innerHTML = heading.innerHTML;
-    if (heading.tagName.toLowerCase() === 'h2') paragraph.classList.add('rich-heading');
-    if (heading.tagName.toLowerCase() === 'h3') paragraph.classList.add('rich-subheading');
-    heading.replaceWith(paragraph);
-  });
-  return container.innerHTML;
-}
-
-function normalizeEditorElement(root: HTMLElement) {
-  root.querySelectorAll<HTMLElement>('[style]').forEach((element) => {
-    element.style.fontSize = '';
-    element.style.fontFamily = '';
-    element.style.lineHeight = '';
-  });
-}
-
-function markupToHtml(value: string) {
-  const normalized = normalizeStoredMarkup(value);
   const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   if (blocks.length === 0) return '';
   return blocks
     .map((block) => {
       if (block === '##' || block === '###') return '';
-      if (block.startsWith('### ')) return `<p>${inlineMarkupToHtml(block.slice(4))}</p>`;
-      if (block.startsWith('## ')) return `<p>${inlineMarkupToHtml(block.slice(3))}</p>`;
+      if (block.startsWith('### ')) return `<h3>${inlineMarkupToHtml(block.slice(4))}</h3>`;
+      if (block.startsWith('## ')) return `<h2>${inlineMarkupToHtml(block.slice(3))}</h2>`;
       if (block.startsWith('> ')) return `<blockquote>${inlineMarkupToHtml(block.replace(/^> /gm, ''))}</blockquote>`;
       if (block.startsWith('![')) {
         const image = block.match(/^!\[(.*?)\]\((https?:\/\/[^)]+)\)$/);
@@ -1707,25 +1623,6 @@ function markupToHtml(value: string) {
     .join('');
 }
 
-function storedContentToEditorHtml(value: string, parseStoredMarkup = true, demoteStoredHeadings = false) {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) return sanitizeEditorHtml(demoteStoredHeadings ? demoteHeadingsToParagraphs(trimmed) : trimmed);
-  if (!parseStoredMarkup) return plainTextToHtml(trimmed);
-  return markupToHtml(trimmed);
-}
-
-function normalizeStoredMarkup(value: string) {
-  return value
-    .replace(/<b>(.*?)<\/b>/gis, '**$1**')
-    .replace(/<strong>(.*?)<\/strong>/gis, '**$1**')
-    .replace(/<url=(.*?)>(.*?)<\/url>/gis, '[$2]($1)')
-    .replace(/<url>(.*?)<\/url>/gis, '[$1]($1)')
-    .replace(/\[b\](.*?)\[\/b\]/gis, '**$1**')
-    .replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '[$2]($1)')
-    .replace(/\[url\](.*?)\[\/url\]/gis, '[$1]($1)');
-}
-
 function inlineMarkupToHtml(value: string) {
   const escaped = escapeHtml(value);
   return escaped
@@ -1734,117 +1631,6 @@ function inlineMarkupToHtml(value: string) {
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/~~(.+?)~~/g, '<s>$1</s>')
     .replace(/\[(.+?)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2">$1</a>');
-}
-
-function sanitizeEditorHtml(source: HTMLElement | string) {
-  const container = document.createElement('div');
-  container.innerHTML = typeof source === 'string' ? source : source.innerHTML;
-  normalizeEditorElement(container);
-  const clean = document.createElement('div');
-  Array.from(container.childNodes).forEach((node) => {
-    const sanitized = sanitizeEditorNode(node);
-    if (sanitized) clean.appendChild(sanitized);
-  });
-  clean.querySelectorAll('h1, h4, h5, h6').forEach((heading) => {
-    const paragraph = document.createElement('p');
-    paragraph.innerHTML = heading.innerHTML;
-    heading.replaceWith(paragraph);
-  });
-  normalizeAccidentalHeadingElements(clean);
-  return clean.innerHTML
-    .replace(/<h([23])>\s*(?:##|###)?\s*<\/h\1>/gi, '')
-    .replace(/<p>\s*(?:##|###)\s*<\/p>/gi, '')
-    .trim();
-}
-
-function normalizeAccidentalHeadingElements(root: HTMLElement) {
-  root.querySelectorAll('h2, h3').forEach((heading) => {
-    if ((heading.textContent ?? '').trim().length <= 120) return;
-    const paragraph = document.createElement('p');
-    paragraph.innerHTML = heading.innerHTML;
-    const textAlign = (heading as HTMLElement).style.textAlign;
-    if (['center', 'right', 'justify'].includes(textAlign)) paragraph.style.textAlign = textAlign;
-    heading.replaceWith(paragraph);
-  });
-}
-
-function sanitizeEditorNode(node: ChildNode): Node | null {
-  if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent ?? '');
-  if (!(node instanceof HTMLElement)) return null;
-
-  const tag = node.tagName.toLowerCase();
-  if (tag === 'script' || tag === 'style') return null;
-
-  if (node.dataset.video) {
-    const url = node.dataset.video.trim();
-    if (!isSafeMediaUrl(url)) return null;
-    const video = document.createElement('div');
-    video.dataset.video = url;
-    video.textContent = `Video: ${url}`;
-    return video;
-  }
-
-  if (tag === 'img') {
-    const src = (node as HTMLImageElement).src || node.getAttribute('src') || '';
-    if (!isSafeMediaUrl(src)) return null;
-    const image = document.createElement('img');
-    image.src = src;
-    image.alt = node.getAttribute('alt') || 'Hình ảnh';
-    return image;
-  }
-
-  if (tag === 'iframe') {
-    const src = node.getAttribute('src') || '';
-    if (!isSafeMediaUrl(src)) return null;
-    const frame = document.createElement('iframe');
-    frame.src = src;
-    frame.setAttribute('allowfullscreen', 'true');
-    frame.setAttribute('frameborder', '0');
-    return frame;
-  }
-
-  if (tag === 'video') {
-    const src = node.getAttribute('src') || node.querySelector('source')?.getAttribute('src') || '';
-    if (!isSafeMediaUrl(src)) return null;
-    const video = document.createElement('video');
-    video.src = src;
-    video.controls = true;
-    return video;
-  }
-
-  const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figure']);
-  if (!allowedTags.has(tag)) {
-    const fragment = document.createDocumentFragment();
-    Array.from(node.childNodes).forEach((child) => {
-      const sanitized = sanitizeEditorNode(child);
-      if (sanitized) fragment.appendChild(sanitized);
-    });
-    return fragment;
-  }
-
-  const next = document.createElement(tag);
-  const alignClass = Array.from(node.classList).find((className) => /^ql-align-(center|right|justify)$/.test(className));
-  const paragraphClass = Array.from(node.classList).find((className) => /^(rich-heading|rich-subheading)$/.test(className));
-  const textAlign = node.style.textAlign;
-  if (alignClass) next.classList.add(alignClass);
-  if (paragraphClass && ['p', 'div'].includes(tag)) next.classList.add(paragraphClass);
-  if (['center', 'right', 'justify'].includes(textAlign)) next.style.textAlign = textAlign;
-  if (tag === 'a') {
-    const href = node.getAttribute('href') || '';
-    if (!isSafeMediaUrl(href)) return document.createTextNode(node.textContent ?? '');
-    next.setAttribute('href', href);
-    next.setAttribute('target', '_blank');
-    next.setAttribute('rel', 'noreferrer');
-  }
-
-  Array.from(node.childNodes).forEach((child) => {
-    const sanitized = sanitizeEditorNode(child);
-    if (sanitized) next.appendChild(sanitized);
-  });
-
-  const markerOnly = ['h1', 'h2', 'h3', 'p', 'div'].includes(tag) && ['##', '###'].includes((next.textContent ?? '').trim());
-  if (markerOnly) return null;
-  return next;
 }
 
 function isSafeMediaUrl(value: string) {
