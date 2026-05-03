@@ -7,6 +7,10 @@ import LinkExtension from '@tiptap/extension-link';
 import PlaceholderExtension from '@tiptap/extension-placeholder';
 import TextAlignExtension from '@tiptap/extension-text-align';
 import UnderlineExtension from '@tiptap/extension-underline';
+import Superscript from '@tiptap/extension-superscript';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import '@fontsource/noto-sans/400.css';
@@ -55,6 +59,9 @@ import {
   Settings,
   Share2,
   Strikethrough,
+  Superscript as SuperscriptIcon,
+  Baseline,
+  Highlighter,
   Trash2,
   Underline,
   Unlink,
@@ -1581,6 +1588,10 @@ function RichTextEditor({
       PlaceholderExtension.configure({
         placeholder: placeholder ?? '',
       }),
+      Superscript,
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
       VideoEmbedExtension,
     ],
     content: initialContent,
@@ -1628,6 +1639,9 @@ function RichTextEditor({
     if (format === 'list' && commandValue !== 'ordered') chain.toggleBulletList().run();
     if (format === 'align') chain.setTextAlign(commandValue ? String(commandValue) : 'left').run();
     if (format === 'link' && commandValue === false) chain.unsetLink().run();
+    if (format === 'superscript') chain.toggleSuperscript().run();
+    if (format === 'color') chain.setColor(String(commandValue)).run();
+    if (format === 'highlight') chain.toggleHighlight({ color: String(commandValue) }).run();
   }
 
   function addLink() {
@@ -1731,6 +1745,18 @@ function RichTextEditor({
         <button style={btnStyle(Boolean(editor?.isActive('italic')))} type="button" onClick={() => runCommand('italic')} title="In nghiêng"><Italic size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive('underline')))} type="button" onClick={() => runCommand('underline')} title="Gạch chân"><Underline size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive('strike')))} type="button" onClick={() => runCommand('strike')} title="Gạch ngang"><Strikethrough size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('superscript')))} type="button" onClick={() => runCommand('superscript')} title="Số mũ (Mũ)"><SuperscriptIcon size={16} /></button>
+        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        
+        {/* Colors */}
+        <button style={btnStyle(false)} type="button" onClick={() => {
+          const color = window.prompt('Nhập mã màu (ví dụ: #ff0000 hoặc red)', '#ff0000');
+          if (color) runCommand('color', color);
+        }} title="Màu chữ"><Baseline size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={() => {
+          const color = window.prompt('Nhập màu nền (ví dụ: #ffff00 hoặc yellow)', '#ffff00');
+          if (color) runCommand('highlight', color);
+        }} title="Tô sáng"><Highlighter size={16} /></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Blocks & Lists */}
