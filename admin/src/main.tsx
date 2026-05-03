@@ -1,8 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
-import Quill from 'quill';
-import 'quill/dist/quill.snow.css';
 import '@fontsource/noto-sans/400.css';
 import '@fontsource/noto-sans/500.css';
 import '@fontsource/noto-sans/600.css';
@@ -1350,129 +1348,106 @@ function RichTextEditor({
   demoteStoredHeadings?: boolean;
 }) {
   const editorMountRef = useRef<HTMLDivElement | null>(null);
-  const quillRef = useRef<Quill | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const lastHtmlRef = useRef('');
   const isFocusedRef = useRef(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
-    if (!editorMountRef.current || quillRef.current) return;
-    const quill = new Quill(editorMountRef.current, {
-      theme: 'snow',
-      placeholder,
-      modules: {
-        toolbar: false,
-        keyboard: {
-          bindings: {
-            tab: false,
-          },
-        },
-      },
-    });
-    quillRef.current = quill;
-    quill.root.setAttribute('spellcheck', 'false');
-    quill.root.setAttribute('autocorrect', 'off');
-    quill.root.setAttribute('autocapitalize', 'off');
-    quill.root.setAttribute('autocomplete', 'off');
-    quill.clipboard.dangerouslyPasteHTML(0, storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings));
-    lastHtmlRef.current = quill.root.innerHTML;
+    const editor = editorMountRef.current;
+    if (!editor) return;
+    editor.innerHTML = storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings);
+    lastHtmlRef.current = sanitizeEditorHtml(editor.innerHTML);
 
     const handlePaste = (event: ClipboardEvent) => {
-      if (!pasteAsPlainText) return;
-      const text = event.clipboardData?.getData('text/plain');
+      const html = event.clipboardData?.getData('text/html') ?? '';
+      const text = event.clipboardData?.getData('text/plain') ?? '';
       if (!text) return;
       event.preventDefault();
-      const range = quill.getSelection(true);
-      if (range.length) quill.deleteText(range.index, range.length, 'user');
-      quill.insertText(range.index, text, 'user');
-      quill.removeFormat(range.index, text.length, 'silent');
-      quill.setSelection(range.index + text.length, 0, 'silent');
+      const next = pasteAsPlainText
+        ? plainTextToHtml(text)
+        : sanitizeEditorHtml(storedContentToEditorHtml(html || text, true, true));
+      insertHtml(next);
       syncValue();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!resetFormatOnEnter || event.key !== 'Enter' || event.shiftKey) return;
       window.setTimeout(() => {
-        const range = quill.getSelection();
-        if (!range) return;
-        quill.formatLine(range.index, 1, { header: false, blockquote: false, list: false, align: false }, 'silent');
-        quill.format('bold', false, 'silent');
-        quill.format('italic', false, 'silent');
-        quill.format('underline', false, 'silent');
-        quill.format('strike', false, 'silent');
+        document.execCommand('formatBlock', false, 'p');
+        document.execCommand('justifyLeft');
         syncValue();
       }, 0);
     };
-    quill.root.addEventListener('paste', handlePaste);
-    quill.root.addEventListener('keydown', handleKeyDown);
+    const handleFocus = () => {
+      isFocusedRef.current = true;
+    };
+    const handleBlur = () => {
+      isFocusedRef.current = false;
+      syncValue();
+    };
+    const handleInput = () => syncValue();
 
-    quill.on('selection-change', (range) => {
-      isFocusedRef.current = range !== null;
-    });
-    quill.on('text-change', () => {
-      const nextHtml = quill.root.innerHTML.trim() === '<p><br></p>' ? '' : sanitizeEditorHtml(quill.root.innerHTML);
-      lastHtmlRef.current = nextHtml;
-      onChange(nextHtml);
-    });
+    editor.addEventListener('paste', handlePaste);
+    editor.addEventListener('keydown', handleKeyDown);
+    editor.addEventListener('focus', handleFocus);
+    editor.addEventListener('blur', handleBlur);
+    editor.addEventListener('input', handleInput);
 
     return () => {
-      quill.root.removeEventListener('paste', handlePaste);
-      quill.root.removeEventListener('keydown', handleKeyDown);
+      editor.removeEventListener('paste', handlePaste);
+      editor.removeEventListener('keydown', handleKeyDown);
+      editor.removeEventListener('focus', handleFocus);
+      editor.removeEventListener('blur', handleBlur);
+      editor.removeEventListener('input', handleInput);
     };
   }, []);
 
   useEffect(() => {
-    const quill = quillRef.current;
-    if (!quill || isFocusedRef.current || value === lastHtmlRef.current) return;
+    const editor = editorMountRef.current;
+    if (!editor || isFocusedRef.current || value === lastHtmlRef.current) return;
     const nextHtml = storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings);
-    const currentHtml = sanitizeEditorHtml(quill.root.innerHTML);
+    const currentHtml = sanitizeEditorHtml(editor.innerHTML);
     if (currentHtml !== nextHtml) {
-      quill.clipboard.dangerouslyPasteHTML(0, nextHtml);
+      editor.innerHTML = nextHtml;
       lastHtmlRef.current = nextHtml;
     }
   }, [value]);
 
   function syncValue() {
-    const quill = quillRef.current;
-    if (!quill) return;
-    const nextHtml = quill.root.innerHTML.trim() === '<p><br></p>' ? '' : sanitizeEditorHtml(quill.root.innerHTML);
+    const editor = editorMountRef.current;
+    if (!editor) return;
+    const nextHtml = editor.innerHTML.trim() === '<p><br></p>' ? '' : sanitizeEditorHtml(editor.innerHTML);
     lastHtmlRef.current = nextHtml;
     onChange(nextHtml);
   }
 
   function runCommand(format: string, commandValue?: string | number | boolean) {
-    const quill = quillRef.current;
-    if (!quill) return;
-    quill.focus();
-    const current = quill.getFormat();
-    quill.format(format, commandValue === undefined ? !current[format] : commandValue);
+    focusEditor();
+    const command = editorCommand(format, commandValue);
+    document.execCommand(command.name, false, command.value);
     syncValue();
   }
 
   function resetToParagraph() {
-    const quill = quillRef.current;
-    if (!quill) return;
-    quill.focus();
-    const range = quill.getSelection(true);
-    const length = range.length || Math.max(0, quill.getLength() - 1);
-    quill.removeFormat(range.length ? range.index : 0, length);
-    quill.formatLine(range.index, length, { header: false, blockquote: false, list: false, align: false });
+    focusEditor();
+    document.execCommand('removeFormat');
+    document.execCommand('formatBlock', false, 'p');
+    document.execCommand('justifyLeft');
     syncValue();
   }
 
   function insertHtml(html: string) {
-    const quill = quillRef.current;
-    if (!quill) return;
-    quill.focus();
-    const range = quill.getSelection(true);
-    quill.clipboard.dangerouslyPasteHTML(range.index, html);
+    focusEditor();
+    document.execCommand('insertHTML', false, html);
     syncValue();
   }
 
   function addLink() {
     const url = window.prompt('Dán liên kết https://...');
     if (!url) return;
-    runCommand('link', url);
+    focusEditor();
+    document.execCommand('createLink', false, url);
+    syncValue();
   }
 
   function addImageUrl() {
@@ -1482,13 +1457,11 @@ function RichTextEditor({
   }
 
   function insertEmbed(type: 'image' | 'video', url: string) {
-    const quill = quillRef.current;
-    if (!quill) return;
-    quill.focus();
-    const range = quill.getSelection(true);
-    quill.insertEmbed(range.index, type, url, 'user');
-    quill.setSelection(range.index + 1);
-    syncValue();
+    if (type === 'image') {
+      insertHtml(`<figure><img src="${escapeHtml(url)}" alt="Hình ảnh" /></figure><p><br></p>`);
+      return;
+    }
+    insertHtml(`<iframe src="${escapeHtml(url)}" allowfullscreen frameborder="0"></iframe><p><br></p>`);
   }
 
   async function uploadImage(file?: File) {
@@ -1517,7 +1490,7 @@ function RichTextEditor({
 
   return (
     <div className={`rich-editor ${compact ? 'compact' : ''}`}>
-      <div className="rich-toolbar" aria-label="Công cụ định dạng">
+      <div className="rich-toolbar" aria-label="Công cụ định dạng" onMouseDown={(event) => event.preventDefault()}>
         <button type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề">
           <Heading2 size={16} />
         </button>
@@ -1586,13 +1559,42 @@ function RichTextEditor({
           onChange={(event) => void uploadImage(event.target.files?.[0])}
         />
       </div>
-      <div className="rich-surface quill-surface" ref={editorMountRef} />
+      <div
+        className="rich-surface"
+        ref={editorMountRef}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder={placeholder}
+        spellCheck={false}
+      />
       <div className={`rich-preview ${compact ? 'compact' : ''}`}>
         <span className="bbcode-preview-label">Xem trước</span>
         <div dangerouslySetInnerHTML={{ __html: value ? sanitizeEditorHtml(value) : '<p class="muted">Chưa có nội dung xem trước.</p>' }} />
       </div>
     </div>
   );
+
+  function focusEditor() {
+    const editor = editorMountRef.current;
+    if (!editor) return;
+    editor.focus();
+  }
+}
+
+function editorCommand(format: string, commandValue?: string | number | boolean) {
+  if (format === 'header') return { name: 'formatBlock', value: commandValue ? `h${commandValue}` : 'p' };
+  if (format === 'blockquote') return { name: 'formatBlock', value: 'blockquote' };
+  if (format === 'bold') return { name: 'bold', value: undefined };
+  if (format === 'italic') return { name: 'italic', value: undefined };
+  if (format === 'underline') return { name: 'underline', value: undefined };
+  if (format === 'strike') return { name: 'strikeThrough', value: undefined };
+  if (format === 'list') return { name: commandValue === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList', value: undefined };
+  if (format === 'align') {
+    const align = commandValue === 'center' ? 'justifyCenter' : commandValue === 'right' ? 'justifyRight' : commandValue === 'justify' ? 'justifyFull' : 'justifyLeft';
+    return { name: align, value: undefined };
+  }
+  if (format === 'link' && commandValue === false) return { name: 'unlink', value: undefined };
+  return { name: format, value: String(commandValue ?? '') };
 }
 
 function plainTextToHtml(value: string) {

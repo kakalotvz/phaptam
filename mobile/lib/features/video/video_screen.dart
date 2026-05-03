@@ -410,6 +410,7 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
       allowFullScreen: true,
       allowMuting: true,
       allowPlaybackSpeedChanging: false,
+      showOptions: false,
       showControls: true,
       materialProgressColors: ChewieProgressColors(
         playedColor: colorScheme.primary,
@@ -417,42 +418,6 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
         bufferedColor: colorScheme.primaryContainer,
         backgroundColor: colorScheme.surfaceContainerHighest,
       ),
-      optionsTranslation: OptionsTranslation(
-        playbackSpeedButtonText: 'Tốc độ',
-        subtitlesButtonText: 'Phụ đề',
-        cancelButtonText: 'Hủy',
-      ),
-      additionalOptions: (context) => [
-        OptionItem(
-          onTap: (_) => _shareVideo(),
-          iconData: Icons.share_outlined,
-          title: 'Chia sẻ',
-        ),
-        OptionItem(
-          onTap: (_) => _enterPictureInPicture(),
-          iconData: Icons.picture_in_picture_alt,
-          title: 'Xem trong nền PiP',
-        ),
-        OptionItem(
-          onTap: (_) {
-            final player = controller;
-            if (player == null) return;
-            final next = player.value.position - const Duration(seconds: 10);
-            unawaited(player.seekTo(next < Duration.zero ? Duration.zero : next));
-          },
-          iconData: Icons.replay_10,
-          title: 'Tua lại 10 giây',
-        ),
-        OptionItem(
-          onTap: (_) {
-            final player = controller;
-            if (player == null) return;
-            unawaited(player.seekTo(player.value.position + const Duration(seconds: 10)));
-          },
-          iconData: Icons.forward_10,
-          title: 'Tua tới 10 giây',
-        ),
-      ],
     );
     setState(() {
       controller = nextController;
@@ -481,16 +446,41 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
             child: AspectRatio(
               aspectRatio: 16 / 9,
               child: player != null && player.value.isInitialized && chewie != null
-                  ? GestureDetector(
-                      onDoubleTapDown: (details) {
-                        final width = MediaQuery.sizeOf(context).width;
-                        final offset = details.localPosition.dx < width / 2
-                            ? const Duration(seconds: -10)
-                            : const Duration(seconds: 10);
-                        final next = player.value.position + offset;
-                        unawaited(player.seekTo(next < Duration.zero ? Duration.zero : next));
-                      },
-                      child: Chewie(controller: chewie),
+                  ? Stack(
+                      children: [
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onDoubleTapDown: (details) {
+                              final width = MediaQuery.sizeOf(context).width;
+                              final offset = details.localPosition.dx < width / 2
+                                  ? const Duration(seconds: -10)
+                                  : const Duration(seconds: 10);
+                              final next = player.value.position + offset;
+                              unawaited(player.seekTo(next < Duration.zero ? Duration.zero : next));
+                            },
+                            child: Chewie(controller: chewie),
+                          ),
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Row(
+                            children: [
+                              _VideoOverlayButton(
+                                icon: Icons.share_outlined,
+                                tooltip: 'Chia sẻ',
+                                onPressed: _shareVideo,
+                              ),
+                              const SizedBox(width: 8),
+                              _VideoOverlayButton(
+                                icon: Icons.picture_in_picture_alt,
+                                tooltip: 'Xem trong nền PiP',
+                                onPressed: _enterPictureInPicture,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     )
                   : Stack(
                       fit: StackFit.expand,
@@ -601,6 +591,35 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
   void _enterPictureInPicture() {
     const channel = MethodChannel('phaptam/pip');
     unawaited(channel.invokeMethod<bool>('enter'));
+  }
+}
+
+class _VideoOverlayButton extends StatelessWidget {
+  const _VideoOverlayButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: .48),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        color: Colors.white,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+      ),
+    );
   }
 }
 
