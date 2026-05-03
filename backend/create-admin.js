@@ -16,7 +16,7 @@ async function run() {
       where: { id: existing.id },
       data: { role: 'ADMIN', passwordHash: hash },
     });
-    console.log(\`Tài khoản đã tồn tại. Đã cập nhật quyền ADMIN và reset mật khẩu thành: \${password}\`);
+    console.log(`Tài khoản đã tồn tại. Đã cập nhật quyền ADMIN và reset mật khẩu thành: ${password}`);
   } else {
     await prisma.user.create({
       data: {
@@ -28,7 +28,7 @@ async function run() {
         acceptedTerms: true,
       },
     });
-    console.log(\`Đã tạo tài khoản mới:\nEmail: \${email}\nMật khẩu: \${password}\`);
+    console.log(`Đã tạo tài khoản mới:\nEmail: ${email}\nMật khẩu: ${password}`);
   }
 }
 
