@@ -1333,9 +1333,9 @@ function RichTextEditor({
   compact = false,
   imageUploadKind = 'images/news',
   parseStoredMarkup = true,
-  pasteAsPlainText = false,
+  pasteAsPlainText = true,
   resetFormatOnEnter = false,
-  demoteStoredHeadings = false,
+  demoteStoredHeadings = true,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1360,14 +1360,12 @@ function RichTextEditor({
     lastHtmlRef.current = sanitizeEditorHtml(editor.innerHTML);
 
     const handlePaste = (event: ClipboardEvent) => {
-      const html = event.clipboardData?.getData('text/html') ?? '';
       const text = event.clipboardData?.getData('text/plain') ?? '';
       if (!text) return;
       event.preventDefault();
-      const next = pasteAsPlainText
-        ? plainTextToHtml(text)
-        : sanitizeEditorHtml(storedContentToEditorHtml(html || text, true, true));
-      insertHtml(next);
+      document.execCommand('formatBlock', false, 'p');
+      document.execCommand('justifyLeft');
+      insertHtml(plainTextToHtml(text));
       syncValue();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1429,11 +1427,12 @@ function RichTextEditor({
   }
 
   function resetToParagraph() {
+    const editor = editorMountRef.current;
+    if (!editor) return;
+    editor.innerHTML = plainTextToHtml(editor.innerText);
+    lastHtmlRef.current = sanitizeEditorHtml(editor.innerHTML);
+    onChange(lastHtmlRef.current);
     focusEditor();
-    document.execCommand('removeFormat');
-    document.execCommand('formatBlock', false, 'p');
-    document.execCommand('justifyLeft');
-    syncValue();
   }
 
   function insertHtml(html: string) {
@@ -1567,10 +1566,6 @@ function RichTextEditor({
         data-placeholder={placeholder}
         spellCheck={false}
       />
-      <div className={`rich-preview ${compact ? 'compact' : ''}`}>
-        <span className="bbcode-preview-label">Xem trước</span>
-        <div dangerouslySetInnerHTML={{ __html: value ? sanitizeEditorHtml(value) : '<p class="muted">Chưa có nội dung xem trước.</p>' }} />
-      </div>
     </div>
   );
 
@@ -1598,7 +1593,11 @@ function editorCommand(format: string, commandValue?: string | number | boolean)
 }
 
 function plainTextToHtml(value: string) {
-  const blocks = value.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  const normalized = value
+    .replace(/\r\n/g, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/\u00a0/g, ' ');
+  const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   return blocks.map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
