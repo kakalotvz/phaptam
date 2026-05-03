@@ -2705,7 +2705,8 @@ function UserManager({ data, run }: { data: DataState; run: RunAction }) {
 
 function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
   function viewFeedback(row: Feedback) {
-    window.alert(`${row.type}\n${row.user?.username || row.user?.email || row.user?.name || 'Khách/không xác định'}\n\n${row.content}`);
+    const detail = feedbackDetail(row);
+    window.alert(`${row.type}\n${detail.source}\n${detail.name}${detail.email ? `\n${detail.email}` : ''}\n\n${detail.message}`);
   }
 
   return (
@@ -2714,8 +2715,10 @@ function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
         rows={data.feedback}
         columns={[
           ['type', 'Loại'],
-          [(row: Feedback) => row.user?.username || row.user?.email || row.user?.name || 'Khách/không xác định', 'Người góp ý'],
-          ['content', 'Nội dung'],
+          [(row: Feedback) => feedbackDetail(row).source, 'Nguồn'],
+          [(row: Feedback) => feedbackDetail(row).name, 'Người góp ý'],
+          [(row: Feedback) => feedbackDetail(row).email || '-', 'Email'],
+          [(row: Feedback) => feedbackDetail(row).message, 'Nội dung'],
           [(row: Feedback) => new Date(row.createdAt).toLocaleString('vi-VN'), 'Thời gian'],
           [
             (row: Feedback) => (
@@ -2731,6 +2734,33 @@ function FeedbackManager({ data, run }: { data: DataState; run: RunAction }) {
       />
     </Panel>
   );
+}
+
+function feedbackDetail(row: Feedback) {
+  if (row.user) {
+    return {
+      source: 'Tài khoản',
+      name: row.user.username || row.user.name || row.user.email || 'Người dùng',
+      email: row.user.email || '',
+      message: row.content,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(row.content) as { name?: string; email?: string; message?: string };
+    if (parsed && typeof parsed === 'object' && parsed.message) {
+      return {
+        source: 'Khách',
+        name: parsed.name || 'Khách',
+        email: parsed.email || '',
+        message: parsed.message,
+      };
+    }
+  } catch {
+    // Feedback cũ được lưu dạng text thuần.
+  }
+
+  return { source: 'Khách', name: 'Khách/không xác định', email: '', message: row.content };
 }
 
 function SettingsPanel({ onSaved }: { onSaved: () => void }) {

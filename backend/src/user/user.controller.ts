@@ -37,6 +37,14 @@ class FeedbackDto {
   @IsOptional()
   @IsString()
   userId?: string;
+
+  @IsOptional()
+  @IsString()
+  guestName?: string;
+
+  @IsOptional()
+  @IsString()
+  guestEmail?: string;
 }
 
 class ScriptureReminderDto {
@@ -214,6 +222,14 @@ export class UserController {
 
   @Post('feedback')
   feedback(@Body() dto: FeedbackDto) {
-    return this.prisma.feedback.create({ data: { userId: dto.userId || null, content: dto.content, type: dto.type } });
+    const content = dto.userId
+      ? dto.content.trim()
+      : JSON.stringify({
+          source: 'guest',
+          name: dto.guestName?.trim() || 'Khách',
+          email: dto.guestEmail?.trim() || '',
+          message: dto.content.trim(),
+        });
+    return this.prisma.feedback.create({ data: { userId: dto.userId || null, content, type: dto.type } });
   }
 }

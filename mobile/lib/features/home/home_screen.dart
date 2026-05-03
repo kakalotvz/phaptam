@@ -677,7 +677,7 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 22, 58, 22),
+                  padding: const EdgeInsets.fromLTRB(18, 18, 54, 18),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -686,25 +686,25 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
                         color: widget.quote.imageUrl == null
                             ? Theme.of(context).colorScheme.secondary
                             : Colors.white,
-                        size: 32,
+                        size: 26,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       RichContent(
                         content: widget.quote.content,
                         compact: true,
-                        baseStyle: Theme.of(context).textTheme.titleLarge
+                        baseStyle: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
-                              height: 1.34,
+                              height: 1.28,
                               fontWeight: FontWeight.w700,
                               color: widget.quote.imageUrl == null
                                   ? null
                                   : Colors.white,
                             ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       Text(
-                        'Lời nhắc hôm nay',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        'Trích dẫn hôm nay',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: widget.quote.imageUrl == null
                               ? null
                               : Colors.white.withValues(alpha: .82),

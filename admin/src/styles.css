@@ -274,8 +274,12 @@ main {
 
 .quote-save-button {
   justify-self: start;
-  align-self: end;
+  align-self: start;
+  width: auto;
+  max-width: max-content;
+  height: 38px;
   min-height: 38px;
+  max-height: 38px;
   padding: 0 13px;
   white-space: nowrap;
 }
