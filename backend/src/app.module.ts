@@ -11,6 +11,7 @@ import { PublicModule } from './public/public.module';
 import { StorageModule } from './storage/storage.module';
 import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UserModule } from './user/user.module';
     AdminModule,
     UploadModule,
     JobsModule,
+    MailModule,
   ],
 })
 export class AppModule {}

@@ -232,43 +232,117 @@ const SettingsContext = React.createContext<AppSettings>({ contentPageSize: 10 }
 
 
 function Login({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState('');
+  const [mode, setMode] = useState<'login' | 'forgot' | 'reset'>('login');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  async function handleSubmit(e: React.FormEvent) {
+  const cardStyle: React.CSSProperties = { width: '100%', maxWidth: '400px', padding: '32px', background: '#fffcf0', borderRadius: '18px', boxShadow: '0 22px 60px rgba(72, 48, 38, .08)' };
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #d6c4a0', background: '#fdf8ef', boxSizing: 'border-box' };
+  const btnPrimary: React.CSSProperties = { width: '100%', padding: '12px', background: '#8b5e3c', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px', marginTop: '8px' };
+  const btnLink: React.CSSProperties = { background: 'none', border: 'none', color: '#8b5e3c', cursor: 'pointer', textDecoration: 'underline', fontSize: '13px', padding: 0 };
+  const fieldStyle: React.CSSProperties = { display: 'grid', gap: '6px', marginBottom: '14px' };
+  const labelStyle: React.CSSProperties = { fontSize: '13px', fontWeight: 600, color: '#6b4c30' };
+
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
-      const res = await api.login({ email, password });
+      const res = await api.login({ email: identifier, password });
       localStorage.setItem('phaptam_admin_token', res.accessToken);
       onLogin();
-    } catch (err: any) {
-      setError(err.message || 'Sai tài khoản hoặc mật khẩu');
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { setError(err.message || 'Sai tài khoản hoặc mật khẩu'); }
+    finally { setLoading(false); }
+  }
+
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      await api.post('/auth/forgot-password', { identifier });
+      setSuccess('Nếu tài khoản tồn tại, mã OTP đã được gửi đến Email. Kiểm tra hộp thư đến (và thư mục Spam).');
+      setMode('reset');
+    } catch (err: any) { setError(err.message || 'Không gửi được email'); }
+    finally { setLoading(false); }
+  }
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      await api.post('/auth/reset-password', { identifier, otp, newPassword });
+      setSuccess('Đặt lại mật khẩu thành công! Đang chuyển đến đăng nhập...');
+      setTimeout(() => { setMode('login'); setSuccess(''); setOtp(''); setNewPassword(''); }, 2000);
+    } catch (err: any) { setError(err.message || 'Mã OTP không đúng hoặc đã hết hạn'); }
+    finally { setLoading(false); }
   }
 
   return (
-    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', background: '#f6f0dd' }}>
-      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '380px', padding: '30px', background: '#fffcf0', borderRadius: '18px', boxShadow: '0 22px 60px rgba(72, 48, 38, .08)' }}>
-        <h2 style={{ textAlign: 'center', fontFamily: '"Noto Serif", serif', color: '#8b5e3c', margin: '0 0 20px' }}>Đăng nhập Quản trị</h2>
-        {error && <div style={{ color: 'red', marginBottom: '14px', fontSize: '14px', textAlign: 'center' }}>{error}</div>}
-        <label style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
-          Tài khoản / Email
-          <input value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="admin" autoFocus />
-        </label>
-        <label style={{ display: 'grid', gap: '8px', marginBottom: '24px' }}>
-          Mật khẩu
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
-        </label>
-        <button type="submit" disabled={loading} style={{ width: '100%', padding: '12px', background: '#8b5e3c', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}>
-          {loading ? 'Đang xử lý...' : 'Đăng nhập'}
-        </button>
-      </form>
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #f6f0dd 0%, #e8d9b0 100%)' }}>
+      <div style={cardStyle}>
+        <h2 style={{ textAlign: 'center', fontFamily: '"Noto Serif", serif', color: '#8b5e3c', margin: '0 0 4px' }}>🙏 Pháp Tâm</h2>
+        <p style={{ textAlign: 'center', color: '#9a7d5a', fontSize: '13px', margin: '0 0 24px' }}>
+          {mode === 'login' ? 'Quản trị viên' : mode === 'forgot' ? 'Quên mật khẩu' : 'Đặt lại mật khẩu'}
+        </p>
+
+        {error && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px' }}>{error}</div>}
+        {success && <div style={{ color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px' }}>{success}</div>}
+
+        {mode === 'login' && (
+          <form onSubmit={handleLogin}>
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Tài khoản / Email</span>
+              <input style={inputStyle} value={identifier} onChange={(e) => setIdentifier(e.target.value)} required placeholder="admin hoặc email@gmail.com" autoFocus />
+            </div>
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Mật khẩu</span>
+              <input style={inputStyle} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
+            </div>
+            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang xử lý...' : 'Đăng nhập'}</button>
+            <div style={{ textAlign: 'center', marginTop: '16px' }}>
+              <button type="button" style={btnLink} onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}>Quên mật khẩu?</button>
+            </div>
+          </form>
+        )}
+
+        {mode === 'forgot' && (
+          <form onSubmit={handleForgot}>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>Nhập Email hoặc Username của tài khoản. Hệ thống sẽ gửi mã OTP 6 số về Email đã đăng ký.</p>
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Tài khoản / Email</span>
+              <input style={inputStyle} value={identifier} onChange={(e) => setIdentifier(e.target.value)} required placeholder="admin hoặc email@gmail.com" autoFocus />
+            </div>
+            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang gửi...' : 'Gửi mã OTP'}</button>
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button type="button" style={btnLink} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>← Quay lại đăng nhập</button>
+            </div>
+          </form>
+        )}
+
+        {mode === 'reset' && (
+          <form onSubmit={handleReset}>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>Kiểm tra Email và nhập mã OTP 6 số cùng mật khẩu mới.</p>
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Mã OTP (6 số)</span>
+              <input style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} required placeholder="123456" maxLength={6} autoFocus />
+            </div>
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Mật khẩu mới (tối thiểu 8 ký tự)</span>
+              <input style={inputStyle} type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={8} placeholder="••••••••" />
+            </div>
+            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang xử lý...' : 'Đặt lại mật khẩu'}</button>
+            <div style={{ textAlign: 'center', marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '16px' }}>
+              <button type="button" style={btnLink} onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}>Gửi lại mã OTP</button>
+              <span style={{ color: '#d1d5db' }}>|</span>
+              <button type="button" style={btnLink} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>← Đăng nhập</button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

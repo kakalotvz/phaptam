@@ -41,6 +41,8 @@ model User {
   birthDate     DateTime?       @map("birth_date")
   active        Boolean         @default(true)
   role          Role            @default(USER)
+  otp           String?
+  otpExpiry     DateTime?       @map("otp_expiry")
   playlists     Playlist[]
   favorites     Favorite[]
   histories     History[]

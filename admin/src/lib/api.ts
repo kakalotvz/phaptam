@@ -203,10 +203,12 @@ export function setApiBaseUrl(value: string) {
   localStorage.setItem('phaptam_api_base_url', value.replace(/\/$/, ''));
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, options?: RequestInit, authenticate = true): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = localStorage.getItem('phaptam_admin_token');
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (authenticate) {
+    const token = localStorage.getItem('phaptam_admin_token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  }
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     headers: { ...headers, ...options?.headers },
@@ -276,6 +278,9 @@ export const api = {
   update: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data) }),
   remove: (path: string) => request<void>(path, { method: 'DELETE' }),
+  // Unauthenticated POST (for forgot/reset password)
+  post: <T = unknown>(path: string, data: unknown) =>
+    request<T>(path, { method: 'POST', body: JSON.stringify(data) }, false),
 };
 
 export async function uploadToR2(file: File, kind: UploadKind): Promise<string> {

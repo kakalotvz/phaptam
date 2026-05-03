@@ -119,12 +119,17 @@ export class AdminController {
   }
 
   @Patch('users/:id')
-  updateUser(@Param('id') id: string, @Body() data: { name?: string; username?: string; birthDate?: string; active?: boolean; role?: Role }) {
+  async updateUser(
+    @Param('id') id: string,
+    @Body() data: { name?: string; username?: string; email?: string; password?: string; birthDate?: string; active?: boolean; role?: Role },
+  ) {
     return this.prisma.user.update({
       where: { id },
       data: {
         name: data.name,
         username: data.username,
+        email: data.email,
+        passwordHash: data.password ? await bcrypt.hash(data.password, 12) : undefined,
         birthDate: data.birthDate ? new Date(data.birthDate) : undefined,
         active: data.active,
         role: data.role,

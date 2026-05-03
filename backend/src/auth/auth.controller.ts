@@ -18,6 +18,7 @@ class RegisterDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
   @IsString()
   username!: string;
 
@@ -31,6 +32,18 @@ class RegisterDto {
 
   @IsBoolean()
   acceptedTerms!: boolean;
+}
+
+class ResetPasswordDto {
+  @IsString()
+  identifier!: string;
+
+  @IsString()
+  otp!: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword!: string;
 }
 
 @Controller('auth')
@@ -48,7 +61,12 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  forgotPassword(@Body('email') email: string) {
-    return this.auth.forgotPassword(email);
+  forgotPassword(@Body('identifier') identifier: string) {
+    return this.auth.forgotPassword(identifier);
+  }
+
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetPassword(dto.identifier, dto.otp, dto.newPassword);
   }
 }
