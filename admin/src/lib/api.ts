@@ -100,6 +100,7 @@ export type ScriptureReminder = {
   resumeMode: 'RESUME' | 'RESTART';
   active: boolean;
   lastLineIndex: number;
+  createdAt: string;
 };
 
 export type Quote = {
@@ -107,6 +108,7 @@ export type Quote = {
   content: string;
   imageUrl?: string;
   active: boolean;
+  createdAt: string;
 };
 
 export type Banner = {

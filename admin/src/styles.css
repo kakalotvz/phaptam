@@ -503,6 +503,31 @@ main {
   outline: none;
 }
 
+.news-editor .rich-surface {
+  max-height: clamp(360px, 54vh, 620px);
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.news-editor .rich-surface::-webkit-scrollbar {
+  width: 10px;
+}
+
+.news-editor .rich-surface::-webkit-scrollbar-track {
+  background: rgba(246, 234, 208, .8);
+  border-radius: 999px;
+}
+
+.news-editor .rich-surface::-webkit-scrollbar-thumb {
+  background: rgba(140, 93, 69, .38);
+  border: 2px solid rgba(246, 234, 208, .8);
+  border-radius: 999px;
+}
+
+.news-editor .rich-surface::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 93, 69, .58);
+}
+
 .rich-surface * {
   font-family: inherit !important;
   font-size: 16px !important;
@@ -1097,4 +1122,3 @@ th {
   border: none;
   border-radius: 12px;
 }
-

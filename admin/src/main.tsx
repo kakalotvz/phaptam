@@ -223,12 +223,12 @@ const nav = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'audio', label: 'Kinh audio', icon: BookAudio },
   { id: 'scripture', label: 'Đọc Kinh', icon: BookOpenText },
-  { id: 'reminder', label: 'Lịch tụng', icon: CalendarClock },
+  { id: 'reminder', label: 'Lịch nhắc tụng kinh', icon: CalendarClock },
   { id: 'video', label: 'Video giảng', icon: Clapperboard },
   { id: 'meditation', label: 'Thiền', icon: Pause },
   { id: 'news', label: 'Tin tức', icon: Newspaper },
   { id: 'rss', label: 'Nguồn RSS', icon: Newspaper },
-  { id: 'quote', label: 'Lời nhắc', icon: Quote },
+  { id: 'quote', label: 'Trích dẫn', icon: Quote },
   { id: 'banner', label: 'Banner', icon: Image },
   { id: 'users', label: 'Tài khoản', icon: ShieldCheck },
   { id: 'feedback', label: 'Góp ý', icon: MessageSquareText },
@@ -499,7 +499,7 @@ function App() {
     ['audio', 'Audio', <BookAudio size={16} />],
     ['video', 'Video', <Clapperboard size={16} />],
     ['scripture', 'Kinh điển', <BookOpenText size={16} />],
-    ['reminder', 'Lời nhắc', <CalendarClock size={16} />],
+    ['reminder', 'Lịch nhắc tụng kinh', <CalendarClock size={16} />],
     ['meditation', 'Chương trình thiền', <List size={16} />],
     ['news', 'Tin tức', <Newspaper size={16} />],
     ['quote', 'Trích dẫn', <Quote size={16} />],
@@ -556,7 +556,7 @@ function App() {
               {section === 'overview' && <Overview data={data} />}
               {section === 'audio' && <AudioManager data={data} run={run} />}
               {section === 'scripture' && <ScriptureManager data={data} run={run} />}
-              {section === 'reminder' && <ScriptureReminderManager data={data} run={run} />}
+              {section === 'reminder' && <ScriptureReminderManager data={data} />}
               {section === 'video' && <VideoManager data={data} run={run} />}
               {section === 'meditation' && <MeditationManager data={data} run={run} />}
               {section === 'news' && <NewsManager data={data} run={run} />}
@@ -579,7 +579,7 @@ function Overview({ data }: { data: DataState }) {
     ['Danh mục audio', data.overview.audioCategoryCount ?? 0, BookAudio],
     ['Bài kinh audio', data.overview.audioCount ?? 0, FileText],
     ['Bản đọc Kinh', data.overview.scriptureCount ?? 0, BookOpenText],
-    ['Lịch tụng', data.overview.scriptureReminderCount ?? 0, CalendarClock],
+    ['Lịch nhắc tụng kinh', data.overview.scriptureReminderCount ?? 0, CalendarClock],
     ['Video', data.overview.videoCount ?? 0, Clapperboard],
     ['Bài Thiền', data.overview.meditationProgramCount ?? 0, Pause],
     ['Tin tức', data.overview.newsCount ?? 0, Newspaper],
@@ -602,7 +602,7 @@ function Overview({ data }: { data: DataState }) {
         <BarChart3 size={22} />
         <div>
           <h2>Trang quản trị đã sẵn sàng</h2>
-          <p>Quản lý danh mục, audio, video, RSS, banner, lời nhắc và góp ý. Media được upload trực tiếp lên Cloudflare R2 bằng URL ký tạm thời từ backend.</p>
+          <p>Quản lý danh mục, audio, video, RSS, banner, trích dẫn, lịch nhắc tụng kinh và góp ý. Media được upload trực tiếp lên Cloudflare R2 bằng URL ký tạm thời từ backend.</p>
         </div>
       </article>
     </section>
@@ -1156,102 +1156,33 @@ const weekdayOptions = [
   [4, 'T5'],
   [5, 'T6'],
   [6, 'T7'],
+  [7, 'CN'],
   [0, 'CN'],
 ] as const;
 
-function ScriptureReminderManager({ data, run }: { data: DataState; run: RunAction }) {
-  const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]);
-  const [resumeMode, setResumeMode] = useState<'RESUME' | 'RESTART'>('RESUME');
-
-  function toggleWeekday(value: number) {
-    setWeekdays((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value].sort()));
-  }
-
-  function editReminder(row: ScriptureReminder) {
-    const title = askText('Tên lời nhắc', row.title);
-    if (title === undefined) return;
-    const timeOfDay = askText('Giờ nhắc HH:mm', row.timeOfDay);
-    if (timeOfDay === undefined) return;
-    const weekdaysText = askText('Ngày nhắc, nhập số cách nhau bởi dấu phẩy (0=CN, 1=T2...)', row.weekdays.join(','));
-    if (weekdaysText === undefined) return;
-    const nextWeekdays = weekdaysText.split(',').map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
-    void run(
-      () => api.update(`/admin/scripture-reminders/${row.id}`, { title, timeOfDay, weekdays: nextWeekdays, resumeMode: row.resumeMode }),
-      'Đã cập nhật lịch nhắc',
-    );
-  }
-
+function ScriptureReminderManager({ data }: { data: DataState }) {
   return (
     <div className="single-column">
-      <Panel title="Tạo lịch nhắc tụng kinh">
-        <SmartForm
-          fields={[
-            ['title', 'Tên lời nhắc'],
-            ['timeOfDay', 'Giờ nhắc', 'time'],
-            ['scriptureId', 'Bộ kinh', 'select', data.scriptures.map((item) => [item.id, item.title])],
-          ]}
-          onSubmit={(values) =>
-            run(
-              () =>
-                api.create('/admin/scripture-reminder', {
-                  ...values,
-                  weekdays,
-                  resumeMode,
-                  active: true,
-                }),
-              'Đã tạo lịch nhắc tụng kinh',
-            )
-          }
-        />
-        <div className="option-row">
-          <span>Ngày nhắc</span>
-          {weekdayOptions.map(([value, label]) => (
-            <button key={value} type="button" className={weekdays.includes(value) ? 'speed active' : 'speed'} onClick={() => toggleWeekday(value)}>
-              {label}
-            </button>
-          ))}
+      <Panel title="Danh sách lịch nhắc tụng kinh của người dùng">
+        <div className="scripture-form-heading">
+          <div>
+            <strong>Chỉ theo dõi lịch do user tự tạo</strong>
+            <span>Admin xem người tạo, bài kinh, giờ nhắc, ngày nhắc, chế độ đọc và trạng thái. Việc tạo/sửa lịch nhắc thuộc về người dùng trong app.</span>
+          </div>
         </div>
-        <div className="option-row">
-          <span>Khi mở đọc kinh</span>
-          <button type="button" className={resumeMode === 'RESUME' ? 'speed active' : 'speed'} onClick={() => setResumeMode('RESUME')}>
-            Tiếp tục chỗ dừng
-          </button>
-          <button type="button" className={resumeMode === 'RESTART' ? 'speed active' : 'speed'} onClick={() => setResumeMode('RESTART')}>
-            Bắt đầu lại
-          </button>
-        </div>
-      </Panel>
-      <Panel title="Lịch nhắc đang bật">
         <Table
           rows={data.scriptureReminders}
           columns={[
-            ['title', 'Lời nhắc'],
+            [(row: ScriptureReminder) => row.user?.name || row.user?.email || 'Lịch hệ thống', 'User'],
+            ['title', 'Tên lịch'],
             [(row: ScriptureReminder) => row.scripture?.title ?? '-', 'Bộ kinh'],
-            ['timeOfDay', 'Giờ'],
+            ['timeOfDay', 'Giờ nhắc'],
             [(row: ScriptureReminder) => row.weekdays.map((day) => weekdayOptions.find(([value]) => value === day)?.[1] ?? day).join(', '), 'Ngày'],
             [(row: ScriptureReminder) => (row.resumeMode === 'RESUME' ? 'Tiếp tục' : 'Bắt đầu lại'), 'Chế độ'],
+            [(row: ScriptureReminder) => row.lastLineIndex.toLocaleString('vi-VN'), 'Dòng đã đọc'],
             [(row: ScriptureReminder) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
-            [
-              (row: ScriptureReminder) => (
-                <div className="action-group">
-                  <button className="ghost" type="button" onClick={() => editReminder(row)}>
-                    <Pencil size={15} />
-                    Sửa
-                  </button>
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() => run(() => api.update(`/admin/scripture-reminders/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt lịch nhắc' : 'Đã bật lịch nhắc')}
-                  >
-                    <Power size={15} />
-                    {row.active ? 'Tắt' : 'Bật'}
-                  </button>
-                </div>
-              ),
-              'Thao tác',
-            ],
+            [(row: ScriptureReminder) => new Date(row.createdAt).toLocaleString('vi-VN'), 'Thời gian tạo'],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/scripture-reminders/${row.id}`), 'Đã xóa lịch nhắc')}
         />
       </Panel>
     </div>
@@ -2460,16 +2391,16 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
 
   return (
     <div className="single-column">
-      <Panel title="Tạo lời nhắc hằng ngày">
+      <Panel title={editingQuoteId ? 'Sửa trích dẫn' : 'Tạo trích dẫn'}>
         <div className="quote-editor">
           {editingQuoteId && (
             <div className="scripture-form-heading">
               <div>
-                <strong>Đang sửa lời nhắc</strong>
-                <span>Nội dung sẽ được cập nhật vào lời nhắc đã chọn.</span>
+                <strong>Đang sửa trích dẫn</strong>
+                <span>Nội dung sẽ được cập nhật vào trích dẫn đã chọn.</span>
               </div>
               <button className="ghost" type="button" onClick={resetQuoteForm}>
-                Tạo lời nhắc mới
+                Tạo trích dẫn mới
               </button>
             </div>
           )}
@@ -2480,7 +2411,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               onChange={setContent}
               compact
               imageUploadKind="images/quote"
-              placeholder="Viết lời nhắc. Có thể in đậm, xuống dòng hoặc gắn liên kết."
+              placeholder="Viết trích dẫn hoặc lời nhắc hôm nay. Có thể in đậm, xuống dòng hoặc gắn liên kết."
             />
           </div>
           <label>
@@ -2496,23 +2427,24 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
                   editingQuoteId
                     ? api.update(`/admin/quote/${editingQuoteId}`, { content, imageUrl })
                     : api.create('/admin/quote', { content, imageUrl }),
-                editingQuoteId ? 'Đã cập nhật lời nhắc' : 'Đã tạo lời nhắc',
+                editingQuoteId ? 'Đã cập nhật trích dẫn' : 'Đã tạo trích dẫn',
               );
               if (ok) resetQuoteForm();
             }}
           >
             <Save size={16} />
-            {editingQuoteId ? 'Cập nhật lời nhắc' : 'Lưu lời nhắc'}
+            {editingQuoteId ? 'Cập nhật trích dẫn' : 'Lưu trích dẫn'}
           </button>
         </div>
       </Panel>
-      <Panel title="Lời nhắc">
+      <Panel title="Danh sách trích dẫn">
         <Table
           rows={data.quotes}
           columns={[
             ['imageUrl', 'Ảnh'],
             ['content', 'Nội dung'],
             [(row: QuoteRecord) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+            [(row: QuoteRecord) => new Date(row.createdAt).toLocaleString('vi-VN'), 'Ngày tạo'],
             [
               (row: QuoteRecord) => (
                 <div className="action-group">
@@ -2523,7 +2455,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
                   <button
                     className="ghost"
                     type="button"
-                    onClick={() => run(() => api.update(`/admin/quote/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt lời nhắc' : 'Đã bật lời nhắc')}
+                    onClick={() => run(() => api.update(`/admin/quote/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt trích dẫn' : 'Đã bật trích dẫn')}
                   >
                     <Power size={15} />
                     {row.active ? 'Tắt' : 'Bật'}
@@ -2533,7 +2465,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               'Thao tác',
             ],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/quote/${row.id}`), 'Đã xóa lời nhắc')}
+          onDelete={(row) => run(() => api.remove(`/admin/quote/${row.id}`), 'Đã xóa trích dẫn')}
         />
       </Panel>
     </div>
