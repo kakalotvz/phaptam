@@ -1509,14 +1509,18 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 
 const VideoEmbedExtension = TiptapNode.create({
   name: 'videoEmbed',
-  group: 'inline',
-  inline: true,
+  group: 'block',
   atom: true,
   addAttributes() {
     return {
       src: {
         default: null,
         parseHTML: (element) => element.getAttribute('src') || element.getAttribute('data-video'),
+      },
+      textAlign: {
+        default: 'left',
+        parseHTML: (element) => element.getAttribute('data-text-align') || 'left',
+        renderHTML: (attrs) => ({ 'data-text-align': attrs.textAlign, style: `text-align: ${attrs.textAlign}` }),
       },
     };
   },
@@ -1573,10 +1577,10 @@ function RichTextEditor({
       }),
       ImageExtension.configure({
         allowBase64: false,
-        inline: true,
+        inline: false,
       }),
       TextAlignExtension.configure({
-        types: ['heading', 'paragraph'],
+        types: ['heading', 'paragraph', 'image', 'videoEmbed'],
       }),
       PlaceholderExtension.configure({
         placeholder: placeholder ?? '',

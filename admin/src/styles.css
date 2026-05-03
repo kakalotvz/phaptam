@@ -1026,3 +1026,56 @@ th {
     grid-column: span 1;
   }
 }
+
+/* ===== Editor image/video alignment ===== */
+.modern-editor-surface img,
+.modern-editor-surface video,
+.modern-editor-surface iframe {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Canh trái (mặc định) */
+.modern-editor-surface img[style*="text-align: left"],
+.modern-editor-surface video[style*="text-align: left"],
+.modern-editor-surface iframe[style*="text-align: left"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Canh giữa */
+.modern-editor-surface img[style*="text-align: center"],
+.modern-editor-surface video[style*="text-align: center"],
+.modern-editor-surface iframe[style*="text-align: center"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Canh phải */
+.modern-editor-surface img[style*="text-align: right"],
+.modern-editor-surface video[style*="text-align: right"],
+.modern-editor-surface iframe[style*="text-align: right"] {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* Kích thước mặc định cho media trong editor */
+.modern-editor-surface img {
+  border-radius: 6px;
+  max-height: 480px;
+  object-fit: cover;
+}
+
+.modern-editor-surface iframe {
+  width: 100%;
+  height: 360px;
+  border: none;
+  border-radius: 8px;
+}
+
+.modern-editor-surface video {
+  max-height: 360px;
+  border-radius: 8px;
+}
+
