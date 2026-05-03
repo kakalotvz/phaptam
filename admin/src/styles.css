@@ -1029,7 +1029,7 @@ th {
 
 /* ===== Editor formatting ===== */
 .modern-editor-surface sup {
-  font-size: 0.55em;
+  font-size: 0.45em;
   vertical-align: super;
   line-height: 0;
   color: #8b5e3c;
