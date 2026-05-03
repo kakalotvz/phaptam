@@ -1435,7 +1435,8 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 
 const VideoEmbedExtension = TiptapNode.create({
   name: 'videoEmbed',
-  group: 'block',
+  group: 'inline',
+  inline: true,
   atom: true,
   addAttributes() {
     return {
@@ -1498,7 +1499,7 @@ function RichTextEditor({
       }),
       ImageExtension.configure({
         allowBase64: false,
-        inline: false,
+        inline: true,
       }),
       TextAlignExtension.configure({
         types: ['heading', 'paragraph'],
