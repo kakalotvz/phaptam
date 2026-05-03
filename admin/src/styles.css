@@ -486,6 +486,12 @@ main {
   background: #fff8e8;
 }
 
+.rich-toolbar button.active {
+  color: #2f211b;
+  background: #ead5ad;
+  border-color: rgba(109, 76, 65, .28);
+}
+
 .rich-surface {
   min-height: 280px;
   padding: 18px;
@@ -507,23 +513,28 @@ main {
   min-height: 150px;
 }
 
-.rich-surface:empty::before {
+.rich-surface p.is-editor-empty:first-child::before {
+  float: left;
   color: #9a887e;
   content: attr(data-placeholder);
+  height: 0;
+  pointer-events: none;
 }
 
+.rich-surface h2,
 .rich-surface .rich-heading {
   margin: 0 0 12px;
   font-family: "Noto Serif", "Noto Sans", serif;
-  font-size: 18px !important;
+  font-size: 20px !important;
   font-weight: 800;
   line-height: 1.35;
 }
 
+.rich-surface h3,
 .rich-surface .rich-subheading {
   margin: 0 0 10px;
   font-family: "Noto Serif", "Noto Sans", serif;
-  font-size: 17px !important;
+  font-size: 18px !important;
   font-weight: 800;
   line-height: 1.45;
 }

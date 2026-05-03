@@ -1,6 +1,14 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
+import { Node as TiptapNode, mergeAttributes } from '@tiptap/core';
+import ImageExtension from '@tiptap/extension-image';
+import LinkExtension from '@tiptap/extension-link';
+import PlaceholderExtension from '@tiptap/extension-placeholder';
+import TextAlignExtension from '@tiptap/extension-text-align';
+import UnderlineExtension from '@tiptap/extension-underline';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
 import '@fontsource/noto-sans/400.css';
 import '@fontsource/noto-sans/500.css';
 import '@fontsource/noto-sans/600.css';
@@ -1326,6 +1334,34 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   );
 }
 
+const VideoEmbedExtension = TiptapNode.create({
+  name: 'videoEmbed',
+  group: 'block',
+  atom: true,
+  addAttributes() {
+    return {
+      src: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('src') || element.getAttribute('data-video'),
+      },
+    };
+  },
+  parseHTML() {
+    return [
+      { tag: 'iframe[src]' },
+      { tag: 'video[src]' },
+      { tag: 'div[data-video]' },
+    ];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const src = String(HTMLAttributes.src ?? HTMLAttributes['data-video'] ?? '');
+    if (/\.mp4(?:\?|#|$)/i.test(src)) {
+      return ['video', mergeAttributes(HTMLAttributes, { src, controls: 'true' })];
+    }
+    return ['iframe', mergeAttributes(HTMLAttributes, { src, allowfullscreen: 'true', frameborder: '0' })];
+  },
+});
+
 function RichTextEditor({
   value,
   onChange,
@@ -1333,9 +1369,7 @@ function RichTextEditor({
   compact = false,
   imageUploadKind = 'images/news',
   parseStoredMarkup = true,
-  pasteAsPlainText = true,
-  resetFormatOnEnter = false,
-  demoteStoredHeadings = true,
+  demoteStoredHeadings = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1347,113 +1381,102 @@ function RichTextEditor({
   resetFormatOnEnter?: boolean;
   demoteStoredHeadings?: boolean;
 }) {
-  const editorMountRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const lastHtmlRef = useRef('');
-  const isFocusedRef = useRef(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const initialContent = useMemo(
+    () => storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings),
+    [],
+  );
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [2, 3] },
+      }),
+      UnderlineExtension,
+      LinkExtension.configure({
+        autolink: true,
+        defaultProtocol: 'https',
+        openOnClick: false,
+      }),
+      ImageExtension.configure({
+        allowBase64: false,
+        inline: false,
+      }),
+      TextAlignExtension.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      PlaceholderExtension.configure({
+        placeholder: placeholder ?? '',
+      }),
+      VideoEmbedExtension,
+    ],
+    content: initialContent,
+    editorProps: {
+      attributes: {
+        class: 'rich-surface',
+        spellcheck: 'false',
+      },
+      handlePaste(view, event) {
+        const text = event.clipboardData?.getData('text/plain') ?? '';
+        if (!text) return false;
+        event.preventDefault();
+        const { state, dispatch } = view;
+        const slice = state.schema.nodeFromJSON({
+          type: 'doc',
+          content: plainTextToTiptapBlocks(text),
+        }).slice(0);
+        dispatch(state.tr.replaceSelection(slice).scrollIntoView());
+        return true;
+      },
+    },
+    onUpdate({ editor: nextEditor }) {
+      const nextHtml = sanitizeEditorHtml(nextEditor.getHTML());
+      lastHtmlRef.current = nextHtml;
+      onChange(nextHtml);
+    },
+  });
 
   useEffect(() => {
-    const editor = editorMountRef.current;
-    if (!editor) return;
-    editor.innerHTML = storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings);
-    lastHtmlRef.current = sanitizeEditorHtml(editor.innerHTML);
-
-    const handlePaste = (event: ClipboardEvent) => {
-      const text = event.clipboardData?.getData('text/plain') ?? '';
-      if (!text) return;
-      event.preventDefault();
-      insertHtml(plainTextToHtml(text));
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!resetFormatOnEnter || event.key !== 'Enter' || event.shiftKey) return;
-      window.setTimeout(() => {
-        normalizeEditorDom();
-        syncValue();
-      }, 0);
-    };
-    const handleFocus = () => {
-      isFocusedRef.current = true;
-      normalizeEditorDom();
-    };
-    const handleBlur = () => {
-      isFocusedRef.current = false;
-      normalizeEditorDom();
-      syncValue();
-    };
-    const handleInput = () => {
-      normalizeEditorDom();
-      syncValue();
-    };
-
-    editor.addEventListener('paste', handlePaste);
-    editor.addEventListener('keydown', handleKeyDown);
-    editor.addEventListener('focus', handleFocus);
-    editor.addEventListener('blur', handleBlur);
-    editor.addEventListener('input', handleInput);
-
-    return () => {
-      editor.removeEventListener('paste', handlePaste);
-      editor.removeEventListener('keydown', handleKeyDown);
-      editor.removeEventListener('focus', handleFocus);
-      editor.removeEventListener('blur', handleBlur);
-      editor.removeEventListener('input', handleInput);
-    };
-  }, []);
-
-  useEffect(() => {
-    const editor = editorMountRef.current;
-    if (!editor || isFocusedRef.current || value === lastHtmlRef.current) return;
+    if (!editor || editor.isFocused || value === lastHtmlRef.current) return;
     const nextHtml = storedContentToEditorHtml(value, parseStoredMarkup, demoteStoredHeadings);
-    const currentHtml = sanitizeEditorHtml(editor.innerHTML);
+    const currentHtml = sanitizeEditorHtml(editor.getHTML());
     if (currentHtml !== nextHtml) {
-      editor.innerHTML = nextHtml;
+      editor.commands.setContent(nextHtml, { emitUpdate: false });
       lastHtmlRef.current = nextHtml;
     }
-  }, [value]);
-
-  function syncValue() {
-    const editor = editorMountRef.current;
-    if (!editor) return;
-    normalizeEditorDom();
-    const nextHtml = editor.innerHTML.trim() === '<p><br></p>' ? '' : sanitizeEditorHtml(editor.innerHTML);
-    lastHtmlRef.current = nextHtml;
-    onChange(nextHtml);
-  }
+  }, [value, editor, parseStoredMarkup, demoteStoredHeadings]);
 
   function runCommand(format: string, commandValue?: string | number | boolean) {
-    focusEditor();
+    if (!editor) return;
+    const chain = editor.chain().focus();
     if (format === 'header') {
-      applyParagraphRole(commandValue === 2 ? 'rich-heading' : commandValue === 3 ? 'rich-subheading' : '');
-      syncValue();
+      if (commandValue === 2) chain.toggleHeading({ level: 2 }).run();
+      else if (commandValue === 3) chain.toggleHeading({ level: 3 }).run();
+      else chain.setParagraph().run();
       return;
     }
-    const command = editorCommand(format, commandValue);
-    document.execCommand(command.name, false, command.value);
-    syncValue();
+    if (format === 'blockquote') chain.toggleBlockquote().run();
+    if (format === 'bold') chain.toggleBold().run();
+    if (format === 'italic') chain.toggleItalic().run();
+    if (format === 'underline') chain.toggleUnderline().run();
+    if (format === 'strike') chain.toggleStrike().run();
+    if (format === 'list' && commandValue === 'ordered') chain.toggleOrderedList().run();
+    if (format === 'list' && commandValue !== 'ordered') chain.toggleBulletList().run();
+    if (format === 'align') chain.setTextAlign(commandValue ? String(commandValue) : 'left').run();
+    if (format === 'link' && commandValue === false) chain.unsetLink().run();
   }
 
   function resetToParagraph() {
-    const editor = editorMountRef.current;
     if (!editor) return;
-    editor.innerHTML = plainTextToHtml(editor.innerText);
-    lastHtmlRef.current = sanitizeEditorHtml(editor.innerHTML);
-    onChange(lastHtmlRef.current);
-    focusEditor();
-  }
-
-  function insertHtml(html: string) {
-    focusEditor();
-    document.execCommand('insertHTML', false, html);
-    syncValue();
+    editor.chain().focus().clearNodes().unsetAllMarks().setTextAlign('left').run();
   }
 
   function addLink() {
+    if (!editor) return;
     const url = window.prompt('Dán liên kết https://...');
     if (!url) return;
-    focusEditor();
-    document.execCommand('createLink', false, url);
-    syncValue();
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
   }
 
   function addImageUrl() {
@@ -1463,11 +1486,12 @@ function RichTextEditor({
   }
 
   function insertEmbed(type: 'image' | 'video', url: string) {
+    if (!editor) return;
     if (type === 'image') {
-      insertHtml(`<figure><img src="${escapeHtml(url)}" alt="Hình ảnh" /></figure><p><br></p>`);
+      editor.chain().focus().setImage({ src: url, alt: 'Hình ảnh' }).createParagraphNear().run();
       return;
     }
-    insertHtml(`<iframe src="${escapeHtml(url)}" allowfullscreen frameborder="0"></iframe><p><br></p>`);
+    editor.chain().focus().insertContent({ type: 'videoEmbed', attrs: { src: url } }).createParagraphNear().run();
   }
 
   async function uploadImage(file?: File) {
@@ -1487,44 +1511,40 @@ function RichTextEditor({
   function addVideo() {
     const url = window.prompt('Dán link video YouTube hoặc MP4');
     if (!url) return;
-    if (/\.mp4(?:\?|#|$)/i.test(url)) {
-      insertHtml(`<video controls src="${escapeHtml(url)}"></video>`);
-      return;
-    }
     insertEmbed('video', url);
   }
 
   return (
     <div className={`rich-editor ${compact ? 'compact' : ''}`}>
       <div className="rich-toolbar" aria-label="Công cụ định dạng" onMouseDown={(event) => event.preventDefault()}>
-        <button type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề">
+        <button type="button" className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''} onClick={() => runCommand('header', 2)} title="Tiêu đề">
           <Heading2 size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
+        <button type="button" className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''} onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
           <Heading3 size={16} />
         </button>
         <button type="button" onClick={() => runCommand('header', false)} title="Đoạn văn">
           Aa
         </button>
-        <button type="button" onClick={() => runCommand('blockquote')} title="Trích dẫn">
+        <button type="button" className={editor?.isActive('blockquote') ? 'active' : ''} onClick={() => runCommand('blockquote')} title="Trích dẫn">
           <Quote size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('bold')} title="In đậm">
+        <button type="button" className={editor?.isActive('bold') ? 'active' : ''} onClick={() => runCommand('bold')} title="In đậm">
           <Bold size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('italic')} title="In nghiêng">
+        <button type="button" className={editor?.isActive('italic') ? 'active' : ''} onClick={() => runCommand('italic')} title="In nghiêng">
           <Italic size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('underline')} title="Gạch chân">
+        <button type="button" className={editor?.isActive('underline') ? 'active' : ''} onClick={() => runCommand('underline')} title="Gạch chân">
           <Underline size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('strike')} title="Gạch ngang">
+        <button type="button" className={editor?.isActive('strike') ? 'active' : ''} onClick={() => runCommand('strike')} title="Gạch ngang">
           <Strikethrough size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('list', 'bullet')} title="Danh sách">
+        <button type="button" className={editor?.isActive('bulletList') ? 'active' : ''} onClick={() => runCommand('list', 'bullet')} title="Danh sách">
           <List size={16} />
         </button>
-        <button type="button" onClick={() => runCommand('list', 'ordered')} title="Danh sách số">
+        <button type="button" className={editor?.isActive('orderedList') ? 'active' : ''} onClick={() => runCommand('list', 'ordered')} title="Danh sách số">
           <ListOrdered size={16} />
         </button>
         <button type="button" onClick={() => runCommand('align', false)} title="Căn trái">
@@ -1565,64 +1585,9 @@ function RichTextEditor({
           onChange={(event) => void uploadImage(event.target.files?.[0])}
         />
       </div>
-      <div
-        className="rich-surface"
-        ref={editorMountRef}
-        contentEditable
-        suppressContentEditableWarning
-        data-placeholder={placeholder}
-        spellCheck={false}
-      />
+      <EditorContent editor={editor} />
     </div>
   );
-
-  function focusEditor() {
-    const editor = editorMountRef.current;
-    if (!editor) return;
-    editor.focus();
-  }
-
-  function normalizeEditorDom() {
-    const editor = editorMountRef.current;
-    if (!editor) return;
-    normalizeEditorElement(editor);
-  }
-
-  function applyParagraphRole(className: string) {
-    document.execCommand('formatBlock', false, 'p');
-    const block = getSelectedBlock();
-    if (!block) return;
-    block.classList.remove('rich-heading', 'rich-subheading');
-    if (className) block.classList.add(className);
-  }
-
-  function getSelectedBlock() {
-    const editor = editorMountRef.current;
-    const selection = window.getSelection();
-    if (!editor || !selection || selection.rangeCount === 0) return null;
-    let node: Node | null = selection.anchorNode;
-    if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
-    while (node && node !== editor) {
-      if (node instanceof HTMLElement && ['P', 'DIV', 'LI', 'BLOCKQUOTE'].includes(node.tagName)) return node;
-      node = node.parentNode;
-    }
-    return null;
-  }
-}
-
-function editorCommand(format: string, commandValue?: string | number | boolean) {
-  if (format === 'blockquote') return { name: 'formatBlock', value: 'blockquote' };
-  if (format === 'bold') return { name: 'bold', value: undefined };
-  if (format === 'italic') return { name: 'italic', value: undefined };
-  if (format === 'underline') return { name: 'underline', value: undefined };
-  if (format === 'strike') return { name: 'strikeThrough', value: undefined };
-  if (format === 'list') return { name: commandValue === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList', value: undefined };
-  if (format === 'align') {
-    const align = commandValue === 'center' ? 'justifyCenter' : commandValue === 'right' ? 'justifyRight' : commandValue === 'justify' ? 'justifyFull' : 'justifyLeft';
-    return { name: align, value: undefined };
-  }
-  if (format === 'link' && commandValue === false) return { name: 'unlink', value: undefined };
-  return { name: format, value: String(commandValue ?? '') };
 }
 
 function plainTextToHtml(value: string) {
@@ -1632,6 +1597,24 @@ function plainTextToHtml(value: string) {
     .replace(/\u00a0/g, ' ');
   const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   return blocks.map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`).join('');
+}
+
+function plainTextToTiptapBlocks(value: string) {
+  const normalized = value
+    .replace(/\r\n/g, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/\u00a0/g, ' ');
+  const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  if (blocks.length === 0) return [{ type: 'paragraph' }];
+  return blocks.map((block) => ({
+    type: 'paragraph',
+    content: block.split('\n').flatMap((line, index) => {
+      const content: Array<{ type: string; text?: string }> = [];
+      if (index > 0) content.push({ type: 'hardBreak' });
+      if (line) content.push({ type: 'text', text: line });
+      return content;
+    }),
+  }));
 }
 
 function demoteHeadingsToParagraphs(value: string) {
@@ -1648,13 +1631,6 @@ function demoteHeadingsToParagraphs(value: string) {
 }
 
 function normalizeEditorElement(root: HTMLElement) {
-  root.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
-    const paragraph = document.createElement('p');
-    paragraph.innerHTML = heading.innerHTML;
-    if (heading.tagName.toLowerCase() === 'h2') paragraph.classList.add('rich-heading');
-    if (heading.tagName.toLowerCase() === 'h3') paragraph.classList.add('rich-subheading');
-    heading.replaceWith(paragraph);
-  });
   root.querySelectorAll<HTMLElement>('[style]').forEach((element) => {
     element.style.fontSize = '';
     element.style.fontFamily = '';
@@ -1730,7 +1706,13 @@ function sanitizeEditorHtml(source: HTMLElement | string) {
     const sanitized = sanitizeEditorNode(node);
     if (sanitized) clean.appendChild(sanitized);
   });
+  clean.querySelectorAll('h1, h4, h5, h6').forEach((heading) => {
+    const paragraph = document.createElement('p');
+    paragraph.innerHTML = heading.innerHTML;
+    heading.replaceWith(paragraph);
+  });
   return clean.innerHTML
+    .replace(/<h([23])>\s*(?:##|###)?\s*<\/h\1>/gi, '')
     .replace(/<p>\s*(?:##|###)\s*<\/p>/gi, '')
     .trim();
 }
@@ -1779,7 +1761,7 @@ function sanitizeEditorNode(node: ChildNode): Node | null {
     return video;
   }
 
-  const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'figure']);
+  const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figure']);
   if (!allowedTags.has(tag)) {
     const fragment = document.createDocumentFragment();
     Array.from(node.childNodes).forEach((child) => {
