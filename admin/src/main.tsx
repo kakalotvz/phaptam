@@ -2000,7 +2000,7 @@ function editNews(row: NewsItem) {
             Link gốc hoặc link chia sẻ
             <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="https://..." />
           </label>
-          <label className="span">
+          <div className="span" style={{ display: 'grid', gap: '7px', color: '#6a564e', fontSize: '13px', fontWeight: 700 }}>
             Nội dung
             <RichTextEditor
               value={content}
@@ -2008,7 +2008,7 @@ function editNews(row: NewsItem) {
               placeholder="Viết nội dung tin tức"
               imageUploadKind="images/news"
             />
-          </label>
+          </div>
           <label className="check-row span">
             <input type="checkbox" checked={shareEnabled} onChange={(event) => setShareEnabled(event.target.checked)} />
             <Share2 size={16} />
@@ -2234,7 +2234,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               </button>
             </div>
           )}
-          <label>
+          <div style={{ display: 'grid', gap: '7px', color: '#6a564e', fontSize: '13px', fontWeight: 700 }}>
             Nội dung
             <RichTextEditor
               value={content}
@@ -2243,7 +2243,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               imageUploadKind="images/quote"
               placeholder="Viết lời nhắc. Có thể in đậm, xuống dòng hoặc gắn liên kết."
             />
-          </label>
+          </div>
           <label>
             Ảnh minh họa
             <UploadField kind="images/quote" value={imageUrl} onUploaded={setImageUrl} />
