@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/biometric_auth.dart';
 import '../../core/network/api_client.dart';
 import '../../core/offline/media_downloads.dart';
 import '../content/content_providers.dart';
@@ -48,6 +49,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Widget build(BuildContext context) {
     final isRegister = widget.mode == AuthMode.register;
     final isForgot = widget.mode == AuthMode.forgot;
+    final biometricLogin = widget.mode == AuthMode.login
+        ? ref
+              .watch(biometricAuthProvider)
+              .whenOrNull(
+                data: (state) =>
+                    state.supported && state.enabled ? state : null,
+              )
+        : null;
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
@@ -155,6 +164,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   : title,
             ),
           ),
+          if (biometricLogin != null) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: submitting ? null : _loginWithBiometrics,
+              icon: Icon(
+                biometricLogin.label == 'Face ID'
+                    ? Icons.face_retouching_natural
+                    : Icons.fingerprint,
+              ),
+              label: Text('Đăng nhập bằng ${biometricLogin.label}'),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Chỉ hoạt động trên thiết bị đã bật trong Hồ sơ.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           if (widget.mode == AuthMode.login)
             TextButton(
@@ -214,6 +243,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           token: result['accessToken'] as String?,
           userId: (result['user'] as Map<String, dynamic>?)?['id'] as String?,
         );
+        await ref
+            .read(biometricAuthProvider.notifier)
+            .refreshCredentialForCurrentSession();
         ref.read(isLoggedInProvider.notifier).login();
         ref.invalidate(downloadManifestProvider);
       } else {
@@ -225,6 +257,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           token: result['accessToken'] as String?,
           userId: (result['user'] as Map<String, dynamic>?)?['id'] as String?,
         );
+        await ref
+            .read(biometricAuthProvider.notifier)
+            .refreshCredentialForCurrentSession();
         ref.read(isLoggedInProvider.notifier).login();
         ref.invalidate(downloadManifestProvider);
       }
@@ -244,6 +279,31 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => submitting = false);
+    }
+  }
+
+  Future<void> _loginWithBiometrics() async {
+    setState(() => submitting = true);
+    try {
+      await ref.read(biometricAuthProvider.notifier).restoreSession();
+      ref.read(isLoggedInProvider.notifier).login();
+      ref.invalidate(downloadManifestProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đăng nhập bằng sinh trắc học thành công.'),
+        ),
+      );
+      context.go('/profile');
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
     } finally {
       if (mounted) setState(() => submitting = false);
     }

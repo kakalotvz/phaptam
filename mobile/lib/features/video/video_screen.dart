@@ -63,7 +63,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
           final visibleItems = _sortVideos(_filterVideos(items), _sortOrder);
           return RefreshIndicator(
             onRefresh: () async {
-              ref.invalidate(videoListProvider);
+              await refreshPublicContent(ref);
               await ref.read(videoListProvider.future);
             },
             child: ListView(
@@ -445,18 +445,24 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
             borderRadius: BorderRadius.circular(22),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: player != null && player.value.isInitialized && chewie != null
+              child:
+                  player != null && player.value.isInitialized && chewie != null
                   ? Stack(
                       children: [
                         Positioned.fill(
                           child: GestureDetector(
                             onDoubleTapDown: (details) {
                               final width = MediaQuery.sizeOf(context).width;
-                              final offset = details.localPosition.dx < width / 2
+                              final offset =
+                                  details.localPosition.dx < width / 2
                                   ? const Duration(seconds: -10)
                                   : const Duration(seconds: 10);
                               final next = player.value.position + offset;
-                              unawaited(player.seekTo(next < Duration.zero ? Duration.zero : next));
+                              unawaited(
+                                player.seekTo(
+                                  next < Duration.zero ? Duration.zero : next,
+                                ),
+                              );
                             },
                             child: Chewie(controller: chewie),
                           ),
@@ -584,7 +590,8 @@ class _VideoPlayerSheetState extends ConsumerState<_VideoPlayerSheet> {
   }
 
   void _shareVideo() {
-    final text = '${widget.video.title}\n${widget.video.videoUrl}\n\nChia sẻ từ ứng dụng Pháp Tâm';
+    final text =
+        '${widget.video.title}\n${widget.video.videoUrl}\n\nChia sẻ từ ứng dụng Pháp Tâm';
     unawaited(SharePlus.instance.share(ShareParams(text: text)));
   }
 

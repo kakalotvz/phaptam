@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/biometric_auth.dart';
 import '../../core/network/api_client.dart';
 import '../../core/offline/media_downloads.dart';
 import '../content/content_providers.dart';
@@ -105,6 +106,7 @@ class ProfileScreen extends ConsumerWidget {
             subtitle: 'Video đã xem gần đây',
             locked: !isLoggedIn,
           ),
+          if (isLoggedIn) const _BiometricLoginTile(),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Giao diện tối'),
@@ -286,6 +288,88 @@ class _NavTile extends StatelessWidget {
       onTap: locked ? null : onTap,
     );
   }
+}
+
+class _BiometricLoginTile extends ConsumerWidget {
+  const _BiometricLoginTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final biometric = ref.watch(biometricAuthProvider);
+    return biometric.when(
+      loading: () => const ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.fingerprint),
+        title: Text('Đăng nhập bằng sinh trắc học'),
+        subtitle: Text('Đang kiểm tra thiết bị...'),
+      ),
+      error: (error, stackTrace) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.fingerprint),
+        title: const Text('Đăng nhập bằng sinh trắc học'),
+        subtitle: Text(_friendlyError(error)),
+      ),
+      data: (state) {
+        final enabledForThisAccount = state.enabledForCurrentUser;
+        final hasOtherAccount = state.enabled && !enabledForThisAccount;
+        return SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: Icon(
+            state.label == 'Face ID'
+                ? Icons.face_retouching_natural
+                : Icons.fingerprint,
+          ),
+          title: const Text('Đăng nhập bằng sinh trắc học'),
+          subtitle: Text(
+            !state.supported
+                ? 'Thiết bị chưa hỗ trợ hoặc chưa thiết lập sinh trắc học.'
+                : enabledForThisAccount
+                ? 'Đang bật trên thiết bị này. Khi thoát, bạn có thể đăng nhập lại bằng ${state.label}.'
+                : hasOtherAccount
+                ? 'Thiết bị đang lưu sinh trắc học cho tài khoản khác. Bật để thay bằng tài khoản hiện tại.'
+                : 'Dùng ${state.label} để đăng nhập nhanh sau khi thoát.',
+          ),
+          value: enabledForThisAccount,
+          onChanged: state.supported
+              ? (value) => _toggle(context, ref, value, state.label)
+              : null,
+        );
+      },
+    );
+  }
+
+  Future<void> _toggle(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+    String label,
+  ) async {
+    try {
+      if (enabled) {
+        await ref
+            .read(biometricAuthProvider.notifier)
+            .enableForCurrentSession();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã bật đăng nhập bằng $label.')),
+        );
+      } else {
+        await ref.read(biometricAuthProvider.notifier).disable();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã tắt đăng nhập bằng sinh trắc học.')),
+        );
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyError(error))));
+    }
+  }
+
+  static String _friendlyError(Object error) =>
+      error.toString().replaceFirst('Exception: ', '');
 }
 
 class _DownloadRestorePrompt extends ConsumerStatefulWidget {

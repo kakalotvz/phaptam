@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/network/public_cache.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/offline/media_downloads.dart';
 import 'content_models.dart';
@@ -11,7 +12,7 @@ final audioCategoriesProvider = FutureProvider<List<AudioCategory>>((
   ref,
 ) async {
   _refreshPeriodically(ref);
-  final items = await apiClient.getList('/categories/audio');
+  final items = await PublicListCache.getList(ref, '/categories/audio');
   return items
       .cast<Map<String, dynamic>>()
       .map(AudioCategory.fromJson)
@@ -21,7 +22,7 @@ final audioCategoriesProvider = FutureProvider<List<AudioCategory>>((
 
 final audioListProvider = FutureProvider<List<AudioItem>>((ref) async {
   _refreshPeriodically(ref);
-  final items = await apiClient.getList('/audio');
+  final items = await PublicListCache.getList(ref, '/audio');
   return items
       .cast<Map<String, dynamic>>()
       .map(AudioItem.fromJson)
@@ -34,7 +35,7 @@ final audioListProvider = FutureProvider<List<AudioItem>>((ref) async {
 
 final videoListProvider = FutureProvider<List<VideoItem>>((ref) async {
   _refreshPeriodically(ref);
-  final items = await apiClient.getList('/video');
+  final items = await PublicListCache.getList(ref, '/video');
   return items
       .cast<Map<String, dynamic>>()
       .map(VideoItem.fromJson)
@@ -47,7 +48,7 @@ final videoListProvider = FutureProvider<List<VideoItem>>((ref) async {
 
 final newsListProvider = FutureProvider<List<NewsItem>>((ref) async {
   _refreshPeriodically(ref);
-  final items = await apiClient.getList('/news');
+  final items = await PublicListCache.getList(ref, '/news');
   return items
       .cast<Map<String, dynamic>>()
       .map(NewsItem.fromJson)
@@ -59,7 +60,7 @@ final meditationProgramsProvider = FutureProvider<List<MeditationProgram>>((
   ref,
 ) async {
   _refreshPeriodically(ref);
-  final items = await apiClient.getList('/meditation');
+  final items = await PublicListCache.getList(ref, '/meditation');
   return items
       .cast<Map<String, dynamic>>()
       .map(MeditationProgram.fromJson)
@@ -69,7 +70,7 @@ final meditationProgramsProvider = FutureProvider<List<MeditationProgram>>((
 
 final dailyQuotesProvider = FutureProvider<List<DailyQuote>>((ref) async {
   _refreshPeriodically(ref);
-  final items = await apiClient.getList('/quotes');
+  final items = await PublicListCache.getList(ref, '/quotes');
   return items
       .cast<Map<String, dynamic>>()
       .map(DailyQuote.fromJson)
@@ -79,7 +80,7 @@ final dailyQuotesProvider = FutureProvider<List<DailyQuote>>((ref) async {
 
 final homeBannersProvider = FutureProvider<List<HomeBanner>>((ref) async {
   _refreshPeriodically(ref);
-  final items = await apiClient.getList('/banners');
+  final items = await PublicListCache.getList(ref, '/banners');
   return items
       .cast<Map<String, dynamic>>()
       .map(HomeBanner.fromJson)
@@ -89,7 +90,7 @@ final homeBannersProvider = FutureProvider<List<HomeBanner>>((ref) async {
 
 final scriptureListProvider = FutureProvider<List<Scripture>>((ref) async {
   _refreshPeriodically(ref);
-  final items = await apiClient.getList('/scriptures');
+  final items = await PublicListCache.getList(ref, '/scriptures');
   final remoteScriptures = items
       .cast<Map<String, dynamic>>()
       .map(Scripture.fromJson)
@@ -98,7 +99,19 @@ final scriptureListProvider = FutureProvider<List<Scripture>>((ref) async {
   return remoteScriptures;
 });
 
-void refreshPublicContent(WidgetRef ref) {
+const publicCachePaths = [
+  '/categories/audio',
+  '/audio',
+  '/video',
+  '/news',
+  '/meditation',
+  '/quotes',
+  '/banners',
+  '/scriptures',
+];
+
+Future<void> refreshPublicContent(WidgetRef ref) async {
+  await Future.wait(publicCachePaths.map(PublicListCache.refresh));
   ref.invalidate(audioCategoriesProvider);
   ref.invalidate(audioListProvider);
   ref.invalidate(videoListProvider);

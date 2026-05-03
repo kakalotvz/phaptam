@@ -350,7 +350,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _refreshHomeContent(WidgetRef ref) async {
-    refreshPublicContent(ref);
+    await refreshPublicContent(ref);
     await Future.wait([
       ref.refresh(audioListProvider.future),
       ref.refresh(videoListProvider.future),

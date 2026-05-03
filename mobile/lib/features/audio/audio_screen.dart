@@ -50,8 +50,7 @@ class _AudioScreenState extends ConsumerState<AudioScreen> {
         error: (error, stackTrace) => const _EmptyAudioList(),
         data: (items) => RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(audioCategoriesProvider);
-            ref.invalidate(audioListProvider);
+            await refreshPublicContent(ref);
             await ref.read(audioListProvider.future);
           },
           child: ListView(

@@ -34,7 +34,7 @@ class ScriptureScreen extends ConsumerWidget {
         ),
         data: (scriptures) => RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(scriptureListProvider);
+            await refreshPublicContent(ref);
             await ref.read(scriptureListProvider.future);
           },
           child: _ScriptureContent(

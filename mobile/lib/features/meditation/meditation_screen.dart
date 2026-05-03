@@ -123,7 +123,7 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
           SafeArea(
             child: RefreshIndicator(
               onRefresh: () async {
-                ref.invalidate(meditationProgramsProvider);
+                await refreshPublicContent(ref);
                 await ref.read(meditationProgramsProvider.future);
               },
               child: CustomScrollView(
@@ -134,6 +134,7 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(22),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const Align(
                             alignment: Alignment.centerLeft,
@@ -146,7 +147,7 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                               ),
                             ),
                           ),
-                          const Spacer(),
+                          const SizedBox(height: 18),
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 600),
                             curve: Curves.easeOutCubic,
@@ -172,9 +173,11 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 38),
+                          const SizedBox(height: 26),
                           Wrap(
                             spacing: 10,
+                            runSpacing: 10,
+                            alignment: WrapAlignment.center,
                             children: [
                               for (final value in durations)
                                 ChoiceChip(
@@ -312,12 +315,29 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          TextButton.icon(
-                            onPressed: () {},
-                            icon: const Icon(Icons.water_drop_outlined),
-                            label: const Text('Âm thanh nền'),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.water_drop_outlined,
+                                size: 18,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: .9),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Âm thanh nền',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: .86,
+                                      ),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 10),
                           programs.when(
                             data: (items) => items.isEmpty
                                 ? const _EmptyMeditationProgram()
@@ -331,7 +351,7 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                             error: (error, stackTrace) =>
                                 const _EmptyMeditationProgram(),
                           ),
-                          const Spacer(),
+                          const SizedBox(height: 110),
                         ],
                       ),
                     ),
@@ -431,39 +451,52 @@ class _ProgramChooser extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SizedBox(
-      width: double.infinity,
-      child: Column(
-        spacing: 8,
-        children: [
-          for (final program in programs)
-            Card(
-              color: selectedProgramId == program.id
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Theme.of(context).colorScheme.surface,
-              child: ListTile(
-                enabled: enabled,
-                contentPadding: const EdgeInsets.only(left: 14, right: 6),
-                leading: Icon(
-                  selectedProgramId == program.id
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .08),
+        border: Border.all(color: Colors.white.withValues(alpha: .10)),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          spacing: 8,
+          children: [
+            for (final program in programs)
+              Card(
+                margin: EdgeInsets.zero,
+                color: selectedProgramId == program.id
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.surface,
+                child: ListTile(
+                  enabled: enabled,
+                  contentPadding: const EdgeInsets.only(
+                    left: 12,
+                    right: 4,
+                    top: 4,
+                    bottom: 4,
+                  ),
+                  leading: Icon(
+                    selectedProgramId == program.id
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                  ),
+                  title: Text(program.title, maxLines: 3),
+                  subtitle: program.description?.trim().isNotEmpty == true
+                      ? Text(program.description!, maxLines: 2)
+                      : null,
+                  onTap: enabled ? () => onSelected(program) : null,
+                  trailing: program.audioUrl?.trim().isNotEmpty == true
+                      ? MediaDownloadButton(
+                          mediaKey: mediaKey('meditation', program.id),
+                          title: program.title,
+                          url: program.audioUrl!,
+                        )
+                      : null,
                 ),
-                title: Text(program.title, maxLines: 3),
-                subtitle: program.description?.trim().isNotEmpty == true
-                    ? Text(program.description!, maxLines: 2)
-                    : null,
-                onTap: enabled ? () => onSelected(program) : null,
-                trailing: program.audioUrl?.trim().isNotEmpty == true
-                    ? MediaDownloadButton(
-                        mediaKey: mediaKey('meditation', program.id),
-                        title: program.title,
-                        url: program.audioUrl!,
-                      )
-                    : null,
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

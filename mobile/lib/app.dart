@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -36,7 +38,7 @@ class _PhapTamAppState extends ConsumerState<PhapTamApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      refreshPublicContent(ref);
+      unawaited(refreshPublicContent(ref));
     }
   }
 
@@ -86,9 +88,10 @@ class _PhapTamSplashScreenState extends State<_PhapTamSplashScreen>
       duration: const Duration(milliseconds: 1100),
     )..forward();
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
-    _scale = Tween<double>(begin: 0.92, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _scale = Tween<double>(
+      begin: 0.92,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
   }
 
   @override
