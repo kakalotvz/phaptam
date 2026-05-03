@@ -1435,11 +1435,13 @@ function RichTextEditor({
           const paragraph = state.schema.nodes.paragraph;
           if (paragraph) dispatch(state.tr.setBlockType(0, state.doc.content.size, paragraph).scrollIntoView());
         }
+        window.setTimeout(() => normalizeAccidentalHeading(editor), 0);
         return false;
       },
     },
     onFocus({ editor: nextEditor }) {
       resetEmptyEditorBlock(nextEditor);
+      normalizeAccidentalHeading(nextEditor);
     },
     onUpdate({ editor: nextEditor }) {
       const nextHtml = sanitizeEditorHtml(nextEditor.getHTML());
@@ -1460,6 +1462,7 @@ function RichTextEditor({
 
   function runCommand(format: string, commandValue?: string | number | boolean) {
     if (!editor) return;
+    normalizeAccidentalHeading(editor);
     const chain = editor.chain().focus();
     if (format === 'header') {
       if (commandValue === 2 && !editor.isEmpty) chain.toggleHeading({ level: 2 }).run();
@@ -1526,14 +1529,16 @@ function RichTextEditor({
   }
 
   const hasEditorContent = Boolean(editor && !editor.isEmpty);
+  const h2Active = isHeadingActive(editor, 2);
+  const h3Active = isHeadingActive(editor, 3);
 
   return (
     <div className={`rich-editor ${compact ? 'compact' : ''}`}>
       <div className="rich-toolbar" aria-label="Công cụ định dạng" onMouseDown={(event) => event.preventDefault()}>
-        <button type="button" className={hasEditorContent && editor?.isActive('heading', { level: 2 }) ? 'active' : ''} onClick={() => runCommand('header', 2)} title="Tiêu đề">
+        <button type="button" className={hasEditorContent && h2Active ? 'active' : ''} onClick={() => runCommand('header', 2)} title="Tiêu đề">
           <Heading2 size={16} />
         </button>
-        <button type="button" className={hasEditorContent && editor?.isActive('heading', { level: 3 }) ? 'active' : ''} onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
+        <button type="button" className={hasEditorContent && h3Active ? 'active' : ''} onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
           <Heading3 size={16} />
         </button>
         <button type="button" onClick={() => runCommand('header', false)} title="Đoạn văn">
@@ -1615,6 +1620,22 @@ function plainTextToHtml(value: string) {
 function resetEmptyEditorBlock(editor: ReturnType<typeof useEditor>) {
   if (!editor || !editor.isEmpty) return;
   editor.commands.setParagraph();
+}
+
+function isHeadingActive(editor: ReturnType<typeof useEditor>, level: 2 | 3) {
+  if (!editor || editor.isEmpty || !editor.isActive('heading', { level })) return false;
+  return getCurrentBlockText(editor).length <= 120;
+}
+
+function normalizeAccidentalHeading(editor: ReturnType<typeof useEditor>) {
+  if (!editor || editor.isEmpty || !editor.isActive('heading')) return;
+  if (getCurrentBlockText(editor).length <= 120) return;
+  editor.commands.setParagraph();
+}
+
+function getCurrentBlockText(editor: ReturnType<typeof useEditor>) {
+  if (!editor) return '';
+  return editor.state.selection.$from.parent.textContent.trim();
 }
 
 function plainTextToTiptapBlocks(value: string) {
@@ -1729,10 +1750,22 @@ function sanitizeEditorHtml(source: HTMLElement | string) {
     paragraph.innerHTML = heading.innerHTML;
     heading.replaceWith(paragraph);
   });
+  normalizeAccidentalHeadingElements(clean);
   return clean.innerHTML
     .replace(/<h([23])>\s*(?:##|###)?\s*<\/h\1>/gi, '')
     .replace(/<p>\s*(?:##|###)\s*<\/p>/gi, '')
     .trim();
+}
+
+function normalizeAccidentalHeadingElements(root: HTMLElement) {
+  root.querySelectorAll('h2, h3').forEach((heading) => {
+    if ((heading.textContent ?? '').trim().length <= 120) return;
+    const paragraph = document.createElement('p');
+    paragraph.innerHTML = heading.innerHTML;
+    const textAlign = (heading as HTMLElement).style.textAlign;
+    if (['center', 'right', 'justify'].includes(textAlign)) paragraph.style.textAlign = textAlign;
+    heading.replaceWith(paragraph);
+  });
 }
 
 function sanitizeEditorNode(node: ChildNode): Node | null {
