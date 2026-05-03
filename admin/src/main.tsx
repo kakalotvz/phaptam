@@ -2191,7 +2191,7 @@ function editNews(row: NewsItem) {
             Cho phép chia sẻ lên mạng xã hội
           </label>
           <button
-            className="primary"
+            className="primary quote-save-button"
             type="button"
             onClick={async () => {
               const payload = {
@@ -2564,6 +2564,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             ],
           ]}
           onDelete={(row) => run(() => api.remove(`/admin/quote/${row.id}`), 'Đã xóa trích dẫn')}
+          pageSize={10}
         />
       </Panel>
     </div>
@@ -2995,21 +2996,24 @@ function Table<T extends { id: string }>({
   rows,
   columns,
   onDelete,
+  pageSize,
 }: {
   rows: T[];
   columns: Array<[keyof T | ((row: T) => React.ReactNode), string]>;
   onDelete?: (row: T) => void;
+  pageSize?: number;
 }) {
   const { contentPageSize } = React.useContext(SettingsContext);
-  const pageSize = Math.max(1, Number(contentPageSize || 10));
+  const resolvedPageSize = Math.max(1, Number(pageSize ?? contentPageSize ?? 10));
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(rows.length / resolvedPageSize));
   const safePage = Math.min(page, pageCount);
-  const visibleRows = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const visibleRows = rows.slice((safePage - 1) * resolvedPageSize, safePage * resolvedPageSize);
+  const pageButtons = paginationPages(safePage, pageCount);
 
   useEffect(() => {
     setPage(1);
-  }, [pageSize, rows.length]);
+  }, [resolvedPageSize, rows.length]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -3066,6 +3070,27 @@ function Table<T extends { id: string }>({
             Trang {safePage}/{pageCount} • {rows.length.toLocaleString('vi-VN')} mục
           </span>
           <div>
+            <button className="ghost page-jump" type="button" disabled={safePage === 1} onClick={() => setPage(1)}>
+              1
+            </button>
+            {pageButtons[0] > 2 && <span className="page-ellipsis">...</span>}
+            {pageButtons.map((pageNumber) => (
+              <button
+                key={pageNumber}
+                className={`ghost page-jump ${pageNumber === safePage ? 'active' : ''}`}
+                type="button"
+                disabled={pageNumber === safePage}
+                onClick={() => setPage(pageNumber)}
+              >
+                {pageNumber}
+              </button>
+            ))}
+            {pageButtons[pageButtons.length - 1] < pageCount - 1 && <span className="page-ellipsis">...</span>}
+            {pageCount > 1 && (
+              <button className="ghost page-jump" type="button" disabled={safePage === pageCount} onClick={() => setPage(pageCount)}>
+                {pageCount}
+              </button>
+            )}
             <button className="ghost" type="button" disabled={safePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
               Trước
             </button>
@@ -3077,6 +3102,16 @@ function Table<T extends { id: string }>({
       )}
     </>
   );
+}
+
+function paginationPages(current: number, total: number) {
+  const pages = new Set<number>();
+  for (let page = current - 1; page <= current + 1; page += 1) {
+    if (page > 1 && page < total) pages.add(page);
+  }
+  if (current === 1 && total > 2) pages.add(2);
+  if (current === total && total > 2) pages.add(total - 1);
+  return Array.from(pages).sort((a, b) => a - b);
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

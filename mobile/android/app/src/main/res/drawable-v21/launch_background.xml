@@ -1,13 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Splash screen với nền màu nâu đậm + logo + chữ Pháp Tâm (API 21+) -->
+<!-- Native splash chỉ dùng nền màu nâu đậm; logo + chữ hiển thị trong Flutter splash. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Nền màu nâu đậm phù hợp với icon -->
     <item android:drawable="@color/splash_background" />
-
-    <!-- Logo + chữ Pháp Tâm ở giữa màn hình -->
-    <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@drawable/splash" />
-    </item>
 </layer-list>

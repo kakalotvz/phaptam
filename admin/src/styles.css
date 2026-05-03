@@ -272,6 +272,14 @@ main {
   white-space: pre-wrap;
 }
 
+.quote-save-button {
+  justify-self: start;
+  align-self: end;
+  min-height: 38px;
+  padding: 0 13px;
+  white-space: nowrap;
+}
+
 .quote-controlbar {
   display: flex;
   justify-content: space-between;
@@ -1016,7 +1024,30 @@ th {
 
 .pagination > div {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.page-jump {
+  min-width: 36px;
+  padding: 0 10px;
+}
+
+.page-jump.active,
+.page-jump.active:disabled {
+  color: #fff8e8;
+  background: #6d4c41;
+  opacity: 1;
+}
+
+.page-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: #8b7568;
+  font-weight: 800;
 }
 
 .modal-backdrop {
