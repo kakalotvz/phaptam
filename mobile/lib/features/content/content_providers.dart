@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/notifications/notification_service.dart';
+import '../../core/offline/media_downloads.dart';
 import 'content_models.dart';
 
 final audioCategoriesProvider = FutureProvider<List<AudioCategory>>((
@@ -221,6 +222,7 @@ class LoginState extends Notifier<bool> {
   Future<void> logout() async {
     await apiClient.clearSession();
     state = false;
+    ref.invalidate(downloadManifestProvider);
     ref.invalidate(scriptureReminderProvider);
   }
 }

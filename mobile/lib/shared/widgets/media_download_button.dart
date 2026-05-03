@@ -1,8 +1,10 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/offline/media_downloads.dart';
+import '../../features/content/content_providers.dart';
 
 class MediaDownloadButton extends ConsumerWidget {
   const MediaDownloadButton({
@@ -19,6 +21,7 @@ class MediaDownloadButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final downloads = ref.watch(mediaDownloadsProvider);
+    final isLoggedIn = ref.watch(isLoggedInProvider);
     return downloads.when(
       loading: () => IconButton(
         tooltip: 'Tải về để nghe/xem offline',
@@ -77,6 +80,20 @@ class MediaDownloadButton extends ConsumerWidget {
                         );
                       }
                     } else {
+                      if (!isLoggedIn) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text(
+                              'Bạn cần đăng nhập để tải nội dung dùng offline',
+                            ),
+                            action: SnackBarAction(
+                              label: 'Đăng nhập',
+                              onPressed: () => context.push('/login'),
+                            ),
+                          ),
+                        );
+                        return;
+                      }
                       final allowed = await _confirmDownloadOnMobileData(
                         context,
                       );
@@ -84,6 +101,7 @@ class MediaDownloadButton extends ConsumerWidget {
                       await ref
                           .read(mediaDownloadsProvider.notifier)
                           .download(key: mediaKey, title: title, url: url);
+                      ref.invalidate(downloadManifestProvider);
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(

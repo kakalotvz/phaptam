@@ -278,6 +278,7 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              const SizedBox(width: 48),
                               FilledButton.icon(
                                 onPressed: isStarting
                                     ? null
@@ -294,16 +295,19 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              IconButton.filledTonal(
-                                tooltip: 'Dừng hẳn',
-                                onPressed:
-                                    isStarting ||
-                                        (!isRunning &&
-                                            remainingSeconds ==
-                                                selectedMinutes * 60)
-                                    ? null
-                                    : () => unawaited(stopMeditation()),
-                                icon: const Icon(Icons.stop),
+                              SizedBox.square(
+                                dimension: 48,
+                                child: IconButton.filledTonal(
+                                  tooltip: 'Dừng hẳn',
+                                  onPressed:
+                                      isStarting ||
+                                          (!isRunning &&
+                                              remainingSeconds ==
+                                                  selectedMinutes * 60)
+                                      ? null
+                                      : () => unawaited(stopMeditation()),
+                                  icon: const Icon(Icons.stop),
+                                ),
                               ),
                             ],
                           ),

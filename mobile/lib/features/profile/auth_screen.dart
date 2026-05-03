@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/offline/media_downloads.dart';
 import '../content/content_providers.dart';
 
 enum AuthMode { login, register, forgot }
@@ -214,6 +215,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           userId: (result['user'] as Map<String, dynamic>?)?['id'] as String?,
         );
         ref.read(isLoggedInProvider.notifier).login();
+        ref.invalidate(downloadManifestProvider);
       } else {
         final result = await apiClient.post('/auth/login', {
           'email': emailController.text.trim(),
@@ -224,6 +226,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           userId: (result['user'] as Map<String, dynamic>?)?['id'] as String?,
         );
         ref.read(isLoggedInProvider.notifier).login();
+        ref.invalidate(downloadManifestProvider);
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

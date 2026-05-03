@@ -27,6 +27,27 @@ class FavoriteDto {
   contentId!: string;
 }
 
+class UserDownloadDto {
+  @IsString()
+  mediaKey!: string;
+
+  @IsString()
+  mediaType!: string;
+
+  @IsString()
+  contentId!: string;
+
+  @IsString()
+  title!: string;
+
+  @IsString()
+  url!: string;
+
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
+}
+
 class FeedbackDto {
   @IsString()
   content!: string;
@@ -133,6 +154,47 @@ export class UserController {
   async favorites(@Req() request: Request) {
     const userId = await this.userIdFromRequest(request);
     return this.prisma.favorite.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
+  }
+
+  @Get('me/downloads')
+  async downloads(@Req() request: Request) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.userDownload.findMany({
+      where: { userId },
+      orderBy: [{ mediaType: 'asc' }, { updatedAt: 'desc' }],
+    });
+  }
+
+  @Post('me/downloads')
+  async saveDownload(@Req() request: Request, @Body() dto: UserDownloadDto) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.userDownload.upsert({
+      where: { userId_mediaKey: { userId, mediaKey: dto.mediaKey } },
+      update: {
+        mediaType: dto.mediaType,
+        contentId: dto.contentId,
+        title: dto.title,
+        url: dto.url,
+        thumbnailUrl: dto.thumbnailUrl || null,
+      },
+      create: {
+        userId,
+        mediaKey: dto.mediaKey,
+        mediaType: dto.mediaType,
+        contentId: dto.contentId,
+        title: dto.title,
+        url: dto.url,
+        thumbnailUrl: dto.thumbnailUrl || null,
+      },
+    });
+  }
+
+  @Delete('me/downloads/:mediaType/:contentId')
+  async deleteDownload(@Req() request: Request, @Param('mediaType') mediaType: string, @Param('contentId') contentId: string) {
+    const userId = await this.userIdFromRequest(request);
+    return this.prisma.userDownload.deleteMany({
+      where: { userId, mediaKey: `${mediaType}:${contentId}` },
+    });
   }
 
   @Post('history')

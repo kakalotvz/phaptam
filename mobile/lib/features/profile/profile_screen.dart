@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/offline/media_downloads.dart';
 import '../content/content_providers.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -18,6 +19,7 @@ class ProfileScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          if (isLoggedIn) const _DownloadRestorePrompt(),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -83,6 +85,19 @@ class ProfileScreen extends ConsumerWidget {
             title: 'Playlist',
             subtitle: 'Danh sách kinh cá nhân',
             locked: !isLoggedIn,
+          ),
+          _NavTile(
+            icon: Icons.download_done_outlined,
+            title: 'Danh sách đã tải',
+            subtitle: 'Quản lý và tải lại nội dung offline',
+            locked: !isLoggedIn,
+            onTap: isLoggedIn
+                ? () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DownloadedMediaScreen(),
+                    ),
+                  )
+                : null,
           ),
           _NavTile(
             icon: Icons.history,
@@ -251,12 +266,14 @@ class _NavTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.locked,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final bool locked;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -266,6 +283,344 @@ class _NavTile extends StatelessWidget {
       title: Text(title),
       subtitle: Text(locked ? '$subtitle • Cần đăng nhập' : subtitle),
       trailing: Icon(locked ? Icons.lock_outline : Icons.chevron_right),
+      onTap: locked ? null : onTap,
     );
+  }
+}
+
+class _DownloadRestorePrompt extends ConsumerStatefulWidget {
+  const _DownloadRestorePrompt();
+
+  @override
+  ConsumerState<_DownloadRestorePrompt> createState() =>
+      _DownloadRestorePromptState();
+}
+
+class _DownloadRestorePromptState
+    extends ConsumerState<_DownloadRestorePrompt> {
+  bool _checking = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final manifest = ref.watch(downloadManifestProvider);
+    final local = ref.watch(mediaDownloadsProvider);
+    manifest.whenOrNull(
+      data: (remoteItems) => local.whenOrNull(
+        data: (localState) {
+          if (_checking || remoteItems.isEmpty) return;
+          _checking = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _maybePrompt(remoteItems, localState);
+          });
+        },
+      ),
+    );
+    return const SizedBox.shrink();
+  }
+
+  Future<void> _maybePrompt(
+    List<RemoteDownload> remoteItems,
+    MediaDownloadState localState,
+  ) async {
+    final shouldPrompt = await shouldPromptDownloadRestore(
+      remoteItems,
+      localState,
+    );
+    if (!mounted || !shouldPrompt) return;
+    final missing = remoteItems
+        .where((item) => !localState.isDownloaded(item.mediaKey))
+        .toList();
+    final restore = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Khôi phục nội dung offline?'),
+        content: Text(
+          'Tài khoản của bạn có ${missing.length} nội dung từng tải về, nhưng thiết bị này chưa có file offline. Bạn muốn tải lại ngay bây giờ không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Để sau'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Tải lại'),
+          ),
+        ],
+      ),
+    );
+    await markDownloadRestorePromptSeen();
+    if (!mounted || restore != true) return;
+    await _downloadRemoteItems(context, ref, missing);
+  }
+}
+
+class DownloadedMediaScreen extends ConsumerStatefulWidget {
+  const DownloadedMediaScreen({super.key});
+
+  @override
+  ConsumerState<DownloadedMediaScreen> createState() =>
+      _DownloadedMediaScreenState();
+}
+
+class _DownloadedMediaScreenState extends ConsumerState<DownloadedMediaScreen> {
+  final Set<String> _selected = {};
+  bool _running = false;
+  bool _paused = false;
+  bool _cancelled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final manifest = ref.watch(downloadManifestProvider);
+    final local = ref.watch(mediaDownloadsProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Danh sách đã tải')),
+      body: manifest.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => Center(child: Text(error.toString())),
+        data: (items) {
+          final grouped = _groupDownloads(items);
+          final selectedItems = items
+              .where((item) => _selected.contains(item.mediaKey))
+              .toList();
+          final actionItems = selectedItems.isEmpty ? items : selectedItems;
+          return ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              Text(
+                'Những nội dung bạn từng tải sẽ được lưu theo tài khoản để có thể tải lại trên thiết bị mới.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: _running || actionItems.isEmpty
+                    ? null
+                    : () => _download(actionItems),
+                icon: const Icon(Icons.download_for_offline_outlined),
+                label: Text(
+                  _selected.isEmpty
+                      ? 'Tải toàn bộ'
+                      : 'Tải ${_selected.length} mục đã chọn',
+                ),
+              ),
+              if (_running) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => setState(() => _paused = !_paused),
+                        icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+                        label: Text(_paused ? 'Tiếp tục' : 'Tạm dừng'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => setState(() => _cancelled = true),
+                        icon: const Icon(Icons.close),
+                        label: const Text('Hủy'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+              if (items.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.download_done_outlined),
+                    title: Text('Chưa có nội dung đã tải'),
+                  ),
+                ),
+              for (final entry in grouped.entries) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 18, bottom: 8),
+                  child: Text(
+                    entry.key,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                for (final item in entry.value)
+                  local.when(
+                    loading: () => _DownloadListTile(
+                      item: item,
+                      selected: _selected.contains(item.mediaKey),
+                      downloaded: false,
+                      onSelected: _toggleSelected,
+                      onDownload: _running ? null : () => _download([item]),
+                    ),
+                    error: (error, stackTrace) => _DownloadListTile(
+                      item: item,
+                      selected: _selected.contains(item.mediaKey),
+                      downloaded: false,
+                      onSelected: _toggleSelected,
+                      onDownload: _running ? null : () => _download([item]),
+                    ),
+                    data: (state) => _DownloadListTile(
+                      item: item,
+                      selected: _selected.contains(item.mediaKey),
+                      downloaded: state.isDownloaded(item.mediaKey),
+                      onSelected: _toggleSelected,
+                      onDownload: _running ? null : () => _download([item]),
+                    ),
+                  ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _toggleSelected(String key, bool selected) {
+    setState(() {
+      if (selected) {
+        _selected.add(key);
+      } else {
+        _selected.remove(key);
+      }
+    });
+  }
+
+  Future<void> _download(List<RemoteDownload> items) async {
+    setState(() {
+      _running = true;
+      _paused = false;
+      _cancelled = false;
+    });
+    try {
+      for (final item in items) {
+        while (_paused && !_cancelled) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        if (_cancelled) break;
+        await ref
+            .read(mediaDownloadsProvider.notifier)
+            .download(
+              key: item.mediaKey,
+              title: item.title,
+              url: item.url,
+              thumbnailUrl: item.thumbnailUrl,
+            );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_cancelled ? 'Đã hủy tải' : 'Đã tải xong')),
+        );
+      }
+    } finally {
+      ref.invalidate(downloadManifestProvider);
+      if (mounted) {
+        setState(() {
+          _running = false;
+          _paused = false;
+          _cancelled = false;
+        });
+      }
+    }
+  }
+}
+
+class _DownloadListTile extends StatelessWidget {
+  const _DownloadListTile({
+    required this.item,
+    required this.selected,
+    required this.downloaded,
+    required this.onSelected,
+    required this.onDownload,
+  });
+
+  final RemoteDownload item;
+  final bool selected;
+  final bool downloaded;
+  final void Function(String key, bool selected) onSelected;
+  final VoidCallback? onDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Checkbox(
+              value: selected,
+              onChanged: (value) => onSelected(item.mediaKey, value ?? false),
+            ),
+            Icon(_downloadIcon(item.mediaType)),
+          ],
+        ),
+        title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+          downloaded ? 'Đã có trên thiết bị' : 'Chưa tải trên thiết bị này',
+        ),
+        trailing: IconButton(
+          tooltip: downloaded ? 'Đã tải' : 'Tải mục này',
+          onPressed: downloaded ? null : onDownload,
+          icon: Icon(
+            downloaded ? Icons.download_done : Icons.download_outlined,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Map<String, List<RemoteDownload>> _groupDownloads(List<RemoteDownload> items) {
+  final result = <String, List<RemoteDownload>>{};
+  for (final item in items) {
+    result.putIfAbsent(_downloadTypeLabel(item.mediaType), () => []).add(item);
+  }
+  return result;
+}
+
+String _downloadTypeLabel(String type) {
+  return switch (type) {
+    'audio' => 'Kinh audio',
+    'video' => 'Videos',
+    'meditation' => 'Thiền',
+    _ => type.trim().isEmpty ? 'Khác' : type,
+  };
+}
+
+IconData _downloadIcon(String type) {
+  return switch (type) {
+    'audio' => Icons.headphones_outlined,
+    'video' => Icons.play_circle_outline,
+    'meditation' => Icons.self_improvement_outlined,
+    _ => Icons.download_outlined,
+  };
+}
+
+Future<void> _downloadRemoteItems(
+  BuildContext context,
+  WidgetRef ref,
+  List<RemoteDownload> items,
+) async {
+  try {
+    for (final item in items) {
+      await ref
+          .read(mediaDownloadsProvider.notifier)
+          .download(
+            key: item.mediaKey,
+            title: item.title,
+            url: item.url,
+            thumbnailUrl: item.thumbnailUrl,
+          );
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã tải lại nội dung offline')),
+      );
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 }
