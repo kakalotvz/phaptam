@@ -1,10 +1,12 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { AdminAuthGuard } from '../auth/admin.guard';
 import { NewsSourceType, ReminderResumeMode, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateScriptureTiming, validateScriptureLines } from '../scripture/timing';
 import { R2Service } from '../storage/r2.service';
 
+@UseGuards(AdminAuthGuard)
 @Controller('admin')
 export class AdminController {
   constructor(private readonly prisma: PrismaService, private readonly r2: R2Service) {}

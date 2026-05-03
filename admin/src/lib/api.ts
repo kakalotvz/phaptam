@@ -204,8 +204,12 @@ export function setApiBaseUrl(value: string) {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = localStorage.getItem('phaptam_admin_token');
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { ...headers, ...options?.headers },
     ...options,
   });
 
@@ -219,6 +223,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (data: unknown) => request<{ accessToken: string }>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   overview: () => request<Record<string, number>>('/admin/overview'),
   settings: () => request<AppSettings>('/admin/settings'),
   updateSettings: (data: Partial<AppSettings>) =>

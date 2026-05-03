@@ -9,6 +9,8 @@ export class AuthService {
 
   async register(data: { email: string; password: string; username: string; name?: string; birthDate?: string; acceptedTerms: boolean }) {
     if (!data.acceptedTerms) throw new BadRequestException('Bạn cần đồng ý điều khoản để đăng ký');
+    if (data.username.trim().toLowerCase() === 'admin') throw new BadRequestException('Tên đăng nhập này không được phép sử dụng');
+    
     const existing = await this.prisma.user.findFirst({
       where: { OR: [{ email: data.email }, { username: data.username }] },
     });

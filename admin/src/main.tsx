@@ -230,12 +230,74 @@ const nav = [
 
 const SettingsContext = React.createContext<AppSettings>({ contentPageSize: 10 });
 
+
+function Login({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.login({ email, password });
+      localStorage.setItem('phaptam_admin_token', res.accessToken);
+      onLogin();
+    } catch (err: any) {
+      setError(err.message || 'Sai tài khoản hoặc mật khẩu');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', background: '#f6f0dd' }}>
+      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '380px', padding: '30px', background: '#fffcf0', borderRadius: '18px', boxShadow: '0 22px 60px rgba(72, 48, 38, .08)' }}>
+        <h2 style={{ textAlign: 'center', fontFamily: '"Noto Serif", serif', color: '#8b5e3c', margin: '0 0 20px' }}>Đăng nhập Quản trị</h2>
+        {error && <div style={{ color: 'red', marginBottom: '14px', fontSize: '14px', textAlign: 'center' }}>{error}</div>}
+        <label style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+          Tài khoản / Email
+          <input value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="admin" autoFocus />
+        </label>
+        <label style={{ display: 'grid', gap: '8px', marginBottom: '24px' }}>
+          Mật khẩu
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
+        </label>
+        <button type="submit" disabled={loading} style={{ width: '100%', padding: '12px', background: '#8b5e3c', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}>
+          {loading ? 'Đang xử lý...' : 'Đăng nhập'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function App() {
-  const [section, setSection] = useState<Section>('overview');
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(localStorage.getItem('phaptam_admin_token')));
+
+  const getHashSection = (): Section => {
+    const hash = window.location.hash.slice(1);
+    const validSections: Section[] = ['overview', 'audio', 'video', 'scripture', 'reminder', 'news', 'quote', 'banner', 'meditation', 'rss', 'users', 'feedback', 'settings'];
+    return validSections.includes(hash as Section) ? (hash as Section) : 'overview';
+  };
+
+  const [section, setSectionState] = useState<Section>(getHashSection());
   const [data, setData] = useState<DataState>(emptyData);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const onHashChange = () => setSectionState(getHashSection());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const setSection = (s: Section) => {
+    window.location.hash = s;
+    setSectionState(s);
+  };
 
   async function load() {
     setLoading(true);
@@ -284,6 +346,7 @@ function App() {
         safe(() => api.feedback(), []),
         safe(() => api.users(), []),
       ]);
+
       setData({
         overview,
         settings,
@@ -303,93 +366,129 @@ function App() {
         users,
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Không tải được dữ liệu');
+      setError(caught instanceof Error ? caught.message : 'Tải dữ liệu thất bại');
+      if (caught instanceof Error && (caught.message.includes('401') || caught.message.includes('Unauthorized') || caught.message.includes('403'))) {
+        localStorage.removeItem('phaptam_admin_token');
+        setIsAuthenticated(false);
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  async function run(action: () => Promise<unknown>, message: string) {
+  useEffect(() => {
+    if (isAuthenticated) void load();
+  }, [isAuthenticated]);
+
+  async function run(action: () => Promise<unknown>, message: string): Promise<boolean> {
     setError('');
     setNotice('');
     try {
       await action();
       setNotice(message);
-      await load();
+      void load();
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Thao tác thất bại');
+      const msg = caught instanceof Error ? caught.message : 'Thao tác thất bại';
+      setError(msg);
+      if (msg.includes('401') || msg.includes('Unauthorized') || msg.includes('403')) {
+        localStorage.removeItem('phaptam_admin_token');
+        setIsAuthenticated(false);
+      }
       return false;
     }
   }
 
   useEffect(() => {
-    void load();
-  }, []);
+    if (notice) {
+      const timer = window.setTimeout(() => setNotice(''), 3000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [notice]);
+
+  function handleLogout() {
+    localStorage.removeItem('phaptam_admin_token');
+    setIsAuthenticated(false);
+  }
+
+  if (!isAuthenticated) return <Login onLogin={() => setIsAuthenticated(true)} />;
+
+  const menu: [Section, string, React.ReactNode][] = [
+    ['overview', 'Tổng quan', <BarChart3 size={16} />],
+    ['audio', 'Audio', <BookAudio size={16} />],
+    ['video', 'Video', <Clapperboard size={16} />],
+    ['scripture', 'Kinh điển', <BookOpenText size={16} />],
+    ['reminder', 'Lời nhắc', <CalendarClock size={16} />],
+    ['meditation', 'Chương trình thiền', <List size={16} />],
+    ['news', 'Tin tức', <Newspaper size={16} />],
+    ['quote', 'Trích dẫn', <Quote size={16} />],
+    ['banner', 'Banner', <Image size={16} />],
+    ['rss', 'RSS Nguồn', <RefreshCcw size={16} />],
+    ['users', 'Người dùng', <FileText size={16} />],
+    ['feedback', 'Phản hồi', <MessageSquareText size={16} />],
+    ['settings', 'Cài đặt', <Settings size={16} />],
+  ];
 
   return (
     <SettingsContext.Provider value={data.settings}>
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">PT</span>
-          <div>
-            <strong>Pháp Tâm</strong>
-            <small>Bảng quản trị</small>
+      <div className="app-shell">
+        <div className="sidebar">
+          <div className="brand">
+            <div className="brand-mark">PT</div>
+            <div>
+              <strong>Pháp Tâm Admin</strong>
+              <small>Hệ thống Quản trị v0.1.0</small>
+            </div>
           </div>
-        </div>
-        <nav>
-          {nav.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                className={section === item.id ? 'active' : ''}
-                onClick={() => setSection(item.id as Section)}
-              >
-                <Icon size={18} />
-                {item.label}
+          <nav>
+            {menu.map(([id, label, icon]) => (
+              <button key={id} className={section === id ? 'active' : ''} type="button" onClick={() => setSection(id)}>
+                {icon}
+                {label}
               </button>
-            );
-          })}
-        </nav>
-      </aside>
-
-      <main>
-        <header className="topbar">
-          <div>
-            <p>Bảng điều khiển nội dung</p>
-            <h1>{nav.find((item) => item.id === section)?.label}</h1>
+            ))}
+            <button type="button" onClick={handleLogout} style={{ marginTop: '20px', color: '#f87171' }}>
+              <Power size={16} />
+              Đăng xuất
+            </button>
+          </nav>
+        </div>
+        <main>
+          <div className="topbar">
+            <div>
+              <p>Menu</p>
+              <h1>{menu.find((m) => m[0] === section)?.[1]}</h1>
+            </div>
+            <div>
+              {notice && <span style={{ color: '#059669', marginRight: '16px', fontWeight: 'bold' }}>{notice}</span>}
+              {error && <span style={{ color: '#dc2626', marginRight: '16px', fontWeight: 'bold' }}>Lỗi: {error}</span>}
+              <button className="primary" type="button" onClick={load} disabled={loading}>
+                <RefreshCcw size={15} />
+                {loading ? 'Đang tải...' : 'Làm mới'}
+              </button>
+            </div>
           </div>
-          <button className="ghost" onClick={() => void load()}>
-            <RefreshCcw size={16} />
-            Tải lại
-          </button>
-        </header>
-
-        {notice && <div className="notice">{notice}</div>}
-        {error && <div className="error">{error}</div>}
-        {loading ? <div className="loading">Đang tải dữ liệu...</div> : null}
-
-        {!loading && (
-          <>
-            {section === 'overview' && <Overview data={data} />}
-            {section === 'audio' && <AudioManager data={data} run={run} />}
-            {section === 'scripture' && <ScriptureManager data={data} run={run} />}
-            {section === 'reminder' && <ScriptureReminderManager data={data} run={run} />}
-            {section === 'video' && <VideoManager data={data} run={run} />}
-            {section === 'meditation' && <MeditationManager data={data} run={run} />}
-            {section === 'news' && <NewsManager data={data} run={run} />}
-            {section === 'rss' && <RssManager data={data} run={run} />}
-            {section === 'quote' && <QuoteManager data={data} run={run} />}
-            {section === 'banner' && <BannerManager data={data} run={run} />}
-            {section === 'users' && <UserManager data={data} run={run} />}
-            {section === 'feedback' && <FeedbackManager data={data} run={run} />}
-            {section === 'settings' && <SettingsPanel onSaved={load} />}
-          </>
-        )}
-      </main>
-    </div>
+          {loading && data === emptyData ? (
+            <div>Đang tải dữ liệu...</div>
+          ) : (
+            <div className="content">
+              {section === 'overview' && <Overview data={data} />}
+              {section === 'audio' && <AudioManager data={data} run={run} />}
+              {section === 'scripture' && <ScriptureManager data={data} run={run} />}
+              {section === 'reminder' && <ScriptureReminderManager data={data} run={run} />}
+              {section === 'video' && <VideoManager data={data} run={run} />}
+              {section === 'meditation' && <MeditationManager data={data} run={run} />}
+              {section === 'news' && <NewsManager data={data} run={run} />}
+              {section === 'rss' && <RssManager data={data} run={run} />}
+              {section === 'quote' && <QuoteManager data={data} run={run} />}
+              {section === 'banner' && <BannerManager data={data} run={run} />}
+              {section === 'users' && <UserManager data={data} run={run} />}
+              {section === 'feedback' && <FeedbackManager data={data} run={run} />}
+              {section === 'settings' && <SettingsPanel onSaved={load} />}
+            </div>
+          )}
+        </main>
+      </div>
     </SettingsContext.Provider>
   );
 }
