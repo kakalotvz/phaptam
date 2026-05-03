@@ -62,8 +62,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          SliverAppBar.large(
-            title: const Text('Pháp Tâm'),
+          SliverAppBar(
+            toolbarHeight: 72,
+            titleSpacing: 18,
+            title: Text(
+              'Pháp Tâm',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             actions: [
               IconButton(
                 tooltip: 'Thông báo',

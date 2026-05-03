@@ -43,7 +43,14 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
       setState(() => timer = null);
       return;
     }
-    await _startBackgroundAudio();
+    final detectedDuration = await _startBackgroundAudio();
+    if (detectedDuration != null && detectedDuration.inSeconds > 0) {
+      final detectedSeconds = detectedDuration.inSeconds;
+      setState(() {
+        selectedMinutes = (detectedSeconds / 60).ceil();
+        remainingSeconds = detectedSeconds;
+      });
+    }
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (remainingSeconds <= 1) {
         timer?.cancel();
@@ -211,7 +218,7 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                             ? const _EmptyMeditationProgram()
                             : _ProgramChooser(
                                 programs: items,
-                                selectedSeconds: remainingSeconds,
+                                selectedProgramId: selectedProgram?.id,
                                 enabled: !isRunning,
                                 onSelected: _selectProgram,
                               ),
@@ -238,19 +245,24 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
   }
 
   void _selectProgram(MeditationProgram program) {
-    final minutes = (program.duration.inSeconds / 60).ceil().clamp(1, 24 * 60);
+    final seconds = program.duration.inSeconds;
+    final minutes = (seconds / 60).ceil().clamp(1, 24 * 60);
     setState(() {
       selectedProgram = program;
       customDuration = false;
-      selectedMinutes = minutes;
-      remainingSeconds = program.duration.inSeconds;
+      if (seconds > 0) {
+        selectedMinutes = minutes;
+        remainingSeconds = seconds;
+      }
     });
   }
 
-  Future<void> _startBackgroundAudio() async {
+  Future<Duration?> _startBackgroundAudio() async {
     final program = selectedProgram;
     final audioUrl = program?.audioUrl;
-    if (program == null || audioUrl == null || audioUrl.trim().isEmpty) return;
+    if (program == null || audioUrl == null || audioUrl.trim().isEmpty) {
+      return null;
+    }
     final player = backgroundPlayer ??= AudioPlayer();
     final source = await ref
         .read(mediaDownloadsProvider.notifier)
@@ -260,8 +272,14 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
     } else {
       await player.setFilePath(source);
     }
-    await player.setLoopMode(LoopMode.one);
+    final detectedDuration =
+        player.duration ??
+        await player.durationStream
+            .firstWhere((value) => value != null && value.inSeconds > 0)
+            .timeout(const Duration(seconds: 2), onTimeout: () => null);
+    await player.setLoopMode(LoopMode.off);
     await player.play();
+    return detectedDuration;
   }
 }
 
@@ -282,13 +300,13 @@ class _EmptyMeditationProgram extends StatelessWidget {
 class _ProgramChooser extends ConsumerWidget {
   const _ProgramChooser({
     required this.programs,
-    required this.selectedSeconds,
+    required this.selectedProgramId,
     required this.enabled,
     required this.onSelected,
   });
 
   final List<MeditationProgram> programs;
-  final int selectedSeconds;
+  final String? selectedProgramId;
   final bool enabled;
   final ValueChanged<MeditationProgram> onSelected;
 
@@ -307,7 +325,7 @@ class _ProgramChooser extends ConsumerWidget {
               children: [
                 ChoiceChip(
                   label: Text(program.title),
-                  selected: selectedSeconds == program.duration.inSeconds,
+                  selected: selectedProgramId == program.id,
                   onSelected: enabled ? (_) => onSelected(program) : null,
                 ),
                 if (program.audioUrl?.trim().isNotEmpty == true)

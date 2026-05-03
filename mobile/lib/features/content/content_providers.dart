@@ -62,9 +62,7 @@ final meditationProgramsProvider = FutureProvider<List<MeditationProgram>>((
   return items
       .cast<Map<String, dynamic>>()
       .map(MeditationProgram.fromJson)
-      .where(
-        (item) => item.title.trim().isNotEmpty && item.duration.inSeconds > 0,
-      )
+      .where((item) => item.title.trim().isNotEmpty)
       .toList();
 });
 

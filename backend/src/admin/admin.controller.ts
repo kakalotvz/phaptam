@@ -482,23 +482,29 @@ export class AdminController {
   }
 
   @Post('meditation')
-  createMeditationProgram(@Body() data: { title: string; description?: string; duration: number; audioUrl?: string; imageUrl?: string; active?: boolean }) {
+  createMeditationProgram(@Body() data: { title: string; description?: string; duration?: number; audioUrl?: string; imageUrl?: string; active?: boolean }) {
     return this.prisma.meditationProgram.create({
       data: { ...data, duration: Number(data.duration || 0), active: data.active ?? true },
     });
   }
 
   @Patch('meditation/:id')
-  updateMeditationProgram(@Param('id') id: string, @Body() data: { title?: string; description?: string; duration?: number; audioUrl?: string; imageUrl?: string; active?: boolean }) {
-    return this.prisma.meditationProgram.update({
+  async updateMeditationProgram(@Param('id') id: string, @Body() data: { title?: string; description?: string; duration?: number; audioUrl?: string; imageUrl?: string; active?: boolean }) {
+    const current = await this.prisma.meditationProgram.findUniqueOrThrow({ where: { id } });
+    const updated = await this.prisma.meditationProgram.update({
       where: { id },
       data: { ...data, duration: data.duration === undefined ? undefined : Number(data.duration || 0) },
     });
+    await this.deleteReplacedR2Media([[current.audioUrl, data.audioUrl], [current.imageUrl, data.imageUrl]]);
+    return updated;
   }
 
   @Delete('meditation/:id')
-  deleteMeditationProgram(@Param('id') id: string) {
-    return this.prisma.meditationProgram.delete({ where: { id } });
+  async deleteMeditationProgram(@Param('id') id: string) {
+    const item = await this.prisma.meditationProgram.findUniqueOrThrow({ where: { id } });
+    const deleted = await this.prisma.meditationProgram.delete({ where: { id } });
+    await this.r2.deletePublicUrls([item.audioUrl, item.imageUrl]);
+    return deleted;
   }
 
   @Get('quote')

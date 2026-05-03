@@ -2259,22 +2259,7 @@ function editNews(row: NewsItem) {
 }
 
 function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
-  function editMeditation(row: MeditationProgram) {
-    const title = askText('Tiêu đề', row.title);
-    if (title === undefined) return;
-    const description = askText('Mô tả', row.description ?? '');
-    if (description === undefined) return;
-    const duration = askNumber('Thời lượng giây', row.duration);
-    if (duration === undefined) return;
-    const audioUrl = askText('Âm thanh nền URL', row.audioUrl ?? '');
-    if (audioUrl === undefined) return;
-    const imageUrl = askText('Ảnh nền URL', row.imageUrl ?? '');
-    if (imageUrl === undefined) return;
-    void run(
-      () => api.update(`/admin/meditation/${row.id}`, { title, description, duration, audioUrl, imageUrl }),
-      'Đã cập nhật bài Thiền',
-    );
-  }
+  const [editingMeditation, setEditingMeditation] = useState<MeditationProgram | null>(null);
 
   return (
     <div className="single-column">
@@ -2283,11 +2268,10 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
           fields={[
             ['title', 'Tiêu đề'],
             ['description', 'Mô tả'],
-            ['duration', 'Thời lượng giây', 'number'],
             ['audioUrl', 'Âm thanh nền', 'upload:audio/meditation'],
             ['imageUrl', 'Ảnh nền', 'upload:images/meditation'],
           ]}
-          onSubmit={(values) => run(() => api.create('/admin/meditation', { ...values, duration: Number(values.duration || 0), active: true }), 'Đã tạo bài Thiền')}
+          onSubmit={(values) => run(() => api.create('/admin/meditation', { ...values, duration: 0, active: true }), 'Đã tạo bài Thiền')}
         />
       </Panel>
       <Panel title="Danh sách bài Thiền">
@@ -2297,12 +2281,11 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
             ['imageUrl', 'Ảnh'],
             ['title', 'Tiêu đề'],
             ['description', 'Mô tả'],
-            [(row: MeditationProgram) => `${row.duration}s`, 'Thời lượng'],
             [(row: MeditationProgram) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
             [
               (row: MeditationProgram) => (
                 <div className="action-group">
-                  <button className="ghost" type="button" onClick={() => editMeditation(row)}>
+                  <button className="ghost" type="button" onClick={() => setEditingMeditation(row)}>
                     <Pencil size={15} />
                     Sửa
                   </button>
@@ -2322,7 +2305,75 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
           onDelete={(row) => run(() => api.remove(`/admin/meditation/${row.id}`), 'Đã xóa bài Thiền')}
         />
       </Panel>
+      {editingMeditation && (
+        <MeditationEditModal
+          program={editingMeditation}
+          onClose={() => setEditingMeditation(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/meditation/${editingMeditation.id}`, compactPayload({ ...values, duration: 0 })),
+              'Đã cập nhật bài Thiền',
+            );
+            if (saved) setEditingMeditation(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function MeditationEditModal({
+  program,
+  onClose,
+  onSave,
+}: {
+  program: MeditationProgram;
+  onClose: () => void;
+  onSave: (values: { title: string; description: string; audioUrl: string; imageUrl: string }) => Promise<void>;
+}) {
+  const [values, setValues] = useState({
+    title: program.title,
+    description: program.description ?? '',
+    audioUrl: program.audioUrl ?? '',
+    imageUrl: program.imageUrl ?? '',
+  });
+
+  return (
+    <Modal title="Sửa bài Thiền" onClose={onClose}>
+      <form
+        className="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave(values);
+        }}
+      >
+        <label>
+          Tiêu đề
+          <input value={values.title} onChange={(event) => setValues({ ...values, title: event.target.value })} required />
+        </label>
+        <label>
+          Mô tả
+          <textarea value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
+        </label>
+        <label>
+          Âm thanh nền
+          <UploadField kind="audio/meditation" value={values.audioUrl} onUploaded={(audioUrl) => setValues({ ...values, audioUrl })} />
+        </label>
+        <label>
+          Ảnh nền
+          <UploadField kind="images/meditation" value={values.imageUrl} onUploaded={(imageUrl) => setValues({ ...values, imageUrl })} />
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" type="button" onClick={onClose}>
+            Hủy
+          </button>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -2447,7 +2498,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             <UploadField kind="images/quote" value={imageUrl} onUploaded={setImageUrl} />
           </label>
           <button
-            className="primary"
+            className="primary quote-save-button"
             type="button"
             onClick={async () => {
               const ok = await run(
