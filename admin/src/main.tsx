@@ -1363,27 +1363,28 @@ function RichTextEditor({
       const text = event.clipboardData?.getData('text/plain') ?? '';
       if (!text) return;
       event.preventDefault();
-      document.execCommand('formatBlock', false, 'p');
-      document.execCommand('justifyLeft');
       insertHtml(plainTextToHtml(text));
-      syncValue();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!resetFormatOnEnter || event.key !== 'Enter' || event.shiftKey) return;
       window.setTimeout(() => {
-        document.execCommand('formatBlock', false, 'p');
-        document.execCommand('justifyLeft');
+        normalizeEditorDom();
         syncValue();
       }, 0);
     };
     const handleFocus = () => {
       isFocusedRef.current = true;
+      normalizeEditorDom();
     };
     const handleBlur = () => {
       isFocusedRef.current = false;
+      normalizeEditorDom();
       syncValue();
     };
-    const handleInput = () => syncValue();
+    const handleInput = () => {
+      normalizeEditorDom();
+      syncValue();
+    };
 
     editor.addEventListener('paste', handlePaste);
     editor.addEventListener('keydown', handleKeyDown);
@@ -1414,6 +1415,7 @@ function RichTextEditor({
   function syncValue() {
     const editor = editorMountRef.current;
     if (!editor) return;
+    normalizeEditorDom();
     const nextHtml = editor.innerHTML.trim() === '<p><br></p>' ? '' : sanitizeEditorHtml(editor.innerHTML);
     lastHtmlRef.current = nextHtml;
     onChange(nextHtml);
@@ -1421,6 +1423,11 @@ function RichTextEditor({
 
   function runCommand(format: string, commandValue?: string | number | boolean) {
     focusEditor();
+    if (format === 'header') {
+      applyParagraphRole(commandValue === 2 ? 'rich-heading' : commandValue === 3 ? 'rich-subheading' : '');
+      syncValue();
+      return;
+    }
     const command = editorCommand(format, commandValue);
     document.execCommand(command.name, false, command.value);
     syncValue();
@@ -1574,10 +1581,36 @@ function RichTextEditor({
     if (!editor) return;
     editor.focus();
   }
+
+  function normalizeEditorDom() {
+    const editor = editorMountRef.current;
+    if (!editor) return;
+    normalizeEditorElement(editor);
+  }
+
+  function applyParagraphRole(className: string) {
+    document.execCommand('formatBlock', false, 'p');
+    const block = getSelectedBlock();
+    if (!block) return;
+    block.classList.remove('rich-heading', 'rich-subheading');
+    if (className) block.classList.add(className);
+  }
+
+  function getSelectedBlock() {
+    const editor = editorMountRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0) return null;
+    let node: Node | null = selection.anchorNode;
+    if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    while (node && node !== editor) {
+      if (node instanceof HTMLElement && ['P', 'DIV', 'LI', 'BLOCKQUOTE'].includes(node.tagName)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
 }
 
 function editorCommand(format: string, commandValue?: string | number | boolean) {
-  if (format === 'header') return { name: 'formatBlock', value: commandValue ? `h${commandValue}` : 'p' };
   if (format === 'blockquote') return { name: 'formatBlock', value: 'blockquote' };
   if (format === 'bold') return { name: 'bold', value: undefined };
   if (format === 'italic') return { name: 'italic', value: undefined };
@@ -1604,12 +1637,29 @@ function plainTextToHtml(value: string) {
 function demoteHeadingsToParagraphs(value: string) {
   const container = document.createElement('div');
   container.innerHTML = value;
-  container.querySelectorAll('h1, h2, h3').forEach((heading) => {
+  container.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
     const paragraph = document.createElement('p');
     paragraph.innerHTML = heading.innerHTML;
+    if (heading.tagName.toLowerCase() === 'h2') paragraph.classList.add('rich-heading');
+    if (heading.tagName.toLowerCase() === 'h3') paragraph.classList.add('rich-subheading');
     heading.replaceWith(paragraph);
   });
   return container.innerHTML;
+}
+
+function normalizeEditorElement(root: HTMLElement) {
+  root.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
+    const paragraph = document.createElement('p');
+    paragraph.innerHTML = heading.innerHTML;
+    if (heading.tagName.toLowerCase() === 'h2') paragraph.classList.add('rich-heading');
+    if (heading.tagName.toLowerCase() === 'h3') paragraph.classList.add('rich-subheading');
+    heading.replaceWith(paragraph);
+  });
+  root.querySelectorAll<HTMLElement>('[style]').forEach((element) => {
+    element.style.fontSize = '';
+    element.style.fontFamily = '';
+    element.style.lineHeight = '';
+  });
 }
 
 function markupToHtml(value: string) {
@@ -1674,18 +1724,13 @@ function inlineMarkupToHtml(value: string) {
 function sanitizeEditorHtml(source: HTMLElement | string) {
   const container = document.createElement('div');
   container.innerHTML = typeof source === 'string' ? source : source.innerHTML;
+  normalizeEditorElement(container);
   const clean = document.createElement('div');
   Array.from(container.childNodes).forEach((node) => {
     const sanitized = sanitizeEditorNode(node);
     if (sanitized) clean.appendChild(sanitized);
   });
-  clean.querySelectorAll('h1').forEach((heading) => {
-    const h2 = document.createElement('h2');
-    h2.innerHTML = heading.innerHTML;
-    heading.replaceWith(h2);
-  });
   return clean.innerHTML
-    .replace(/<h([23])>\s*(?:##|###)?\s*<\/h\1>/gi, '')
     .replace(/<p>\s*(?:##|###)\s*<\/p>/gi, '')
     .trim();
 }
@@ -1734,7 +1779,7 @@ function sanitizeEditorNode(node: ChildNode): Node | null {
     return video;
   }
 
-  const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'figure']);
+  const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a', 'ul', 'ol', 'li', 'blockquote', 'figure']);
   if (!allowedTags.has(tag)) {
     const fragment = document.createDocumentFragment();
     Array.from(node.childNodes).forEach((child) => {
@@ -1746,8 +1791,10 @@ function sanitizeEditorNode(node: ChildNode): Node | null {
 
   const next = document.createElement(tag);
   const alignClass = Array.from(node.classList).find((className) => /^ql-align-(center|right|justify)$/.test(className));
+  const paragraphClass = Array.from(node.classList).find((className) => /^(rich-heading|rich-subheading)$/.test(className));
   const textAlign = node.style.textAlign;
   if (alignClass) next.classList.add(alignClass);
+  if (paragraphClass && ['p', 'div'].includes(tag)) next.classList.add(paragraphClass);
   if (['center', 'right', 'justify'].includes(textAlign)) next.style.textAlign = textAlign;
   if (tag === 'a') {
     const href = node.getAttribute('href') || '';
