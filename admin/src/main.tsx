@@ -1429,6 +1429,17 @@ function RichTextEditor({
         dispatch(state.tr.replaceSelection(slice).scrollIntoView());
         return true;
       },
+      handleClick(view) {
+        if (!view.state.doc.textContent.trim()) {
+          const { state, dispatch } = view;
+          const paragraph = state.schema.nodes.paragraph;
+          if (paragraph) dispatch(state.tr.setBlockType(0, state.doc.content.size, paragraph).scrollIntoView());
+        }
+        return false;
+      },
+    },
+    onFocus({ editor: nextEditor }) {
+      resetEmptyEditorBlock(nextEditor);
     },
     onUpdate({ editor: nextEditor }) {
       const nextHtml = sanitizeEditorHtml(nextEditor.getHTML());
@@ -1451,8 +1462,8 @@ function RichTextEditor({
     if (!editor) return;
     const chain = editor.chain().focus();
     if (format === 'header') {
-      if (commandValue === 2) chain.toggleHeading({ level: 2 }).run();
-      else if (commandValue === 3) chain.toggleHeading({ level: 3 }).run();
+      if (commandValue === 2 && !editor.isEmpty) chain.toggleHeading({ level: 2 }).run();
+      else if (commandValue === 3 && !editor.isEmpty) chain.toggleHeading({ level: 3 }).run();
       else chain.setParagraph().run();
       return;
     }
@@ -1514,13 +1525,15 @@ function RichTextEditor({
     insertEmbed('video', url);
   }
 
+  const hasEditorContent = Boolean(editor && !editor.isEmpty);
+
   return (
     <div className={`rich-editor ${compact ? 'compact' : ''}`}>
       <div className="rich-toolbar" aria-label="Công cụ định dạng" onMouseDown={(event) => event.preventDefault()}>
-        <button type="button" className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''} onClick={() => runCommand('header', 2)} title="Tiêu đề">
+        <button type="button" className={hasEditorContent && editor?.isActive('heading', { level: 2 }) ? 'active' : ''} onClick={() => runCommand('header', 2)} title="Tiêu đề">
           <Heading2 size={16} />
         </button>
-        <button type="button" className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''} onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
+        <button type="button" className={hasEditorContent && editor?.isActive('heading', { level: 3 }) ? 'active' : ''} onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
           <Heading3 size={16} />
         </button>
         <button type="button" onClick={() => runCommand('header', false)} title="Đoạn văn">
@@ -1597,6 +1610,11 @@ function plainTextToHtml(value: string) {
     .replace(/\u00a0/g, ' ');
   const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   return blocks.map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`).join('');
+}
+
+function resetEmptyEditorBlock(editor: ReturnType<typeof useEditor>) {
+  if (!editor || !editor.isEmpty) return;
+  editor.commands.setParagraph();
 }
 
 function plainTextToTiptapBlocks(value: string) {
