@@ -1368,16 +1368,20 @@ function RichTextEditor({
   placeholder,
   compact = false,
   imageUploadKind = 'images/news',
+  videoUploadKind = 'video',
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   compact?: boolean;
   imageUploadKind?: Parameters<typeof uploadToR2>[1];
+  videoUploadKind?: Parameters<typeof uploadToR2>[1];
 }) {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
   const lastEmitHtmlRef = useRef('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
 
   // Auto-cleanup and parse existing content ONLY ONCE on mount
   const initialContent = useMemo(() => parseInitialEditorContent(value), []);
@@ -1465,6 +1469,12 @@ function RichTextEditor({
     insertEmbed('image', url);
   }
 
+  function addVideo() {
+    const url = window.prompt('Dán link video YouTube hoặc MP4');
+    if (!url) return;
+    insertEmbed('video', url);
+  }
+
   function insertEmbed(type: 'image' | 'video', url: string) {
     if (!editor) return;
     if (type === 'image') {
@@ -1488,10 +1498,18 @@ function RichTextEditor({
     }
   }
 
-  function addVideo() {
-    const url = window.prompt('Dán link video YouTube hoặc MP4');
-    if (!url) return;
-    insertEmbed('video', url);
+  async function uploadVideo(file?: File) {
+    if (!file) return;
+    setUploadingVideo(true);
+    try {
+      const url = await uploadToR2(file, videoUploadKind);
+      insertEmbed('video', url);
+    } catch (caught) {
+      window.alert(caught instanceof Error ? caught.message : 'Upload video thất bại');
+    } finally {
+      setUploadingVideo(false);
+      if (videoInputRef.current) videoInputRef.current.value = '';
+    }
   }
 
   const h2Active = Boolean(editor?.isActive('heading', { level: 2 }));
@@ -1525,36 +1543,51 @@ function RichTextEditor({
     <div style={{ border: '1px solid #d1d5db', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', marginTop: '8px' }}>
       <div style={{ padding: '8px 16px', background: '#4f46e5', color: '#fff', fontSize: '12px', fontWeight: 'bold', borderRadius: '11px 11px 0 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ width: '8px', height: '8px', background: '#34d399', borderRadius: '50%' }}></span>
-        Trình soạn thảo phiên bản HOÀN TOÀN MỚI
+        Trình soạn thảo Siêu Cấp (Hỗ trợ Ảnh & Video)
       </div>
       <div style={toolbarStyle} onMouseDown={(event) => event.preventDefault()}>
+        {/* Headings */}
         <button style={btnStyle(h2Active)} type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề Lớn"><Heading2 size={16} /></button>
         <button style={btnStyle(h3Active)} type="button" onClick={() => runCommand('header', 3)} title="Tiêu đề Nhỏ"><Heading3 size={16} /></button>
-        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         <button style={btnStyle(Boolean(editor?.isActive('paragraph')))} type="button" onClick={() => runCommand('header', false)} title="Đoạn văn thường"><span style={{ fontWeight: 'bold' }}>Aa</span></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        
+        {/* Inline Formatting */}
         <button style={btnStyle(Boolean(editor?.isActive('bold')))} type="button" onClick={() => runCommand('bold')} title="In đậm"><Bold size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive('italic')))} type="button" onClick={() => runCommand('italic')} title="In nghiêng"><Italic size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive('underline')))} type="button" onClick={() => runCommand('underline')} title="Gạch chân"><Underline size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('strike')))} type="button" onClick={() => runCommand('strike')} title="Gạch ngang"><Strikethrough size={16} /></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        
+        {/* Blocks & Lists */}
+        <button style={btnStyle(Boolean(editor?.isActive('blockquote')))} type="button" onClick={() => runCommand('blockquote')} title="Trích dẫn"><Quote size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive('bulletList')))} type="button" onClick={() => runCommand('list', 'bullet')} title="Danh sách"><List size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive('orderedList')))} type="button" onClick={() => runCommand('list', 'ordered')} title="Danh sách số"><ListOrdered size={16} /></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        
+        {/* Alignment */}
         <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'left' })))} type="button" onClick={() => runCommand('align', false)} title="Căn trái"><AlignLeft size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'center' })))} type="button" onClick={() => runCommand('align', 'center')} title="Căn giữa"><AlignCenter size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'right' })))} type="button" onClick={() => runCommand('align', 'right')} title="Căn phải"><AlignRight size={16} /></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
-        <button style={btnStyle(Boolean(editor?.isActive('link')))} type="button" onClick={addLink} title="Liên kết"><Link2 size={16} /></button>
-        <button style={btnStyle(false)} type="button" onClick={() => imageInputRef.current?.click()} title="Tải ảnh lên">{uploadingImage ? '...' : <Upload size={16} />}</button>
-        <button style={btnStyle(false)} type="button" onClick={addVideo} title="Chèn video"><VideoIcon size={16} /></button>
+        
+        {/* Media & Links */}
+        <button style={btnStyle(Boolean(editor?.isActive('link')))} type="button" onClick={addLink} title="Chèn liên kết"><Link2 size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={addImageUrl} title="Chèn ảnh từ URL"><Image size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={() => imageInputRef.current?.click()} title="Tải ảnh lên (R2)">{uploadingImage ? '...' : <ImagePlus size={16} />}</button>
+        <button style={btnStyle(false)} type="button" onClick={addVideo} title="Chèn video từ URL"><VideoIcon size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={() => videoInputRef.current?.click()} title="Tải video lên (R2)">{uploadingVideo ? '...' : <Clapperboard size={16} />}</button>
+        
+        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         <button style={btnStyle(false)} type="button" onClick={() => { if(editor) editor.chain().focus().clearNodes().unsetAllMarks().setTextAlign('left').run(); }} title="Xóa định dạng"><Eraser size={16} /></button>
+        
         <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(event) => void uploadImage(event.target.files?.[0])} />
+        <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime,video/webm" hidden onChange={(event) => void uploadVideo(event.target.files?.[0])} />
       </div>
       <EditorContent editor={editor} />
     </div>
   );
 }
-
 function parseInitialEditorContent(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return '';
