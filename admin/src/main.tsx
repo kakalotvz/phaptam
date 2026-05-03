@@ -1525,7 +1525,7 @@ function RichTextEditor({
     <div style={{ border: '1px solid #d1d5db', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', marginTop: '8px' }}>
       <div style={{ padding: '8px 16px', background: '#4f46e5', color: '#fff', fontSize: '12px', fontWeight: 'bold', borderRadius: '11px 11px 0 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ width: '8px', height: '8px', background: '#34d399', borderRadius: '50%' }}></span>
-        Trình soạn thảo phiên bản MỚI NHẤT (Đã vá lỗi H2)
+        Trình soạn thảo phiên bản HOÀN TOÀN MỚI
       </div>
       <div style={toolbarStyle} onMouseDown={(event) => event.preventDefault()}>
         <button style={btnStyle(h2Active)} type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề Lớn"><Heading2 size={16} /></button>
@@ -1604,18 +1604,43 @@ function parseInitialEditorContent(value: string) {
     const container = document.createElement('div');
     container.innerHTML = htmlContent;
     
-    // EXTREME AGGRESSIVE SANITIZATION
-    // Khử mọi thẻ H2, H3, v.v nếu dài hơn 80 ký tự HOẶC chứa chữ dài hơn 80 ký tự.
+    // 1. Khử H2, H3 bị lỗi (dài quá mức)
     container.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
       const textLength = (heading.textContent || '').trim().length;
-      if (textLength > 80) {
+      if (textLength > 60) {
         const p = document.createElement('p');
         p.innerHTML = heading.innerHTML;
-        const align = (heading as HTMLElement).style.textAlign;
-        if (align) p.style.textAlign = align;
         heading.replaceWith(p);
       }
     });
+
+    // 2. Khử b, strong bị bọc toàn bộ văn bản dài (nguyên nhân làm chữ to như H2)
+    container.querySelectorAll('b, strong').forEach((bold) => {
+      if ((bold.textContent || '').trim().length > 60) {
+        const span = document.createElement('span');
+        span.innerHTML = bold.innerHTML;
+        bold.replaceWith(span);
+      }
+    });
+
+    // 3. Xóa thẻ <br> ở cuối đoạn (nguyên nhân gây lỗi nhảy xuống dòng khi click)
+    container.querySelectorAll('p').forEach((p) => {
+      let lastChild = p.lastChild;
+      while (lastChild) {
+        if (lastChild.nodeType === 1 && (lastChild as HTMLElement).tagName === 'BR') {
+          const toRemove = lastChild;
+          lastChild = lastChild.previousSibling;
+          toRemove.remove();
+        } else if (lastChild.nodeType === 3 && (lastChild.textContent || '').trim() === '') {
+          const toRemove = lastChild;
+          lastChild = lastChild.previousSibling;
+          toRemove.remove();
+        } else {
+          break;
+        }
+      }
+    });
+
     return container.innerHTML;
   } catch (err) {
     return htmlContent;
