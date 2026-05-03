@@ -1408,8 +1408,9 @@ function RichTextEditor({
     content: initialContent,
     editorProps: {
       attributes: {
-        class: 'rich-surface',
+        class: 'rich-surface modern-editor-surface',
         spellcheck: 'false',
+        style: 'min-height: 300px; padding: 20px; outline: none; background: #ffffff; border-radius: 0 0 12px 12px; font-family: "Inter", "Segoe UI", sans-serif; font-size: 16px; line-height: 1.6; color: #111827;'
       },
     },
     onUpdate({ editor: nextEditor }) {
@@ -1419,12 +1420,11 @@ function RichTextEditor({
     },
   });
 
-  // Handle external value changes (like selecting a different news item)
+  // Handle external value changes
   useEffect(() => {
     if (!editor || editor.isFocused) return;
     if (value === lastEmitHtmlRef.current) return;
     
-    // If value changed externally, parse it and update editor
     const newHtml = parseInitialEditorContent(value);
     if (editor.getHTML() !== newHtml) {
       editor.commands.setContent(newHtml, { emitUpdate: false });
@@ -1450,11 +1450,6 @@ function RichTextEditor({
     if (format === 'list' && commandValue !== 'ordered') chain.toggleBulletList().run();
     if (format === 'align') chain.setTextAlign(commandValue ? String(commandValue) : 'left').run();
     if (format === 'link' && commandValue === false) chain.unsetLink().run();
-  }
-
-  function resetToParagraph() {
-    if (!editor) return;
-    editor.chain().focus().clearNodes().unsetAllMarks().setTextAlign('left').run();
   }
 
   function addLink() {
@@ -1502,76 +1497,58 @@ function RichTextEditor({
   const h2Active = Boolean(editor?.isActive('heading', { level: 2 }));
   const h3Active = Boolean(editor?.isActive('heading', { level: 3 }));
 
+  const toolbarStyle: React.CSSProperties = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '4px',
+    padding: '12px',
+    background: '#f9fafb',
+    borderBottom: '1px solid #e5e7eb',
+    borderRadius: '12px 12px 0 0',
+  };
+
+  const btnStyle = (active: boolean): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    background: active ? '#e0e7ff' : 'transparent',
+    color: active ? '#4f46e5' : '#4b5563',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  });
+
   return (
-    <div className={`rich-editor ${compact ? 'compact' : ''}`}>
-      <div className="rich-toolbar" aria-label="Công cụ định dạng" onMouseDown={(event) => event.preventDefault()}>
-        <button type="button" className={h2Active ? 'active' : ''} onClick={() => runCommand('header', 2)} title="Tiêu đề">
-          <Heading2 size={16} />
-        </button>
-        <button type="button" className={h3Active ? 'active' : ''} onClick={() => runCommand('header', 3)} title="Tiêu đề phụ">
-          <Heading3 size={16} />
-        </button>
-        <button type="button" className={editor?.isActive('paragraph') ? 'active' : ''} onClick={() => runCommand('header', false)} title="Đoạn văn">
-          Aa
-        </button>
-        <button type="button" className={editor?.isActive('blockquote') ? 'active' : ''} onClick={() => runCommand('blockquote')} title="Trích dẫn">
-          <Quote size={16} />
-        </button>
-        <button type="button" className={editor?.isActive('bold') ? 'active' : ''} onClick={() => runCommand('bold')} title="In đậm">
-          <Bold size={16} />
-        </button>
-        <button type="button" className={editor?.isActive('italic') ? 'active' : ''} onClick={() => runCommand('italic')} title="In nghiêng">
-          <Italic size={16} />
-        </button>
-        <button type="button" className={editor?.isActive('underline') ? 'active' : ''} onClick={() => runCommand('underline')} title="Gạch chân">
-          <Underline size={16} />
-        </button>
-        <button type="button" className={editor?.isActive('strike') ? 'active' : ''} onClick={() => runCommand('strike')} title="Gạch ngang">
-          <Strikethrough size={16} />
-        </button>
-        <button type="button" className={editor?.isActive('bulletList') ? 'active' : ''} onClick={() => runCommand('list', 'bullet')} title="Danh sách">
-          <List size={16} />
-        </button>
-        <button type="button" className={editor?.isActive('orderedList') ? 'active' : ''} onClick={() => runCommand('list', 'ordered')} title="Danh sách số">
-          <ListOrdered size={16} />
-        </button>
-        <button type="button" className={editor?.isActive({ textAlign: 'left' }) ? 'active' : ''} onClick={() => runCommand('align', false)} title="Căn trái">
-          <AlignLeft size={16} />
-        </button>
-        <button type="button" className={editor?.isActive({ textAlign: 'center' }) ? 'active' : ''} onClick={() => runCommand('align', 'center')} title="Căn giữa">
-          <AlignCenter size={16} />
-        </button>
-        <button type="button" className={editor?.isActive({ textAlign: 'right' }) ? 'active' : ''} onClick={() => runCommand('align', 'right')} title="Căn phải">
-          <AlignRight size={16} />
-        </button>
-        <button type="button" className={editor?.isActive({ textAlign: 'justify' }) ? 'active' : ''} onClick={() => runCommand('align', 'justify')} title="Căn đều">
-          <AlignJustify size={16} />
-        </button>
-        <button type="button" className={editor?.isActive('link') ? 'active' : ''} onClick={addLink} title="Liên kết">
-          <Link2 size={16} />
-        </button>
-        <button type="button" onClick={() => runCommand('link', false)} title="Xóa liên kết">
-          <Unlink size={16} />
-        </button>
-        <button type="button" onClick={addImageUrl} title="Chèn ảnh bằng URL">
-          <ImagePlus size={16} />
-        </button>
-        <button type="button" onClick={() => imageInputRef.current?.click()} title="Upload ảnh lên R2">
-          {uploadingImage ? '...' : <Upload size={16} />}
-        </button>
-        <button type="button" onClick={addVideo} title="Chèn link video">
-          <VideoIcon size={16} />
-        </button>
-        <button type="button" onClick={resetToParagraph} title="Xóa định dạng">
-          <Eraser size={16} />
-        </button>
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(event) => void uploadImage(event.target.files?.[0])}
-        />
+    <div style={{ border: '1px solid #d1d5db', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', marginTop: '8px' }}>
+      <div style={{ padding: '8px 16px', background: '#4f46e5', color: '#fff', fontSize: '12px', fontWeight: 'bold', borderRadius: '11px 11px 0 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ width: '8px', height: '8px', background: '#34d399', borderRadius: '50%' }}></span>
+        Trình soạn thảo phiên bản MỚI NHẤT (Đã vá lỗi H2)
+      </div>
+      <div style={toolbarStyle} onMouseDown={(event) => event.preventDefault()}>
+        <button style={btnStyle(h2Active)} type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề Lớn"><Heading2 size={16} /></button>
+        <button style={btnStyle(h3Active)} type="button" onClick={() => runCommand('header', 3)} title="Tiêu đề Nhỏ"><Heading3 size={16} /></button>
+        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        <button style={btnStyle(Boolean(editor?.isActive('paragraph')))} type="button" onClick={() => runCommand('header', false)} title="Đoạn văn thường"><span style={{ fontWeight: 'bold' }}>Aa</span></button>
+        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        <button style={btnStyle(Boolean(editor?.isActive('bold')))} type="button" onClick={() => runCommand('bold')} title="In đậm"><Bold size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('italic')))} type="button" onClick={() => runCommand('italic')} title="In nghiêng"><Italic size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('underline')))} type="button" onClick={() => runCommand('underline')} title="Gạch chân"><Underline size={16} /></button>
+        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        <button style={btnStyle(Boolean(editor?.isActive('bulletList')))} type="button" onClick={() => runCommand('list', 'bullet')} title="Danh sách"><List size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('orderedList')))} type="button" onClick={() => runCommand('list', 'ordered')} title="Danh sách số"><ListOrdered size={16} /></button>
+        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'left' })))} type="button" onClick={() => runCommand('align', false)} title="Căn trái"><AlignLeft size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'center' })))} type="button" onClick={() => runCommand('align', 'center')} title="Căn giữa"><AlignCenter size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'right' })))} type="button" onClick={() => runCommand('align', 'right')} title="Căn phải"><AlignRight size={16} /></button>
+        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+        <button style={btnStyle(Boolean(editor?.isActive('link')))} type="button" onClick={addLink} title="Liên kết"><Link2 size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={() => imageInputRef.current?.click()} title="Tải ảnh lên">{uploadingImage ? '...' : <Upload size={16} />}</button>
+        <button style={btnStyle(false)} type="button" onClick={addVideo} title="Chèn video"><VideoIcon size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={() => { if(editor) editor.chain().focus().clearNodes().unsetAllMarks().setTextAlign('left').run(); }} title="Xóa định dạng"><Eraser size={16} /></button>
+        <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(event) => void uploadImage(event.target.files?.[0])} />
       </div>
       <EditorContent editor={editor} />
     </div>
@@ -1584,7 +1561,6 @@ function parseInitialEditorContent(value: string) {
 
   let htmlContent = trimmed;
 
-  // Nếu là dạng text / bbcode cũ, chuyển sang HTML trước
   if (!/<\/?[a-z][\s\S]*>/i.test(trimmed)) {
     const normalized = trimmed
       .replace(/<b>(.*?)<\/b>/gis, '**$1**')
@@ -1624,13 +1600,15 @@ function parseInitialEditorContent(value: string) {
       .join('');
   }
 
-  // AUTO-CLEANUP CORRUPTED DB DATA: Demote any H1-H6 that is way too long
   try {
     const container = document.createElement('div');
     container.innerHTML = htmlContent;
+    
+    // EXTREME AGGRESSIVE SANITIZATION
+    // Khử mọi thẻ H2, H3, v.v nếu dài hơn 80 ký tự HOẶC chứa chữ dài hơn 80 ký tự.
     container.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
       const textLength = (heading.textContent || '').trim().length;
-      if (textLength > 120) {
+      if (textLength > 80) {
         const p = document.createElement('p');
         p.innerHTML = heading.innerHTML;
         const align = (heading as HTMLElement).style.textAlign;
