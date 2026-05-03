@@ -1379,7 +1379,7 @@ function RichTextEditor({
   const lastEmitHtmlRef = useRef('');
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Parse existing content ONLY ONCE on mount
+  // Auto-cleanup and parse existing content ONLY ONCE on mount
   const initialContent = useMemo(() => parseInitialEditorContent(value), []);
 
   const editor = useEditor({
@@ -1499,7 +1499,6 @@ function RichTextEditor({
     insertEmbed('video', url);
   }
 
-  const hasEditorContent = Boolean(editor && !editor.isEmpty);
   const h2Active = Boolean(editor?.isActive('heading', { level: 2 }));
   const h3Active = Boolean(editor?.isActive('heading', { level: 3 }));
 
@@ -1582,45 +1581,67 @@ function RichTextEditor({
 function parseInitialEditorContent(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return '';
-  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) return trimmed;
 
-  const normalized = trimmed
-    .replace(/<b>(.*?)<\/b>/gis, '**$1**')
-    .replace(/<strong>(.*?)<\/strong>/gis, '**$1**')
-    .replace(/<url=(.*?)>(.*?)<\/url>/gis, '[$2]($1)')
-    .replace(/<url>(.*?)<\/url>/gis, '[$1]($1)')
-    .replace(/\[b\](.*?)\[\/b\]/gis, '**$1**')
-    .replace(/\[i\](.*?)\[\/i\]/gis, '*$1*')
-    .replace(/\[u\](.*?)\[\/u\]/gis, '__$1__')
-    .replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '[$2]($1)')
-    .replace(/\[url\](.*?)\[\/url\]/gis, '[$1]($1)');
+  let htmlContent = trimmed;
 
-  const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
-  if (blocks.length === 0) return '';
-  return blocks
-    .map((block) => {
-      if (block === '##' || block === '###') return '';
-      if (block.startsWith('### ')) return `<h3>${inlineMarkupToHtml(block.slice(4))}</h3>`;
-      if (block.startsWith('## ')) return `<h2>${inlineMarkupToHtml(block.slice(3))}</h2>`;
-      if (block.startsWith('> ')) return `<blockquote>${inlineMarkupToHtml(block.replace(/^> /gm, ''))}</blockquote>`;
-      if (block.startsWith('![')) {
-        const image = block.match(/^!\[(.*?)\]\((https?:\/\/[^)]+)\)$/);
-        if (image) return `<figure><img src="${escapeHtml(image[2])}" alt="${escapeHtml(image[1])}" /></figure>`;
+  // Nếu là dạng text / bbcode cũ, chuyển sang HTML trước
+  if (!/<\/?[a-z][\s\S]*>/i.test(trimmed)) {
+    const normalized = trimmed
+      .replace(/<b>(.*?)<\/b>/gis, '**$1**')
+      .replace(/<strong>(.*?)<\/strong>/gis, '**$1**')
+      .replace(/<url=(.*?)>(.*?)<\/url>/gis, '[$2]($1)')
+      .replace(/<url>(.*?)<\/url>/gis, '[$1]($1)')
+      .replace(/\[b\](.*?)\[\/b\]/gis, '**$1**')
+      .replace(/\[i\](.*?)\[\/i\]/gis, '*$1*')
+      .replace(/\[u\](.*?)\[\/u\]/gis, '__$1__')
+      .replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '[$2]($1)')
+      .replace(/\[url\](.*?)\[\/url\]/gis, '[$1]($1)');
+
+    const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+    htmlContent = blocks
+      .map((block) => {
+        if (block === '##' || block === '###') return '';
+        if (block.startsWith('### ')) return `<h3>${inlineMarkupToHtml(block.slice(4))}</h3>`;
+        if (block.startsWith('## ')) return `<h2>${inlineMarkupToHtml(block.slice(3))}</h2>`;
+        if (block.startsWith('> ')) return `<blockquote>${inlineMarkupToHtml(block.replace(/^> /gm, ''))}</blockquote>`;
+        if (block.startsWith('![')) {
+          const image = block.match(/^!\[(.*?)\]\((https?:\/\/[^)]+)\)$/);
+          if (image) return `<figure><img src="${escapeHtml(image[2])}" alt="${escapeHtml(image[1])}" /></figure>`;
+        }
+        if (block.startsWith('[[video:')) {
+          const video = block.match(/^\[\[video:(.*?)\]\]$/);
+          if (video) return `<div data-video="${escapeHtml(video[1])}">Video: ${escapeHtml(video[1])}</div>`;
+        }
+        const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+        if (lines.every((line) => line.startsWith('- '))) {
+          return `<ul>${lines.map((line) => `<li>${inlineMarkupToHtml(line.slice(2))}</li>`).join('')}</ul>`;
+        }
+        if (lines.every((line) => /^\d+\. /.test(line))) {
+          return `<ol>${lines.map((line) => `<li>${inlineMarkupToHtml(line.replace(/^\d+\. /, ''))}</li>`).join('')}</ol>`;
+        }
+        return `<p>${inlineMarkupToHtml(lines.join('<br>'))}</p>`;
+      })
+      .join('');
+  }
+
+  // AUTO-CLEANUP CORRUPTED DB DATA: Demote any H1-H6 that is way too long
+  try {
+    const container = document.createElement('div');
+    container.innerHTML = htmlContent;
+    container.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
+      const textLength = (heading.textContent || '').trim().length;
+      if (textLength > 120) {
+        const p = document.createElement('p');
+        p.innerHTML = heading.innerHTML;
+        const align = (heading as HTMLElement).style.textAlign;
+        if (align) p.style.textAlign = align;
+        heading.replaceWith(p);
       }
-      if (block.startsWith('[[video:')) {
-        const video = block.match(/^\[\[video:(.*?)\]\]$/);
-        if (video) return `<div data-video="${escapeHtml(video[1])}">Video: ${escapeHtml(video[1])}</div>`;
-      }
-      const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
-      if (lines.every((line) => line.startsWith('- '))) {
-        return `<ul>${lines.map((line) => `<li>${inlineMarkupToHtml(line.slice(2))}</li>`).join('')}</ul>`;
-      }
-      if (lines.every((line) => /^\d+\. /.test(line))) {
-        return `<ol>${lines.map((line) => `<li>${inlineMarkupToHtml(line.replace(/^\d+\. /, ''))}</li>`).join('')}</ol>`;
-      }
-      return `<p>${inlineMarkupToHtml(lines.join('<br>'))}</p>`;
-    })
-    .join('');
+    });
+    return container.innerHTML;
+  } catch (err) {
+    return htmlContent;
+  }
 }
 
 function inlineMarkupToHtml(value: string) {
