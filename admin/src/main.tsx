@@ -82,6 +82,7 @@ import {
   NewsCategory,
   NewsItem,
   Quote as QuoteRecord,
+  QuoteRotation,
   R2Usage,
   RssSource,
   setApiBaseUrl,
@@ -195,6 +196,7 @@ type DataState = {
   newsCategories: NewsCategory[];
   news: NewsItem[];
   quotes: QuoteRecord[];
+  quoteRotation: QuoteRotation;
   banners: Banner[];
   feedback: Feedback[];
   users: AdminUser[];
@@ -214,6 +216,7 @@ const emptyData: DataState = {
   newsCategories: [],
   news: [],
   quotes: [],
+  quoteRotation: { enabled: false, paused: false, quoteIds: [], startDate: '', offset: 0, currentQuoteId: null },
   banners: [],
   feedback: [],
   users: [],
@@ -406,6 +409,7 @@ function App() {
         newsCategories,
         news,
         quotes,
+        quoteRotation,
         banners,
         feedback,
         users,
@@ -423,6 +427,7 @@ function App() {
         safe(() => api.newsCategories(), []),
         safe(() => api.news(), []),
         safe(() => api.quotes(), []),
+        safe(() => api.quoteRotation(), { enabled: false, paused: false, quoteIds: [], startDate: '', offset: 0, currentQuoteId: null }),
         safe(() => api.banners(), []),
         safe(() => api.feedback(), []),
         safe(() => api.users(), []),
@@ -442,6 +447,7 @@ function App() {
         newsCategories,
         news,
         quotes,
+        quoteRotation,
         banners,
         feedback,
         users,
@@ -2375,6 +2381,15 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [editingQuoteId, setEditingQuoteId] = useState('');
+  const [selectedQuoteIds, setSelectedQuoteIds] = useState<string[]>(data.quoteRotation.quoteIds);
+  const activeQuote = data.quotes.find((quote) => quote.active);
+  const activeQuoteId = data.quoteRotation.currentQuoteId ?? activeQuote?.id ?? null;
+  const hasLockedActive = Boolean(activeQuoteId);
+  const selectedCount = selectedQuoteIds.length;
+
+  useEffect(() => {
+    setSelectedQuoteIds(data.quoteRotation.quoteIds);
+  }, [data.quoteRotation.quoteIds.join('|')]);
 
   function editQuote(row: QuoteRecord) {
     setEditingQuoteId(row.id);
@@ -2387,6 +2402,19 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
     setEditingQuoteId('');
     setContent('');
     setImageUrl('');
+  }
+
+  function toggleSelected(id: string, checked: boolean) {
+    setSelectedQuoteIds((current) => checked ? [...current, id] : current.filter((quoteId) => quoteId !== id));
+  }
+
+  async function saveQuoteRotation(enabled: boolean) {
+    const orderedIds = data.quotes.map((quote) => quote.id).filter((id) => selectedQuoteIds.includes(id));
+    const ok = await run(
+      () => api.updateQuoteRotation({ enabled, quoteIds: orderedIds, paused: false }),
+      enabled ? 'Đã bật auto chuyển trích dẫn' : 'Đã tắt auto chuyển trích dẫn',
+    );
+    if (ok) setSelectedQuoteIds(orderedIds);
   }
 
   return (
@@ -2404,16 +2432,16 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               </button>
             </div>
           )}
-          <div style={{ display: 'grid', gap: '7px', color: '#6a564e', fontSize: '13px', fontWeight: 700 }}>
+          <label className="span">
             Nội dung
-            <RichTextEditor
+            <textarea
+              className="quote-lines-input"
               value={content}
-              onChange={setContent}
-              compact
-              imageUploadKind="images/quote"
-              placeholder="Viết trích dẫn hoặc lời nhắc hôm nay. Có thể in đậm, xuống dòng hoặc gắn liên kết."
+              onChange={(event) => setContent(event.target.value)}
+              placeholder={editingQuoteId ? 'Sửa nội dung trích dẫn này' : 'Mỗi dòng là một trích dẫn riêng.\nVí dụ:\nTâm an thì cảnh an.\nBiết đủ là giàu.'}
             />
-          </div>
+            {!editingQuoteId && <span className="field-note">Khi lưu, hệ thống tự tách mỗi dòng thành một trích dẫn riêng.</span>}
+          </label>
           <label>
             Ảnh minh họa
             <UploadField kind="images/quote" value={imageUrl} onUploaded={setImageUrl} />
@@ -2438,12 +2466,90 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
         </div>
       </Panel>
       <Panel title="Danh sách trích dẫn">
+        <div className="quote-controlbar">
+          <div>
+            <strong>Auto chuyển trích dẫn</strong>
+            <span>
+              {data.quoteRotation.enabled
+                ? data.quoteRotation.paused
+                  ? 'Đang dừng, giữ nguyên trích dẫn hiện tại.'
+                  : 'Đang chạy, tự đổi sau 00:00 giờ Việt Nam.'
+                : selectedCount > 0
+                  ? `Đã chọn ${selectedCount.toLocaleString('vi-VN')} trích dẫn.`
+                  : 'Chọn các trích dẫn theo thứ tự từ trên xuống dưới rồi bật auto.'}
+            </span>
+          </div>
+          <div className="action-group">
+            <button
+              className="ghost"
+              type="button"
+              disabled={selectedCount === 0}
+              onClick={() => void saveQuoteRotation(!data.quoteRotation.enabled)}
+            >
+              <Power size={15} />
+              {data.quoteRotation.enabled ? 'Tắt auto' : 'Bật auto'}
+            </button>
+            <button
+              className="ghost"
+              type="button"
+              disabled={!data.quoteRotation.enabled}
+              onClick={() => run(() => api.updateQuoteRotation({ paused: !data.quoteRotation.paused }), data.quoteRotation.paused ? 'Đã tiếp tục auto' : 'Đã dừng auto')}
+            >
+              {data.quoteRotation.paused ? <Play size={15} /> : <Pause size={15} />}
+              {data.quoteRotation.paused ? 'Tiếp tục' : 'Dừng'}
+            </button>
+            <button
+              className="ghost"
+              type="button"
+              disabled={!data.quoteRotation.enabled || data.quoteRotation.paused || selectedCount < 2}
+              onClick={() => run(() => api.skipQuoteRotation(), 'Đã chuyển sang trích dẫn tiếp theo')}
+            >
+              <RefreshCcw size={15} />
+              Bỏ qua
+            </button>
+          </div>
+        </div>
         <Table
           rows={data.quotes}
           columns={[
+            [
+              (row: QuoteRecord) => (
+                <input
+                  className="table-checkbox"
+                  type="checkbox"
+                  checked={selectedQuoteIds.includes(row.id)}
+                  onChange={(event) => toggleSelected(row.id, event.target.checked)}
+                />
+              ),
+              'Chọn',
+            ],
             ['imageUrl', 'Ảnh'],
-            ['content', 'Nội dung'],
-            [(row: QuoteRecord) => (row.active ? 'Đang bật' : 'Tắt'), 'Trạng thái'],
+            [
+              (row: QuoteRecord) => (
+                <span className={row.id === activeQuoteId ? 'quote-current-content' : ''}>
+                  {row.content}
+                </span>
+              ),
+              'Nội dung',
+            ],
+            [
+              (row: QuoteRecord) => (
+                <div className="quote-status-cell">
+                  {row.id === activeQuoteId && <span className="status-pill active">Đang hiển thị</span>}
+                  {row.id !== activeQuoteId && <span className="status-pill">Tắt</span>}
+                  <button
+                    className={`toggle-switch ${row.active ? 'on' : ''}`}
+                    type="button"
+                    disabled={data.quoteRotation.enabled || (hasLockedActive && row.id !== activeQuoteId)}
+                    aria-label={row.active ? 'Tắt hiển thị trích dẫn' : 'Bật hiển thị trích dẫn'}
+                    onClick={() => run(() => api.update(`/admin/quote/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt trích dẫn' : 'Đã bật trích dẫn')}
+                  >
+                    <span />
+                  </button>
+                </div>
+              ),
+              'Trạng thái',
+            ],
             [(row: QuoteRecord) => new Date(row.createdAt).toLocaleString('vi-VN'), 'Ngày tạo'],
             [
               (row: QuoteRecord) => (
@@ -2451,14 +2557,6 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
                   <button className="ghost" type="button" onClick={() => editQuote(row)}>
                     <Pencil size={15} />
                     Sửa
-                  </button>
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() => run(() => api.update(`/admin/quote/${row.id}`, { active: !row.active }), row.active ? 'Đã tắt trích dẫn' : 'Đã bật trích dẫn')}
-                  >
-                    <Power size={15} />
-                    {row.active ? 'Tắt' : 'Bật'}
                   </button>
                 </div>
               ),

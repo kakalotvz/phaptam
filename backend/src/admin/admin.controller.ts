@@ -502,23 +502,109 @@ export class AdminController {
   }
 
   @Get('quote')
-  quotes() {
-    return this.prisma.quote.findMany({ orderBy: { createdAt: 'desc' }, take: 50 });
+  async quotes() {
+    await this.syncQuoteRotation();
+    return this.prisma.quote.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
+  }
+
+  @Get('quote/rotation')
+  async quoteRotation() {
+    const settings = await this.quoteRotationSettings();
+    const currentQuoteId = await this.syncQuoteRotation(settings);
+    return { ...settings, currentQuoteId };
+  }
+
+  @Patch('quote/rotation')
+  async updateQuoteRotation(
+    @Body()
+    data: {
+      enabled?: boolean;
+      paused?: boolean;
+      quoteIds?: string[];
+    },
+  ) {
+    const current = await this.quoteRotationSettings();
+    const quoteIds = data.quoteIds ? uniqueStrings(data.quoteIds) : current.quoteIds;
+    const enabled = data.enabled ?? current.enabled;
+    if (enabled && quoteIds.length === 0) throw new BadRequestException('Chọn ít nhất một trích dẫn để auto chuyển.');
+
+    const quoteIdChanged = data.quoteIds !== undefined && quoteIds.join('|') !== current.quoteIds.join('|');
+    const settings: QuoteRotationSettings = {
+      enabled,
+      paused: data.paused ?? (enabled ? current.paused : false),
+      quoteIds,
+      startDate: enabled && (!current.enabled || quoteIdChanged) ? vietnamDateKey(new Date()) : current.startDate,
+      offset: enabled && (!current.enabled || quoteIdChanged) ? 0 : current.offset,
+    };
+
+    await this.saveQuoteRotationSettings(settings);
+    const currentQuoteId = await this.syncQuoteRotation(settings);
+    return { ...settings, currentQuoteId };
+  }
+
+  @Post('quote/rotation/skip')
+  async skipQuoteRotation() {
+    const settings = await this.quoteRotationSettings();
+    if (!settings.enabled || settings.quoteIds.length === 0) throw new BadRequestException('Auto chuyển trích dẫn chưa bật.');
+    const next: QuoteRotationSettings = { ...settings, offset: settings.offset + 1 };
+    await this.saveQuoteRotationSettings(next);
+    const currentQuoteId = await this.syncQuoteRotation(next);
+    return { ...next, currentQuoteId };
   }
 
   @Post('quote')
-  createQuote(@Body() data: { content: string; imageUrl?: string }) {
-    return this.prisma.quote.create({ data });
+  async createQuote(@Body() data: { content: string; imageUrl?: string }) {
+    const lines = quoteLines(data.content);
+    if (lines.length === 0) throw new BadRequestException('Nội dung trích dẫn không được để trống.');
+    const settings = await this.quoteRotationSettings();
+    const created = await this.prisma.$transaction(async (tx) => {
+      if (!settings.enabled) await tx.quote.updateMany({ data: { active: false } });
+      const items = [];
+      for (const [index, content] of lines.entries()) {
+        items.push(await tx.quote.create({
+          data: {
+            content,
+            imageUrl: data.imageUrl || null,
+            active: !settings.enabled && index === 0,
+          },
+        }));
+      }
+      return items;
+    });
+    return created.length === 1 ? created[0] : created;
   }
 
   @Patch('quote/:id')
-  updateQuote(@Param('id') id: string, @Body() data: { content?: string; imageUrl?: string; active?: boolean }) {
-    return this.prisma.quote.update({ where: { id }, data });
+  async updateQuote(@Param('id') id: string, @Body() data: { content?: string; imageUrl?: string; active?: boolean }) {
+    if (data.content !== undefined && !data.content.trim()) throw new BadRequestException('Nội dung trích dẫn không được để trống.');
+    if (data.active === true) {
+      await this.updateQuoteRotation({ enabled: false });
+      return this.prisma.$transaction(async (tx) => {
+        await tx.quote.updateMany({ where: { id: { not: id } }, data: { active: false } });
+        return tx.quote.update({
+          where: { id },
+          data: { content: data.content?.trim(), imageUrl: data.imageUrl, active: true },
+        });
+      });
+    }
+
+    return this.prisma.quote.update({
+      where: { id },
+      data: { content: data.content?.trim(), imageUrl: data.imageUrl, active: data.active },
+    });
   }
 
   @Delete('quote/:id')
-  deleteQuote(@Param('id') id: string) {
-    return this.prisma.quote.delete({ where: { id } });
+  async deleteQuote(@Param('id') id: string) {
+    const deleted = await this.prisma.quote.delete({ where: { id } });
+    const settings = await this.quoteRotationSettings();
+    if (settings.quoteIds.includes(id)) {
+      const next: QuoteRotationSettings = { ...settings, quoteIds: settings.quoteIds.filter((quoteId) => quoteId !== id) };
+      if (next.quoteIds.length === 0) next.enabled = false;
+      await this.saveQuoteRotationSettings(next);
+      await this.syncQuoteRotation(next);
+    }
+    return deleted;
   }
 
   @Get('rss')
@@ -674,6 +760,57 @@ export class AdminController {
     if (!Number.isFinite(parsed)) return 10;
     return Math.min(100, Math.max(1, Math.round(parsed)));
   }
+
+  private async quoteRotationSettings(): Promise<QuoteRotationSettings> {
+    const setting = await this.prisma.appSetting.findUnique({ where: { key: quoteRotationKey } });
+    if (!setting) return defaultQuoteRotationSettings();
+    try {
+      const parsed = JSON.parse(setting.value) as Partial<QuoteRotationSettings>;
+      return {
+        enabled: Boolean(parsed.enabled),
+        paused: Boolean(parsed.paused),
+        quoteIds: Array.isArray(parsed.quoteIds) ? uniqueStrings(parsed.quoteIds) : [],
+        startDate: typeof parsed.startDate === 'string' ? parsed.startDate : vietnamDateKey(new Date()),
+        offset: Number.isFinite(Number(parsed.offset)) ? Number(parsed.offset) : 0,
+      };
+    } catch {
+      return defaultQuoteRotationSettings();
+    }
+  }
+
+  private async saveQuoteRotationSettings(settings: QuoteRotationSettings) {
+    await this.prisma.appSetting.upsert({
+      where: { key: quoteRotationKey },
+      update: { value: JSON.stringify(settings) },
+      create: { key: quoteRotationKey, value: JSON.stringify(settings) },
+    });
+  }
+
+  private async syncQuoteRotation(settings?: QuoteRotationSettings) {
+    const rotation = settings ?? await this.quoteRotationSettings();
+    if (!rotation.enabled || rotation.paused || rotation.quoteIds.length === 0) {
+      return (await this.prisma.quote.findFirst({ where: { active: true }, select: { id: true } }))?.id ?? null;
+    }
+
+    const existing = await this.prisma.quote.findMany({
+      where: { id: { in: rotation.quoteIds } },
+      select: { id: true },
+    });
+    const validIds = rotation.quoteIds.filter((id) => existing.some((item) => item.id === id));
+    if (validIds.length === 0) {
+      await this.saveQuoteRotationSettings({ ...rotation, enabled: false, quoteIds: [] });
+      await this.prisma.quote.updateMany({ data: { active: false } });
+      return null;
+    }
+
+    const index = quoteRotationIndex(rotation, validIds.length);
+    const currentQuoteId = validIds[index];
+    await this.prisma.$transaction([
+      this.prisma.quote.updateMany({ where: { id: { not: currentQuoteId } }, data: { active: false } }),
+      this.prisma.quote.update({ where: { id: currentQuoteId }, data: { active: true } }),
+    ]);
+    return currentQuoteId;
+  }
 }
 
 function extractUrls(value?: string | null) {
@@ -684,4 +821,51 @@ function extractUrls(value?: string | null) {
 function removedR2Urls(previous?: string | null, next?: string | null) {
   const nextUrls = new Set(extractUrls(next));
   return extractUrls(previous).filter((url) => !nextUrls.has(url));
+}
+
+const quoteRotationKey = 'quoteRotation';
+
+type QuoteRotationSettings = {
+  enabled: boolean;
+  paused: boolean;
+  quoteIds: string[];
+  startDate: string;
+  offset: number;
+};
+
+function defaultQuoteRotationSettings(): QuoteRotationSettings {
+  return { enabled: false, paused: false, quoteIds: [], startDate: vietnamDateKey(new Date()), offset: 0 };
+}
+
+function quoteLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function uniqueStrings(values: unknown[]) {
+  return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)));
+}
+
+function vietnamDateKey(date: Date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function quoteRotationIndex(settings: QuoteRotationSettings, length: number) {
+  const start = Date.parse(`${settings.startDate}T00:00:00+07:00`);
+  const today = Date.parse(`${vietnamDateKey(new Date())}T00:00:00+07:00`);
+  const days = Number.isFinite(start) && Number.isFinite(today)
+    ? Math.max(0, Math.floor((today - start) / 86_400_000))
+    : 0;
+  return positiveModulo(days + settings.offset, length);
+}
+
+function positiveModulo(value: number, length: number) {
+  return ((value % length) + length) % length;
 }

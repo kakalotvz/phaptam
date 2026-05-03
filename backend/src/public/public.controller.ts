@@ -115,11 +115,12 @@ export class PublicController {
   }
 
   @Get('quotes')
-  quotes() {
+  async quotes() {
+    const currentQuoteId = await this.syncQuoteRotation();
     return this.prisma.quote.findMany({
-      where: { active: true },
+      where: currentQuoteId ? { id: currentQuoteId } : { active: true },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: 1,
     });
   }
 
@@ -180,4 +181,82 @@ export class PublicController {
       take: 50,
     });
   }
+
+  private async syncQuoteRotation() {
+    const settings = await this.quoteRotationSettings();
+    if (!settings.enabled || settings.paused || settings.quoteIds.length === 0) {
+      return (await this.prisma.quote.findFirst({ where: { active: true }, select: { id: true } }))?.id ?? null;
+    }
+
+    const existing = await this.prisma.quote.findMany({
+      where: { id: { in: settings.quoteIds } },
+      select: { id: true },
+    });
+    const validIds = settings.quoteIds.filter((id) => existing.some((item) => item.id === id));
+    if (validIds.length === 0) return null;
+
+    const currentQuoteId = validIds[quoteRotationIndex(settings, validIds.length)];
+    await this.prisma.$transaction([
+      this.prisma.quote.updateMany({ where: { id: { not: currentQuoteId } }, data: { active: false } }),
+      this.prisma.quote.update({ where: { id: currentQuoteId }, data: { active: true } }),
+    ]);
+    return currentQuoteId;
+  }
+
+  private async quoteRotationSettings(): Promise<QuoteRotationSettings> {
+    const setting = await this.prisma.appSetting.findUnique({ where: { key: quoteRotationKey } });
+    if (!setting) return defaultQuoteRotationSettings();
+    try {
+      const parsed = JSON.parse(setting.value) as Partial<QuoteRotationSettings>;
+      return {
+        enabled: Boolean(parsed.enabled),
+        paused: Boolean(parsed.paused),
+        quoteIds: Array.isArray(parsed.quoteIds) ? uniqueStrings(parsed.quoteIds) : [],
+        startDate: typeof parsed.startDate === 'string' ? parsed.startDate : vietnamDateKey(new Date()),
+        offset: Number.isFinite(Number(parsed.offset)) ? Number(parsed.offset) : 0,
+      };
+    } catch {
+      return defaultQuoteRotationSettings();
+    }
+  }
+}
+
+const quoteRotationKey = 'quoteRotation';
+
+type QuoteRotationSettings = {
+  enabled: boolean;
+  paused: boolean;
+  quoteIds: string[];
+  startDate: string;
+  offset: number;
+};
+
+function defaultQuoteRotationSettings(): QuoteRotationSettings {
+  return { enabled: false, paused: false, quoteIds: [], startDate: vietnamDateKey(new Date()), offset: 0 };
+}
+
+function uniqueStrings(values: unknown[]) {
+  return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)));
+}
+
+function vietnamDateKey(date: Date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function quoteRotationIndex(settings: QuoteRotationSettings, length: number) {
+  const start = Date.parse(`${settings.startDate}T00:00:00+07:00`);
+  const today = Date.parse(`${vietnamDateKey(new Date())}T00:00:00+07:00`);
+  const days = Number.isFinite(start) && Number.isFinite(today)
+    ? Math.max(0, Math.floor((today - start) / 86_400_000))
+    : 0;
+  return positiveModulo(days + settings.offset, length);
+}
+
+function positiveModulo(value: number, length: number) {
+  return ((value % length) + length) % length;
 }

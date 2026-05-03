@@ -111,6 +111,15 @@ export type Quote = {
   createdAt: string;
 };
 
+export type QuoteRotation = {
+  enabled: boolean;
+  paused: boolean;
+  quoteIds: string[];
+  startDate: string;
+  offset: number;
+  currentQuoteId: string | null;
+};
+
 export type Banner = {
   id: string;
   imageUrl: string;
@@ -264,6 +273,13 @@ export const api = {
     }
   },
   quotes: () => request<Quote[]>('/admin/quote'),
+  quoteRotation: () => request<QuoteRotation>('/admin/quote/rotation'),
+  updateQuoteRotation: (data: Partial<Pick<QuoteRotation, 'enabled' | 'paused' | 'quoteIds'>>) =>
+    request<QuoteRotation>('/admin/quote/rotation', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  skipQuoteRotation: () => request<QuoteRotation>('/admin/quote/rotation/skip', { method: 'POST' }),
   banners: () => request<Banner[]>('/admin/banner'),
   meditationPrograms: () => request<MeditationProgram[]>('/admin/meditation'),
   feedback: () => request<Feedback[]>('/admin/feedback'),

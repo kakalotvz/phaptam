@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/network/api_client.dart';
@@ -29,6 +33,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _newsCategoryFilter;
   String? _newsSourceFilter;
   _NewsSortOrder _newsSortOrder = _NewsSortOrder.newest;
+  Timer? _quoteRefreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _quoteRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) ref.invalidate(dailyQuotesProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    _quoteRefreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +112,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           child: AudioTile(
                             audio: items.first,
                             onTap: () => showAudioPlayer(context, items.first),
-                            onFavorite: () => _favoriteAudio(context, ref, items.first),
+                            onFavorite: () =>
+                                _favoriteAudio(context, ref, items.first),
                           ),
                         ),
                   loading: () => const _EmptyCard(
@@ -125,7 +145,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 width: 280,
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(18),
-                                  onTap: () => showVideoPlayer(context, items[index]),
+                                  onTap: () =>
+                                      showVideoPlayer(context, items[index]),
                                   child: VideoCard(video: items[index]),
                                 ),
                               ),
@@ -403,7 +424,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Future<void> _favoriteAudio(BuildContext context, WidgetRef ref, AudioItem audio) async {
+  Future<void> _favoriteAudio(
+    BuildContext context,
+    WidgetRef ref,
+    AudioItem audio,
+  ) async {
     if (!ref.read(isLoggedInProvider)) {
       context.push('/login');
       return;
@@ -414,15 +439,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         'contentId': audio.id,
       });
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã thêm vào yêu thích')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã thêm vào yêu thích')));
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     }
   }
@@ -604,10 +629,19 @@ class _NewsSearchControls extends StatelessWidget {
   }
 }
 
-class _DailyQuoteCard extends StatelessWidget {
+class _DailyQuoteCard extends StatefulWidget {
   const _DailyQuoteCard({required this.quote});
 
   final DailyQuote quote;
+
+  @override
+  State<_DailyQuoteCard> createState() => _DailyQuoteCardState();
+}
+
+class _DailyQuoteCardState extends State<_DailyQuoteCard> {
+  static const _mediaChannel = MethodChannel('phaptam/media');
+  final _captureKey = GlobalKey();
+  var _capturing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -617,62 +651,249 @@ class _DailyQuoteCard extends StatelessWidget {
       tween: Tween(begin: .94, end: 1),
       builder: (context, value, child) =>
           Transform.scale(scale: value, child: child),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            if (quote.imageUrl != null && quote.imageUrl!.isNotEmpty)
-              Positioned.fill(
-                child: Image.network(quote.imageUrl!, fit: BoxFit.cover),
-              ),
-            if (quote.imageUrl != null && quote.imageUrl!.isNotEmpty)
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: .38),
+      child: RepaintBoundary(
+        key: _captureKey,
+        child: Card(
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: _copyQuote,
+            child: Stack(
+              children: [
+                if (widget.quote.imageUrl != null &&
+                    widget.quote.imageUrl!.isNotEmpty)
+                  Positioned.fill(
+                    child: Image.network(
+                      widget.quote.imageUrl!,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                if (widget.quote.imageUrl != null &&
+                    widget.quote.imageUrl!.isNotEmpty)
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: .38),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 22, 58, 22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.format_quote,
+                        color: widget.quote.imageUrl == null
+                            ? Theme.of(context).colorScheme.secondary
+                            : Colors.white,
+                        size: 32,
+                      ),
+                      const SizedBox(height: 12),
+                      RichContent(
+                        content: widget.quote.content,
+                        compact: true,
+                        baseStyle: Theme.of(context).textTheme.titleLarge
+                            ?.copyWith(
+                              height: 1.34,
+                              fontWeight: FontWeight.w700,
+                              color: widget.quote.imageUrl == null
+                                  ? null
+                                  : Colors.white,
+                            ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Lời nhắc hôm nay',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: widget.quote.imageUrl == null
+                              ? null
+                              : Colors.white.withValues(alpha: .82),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.format_quote,
-                    color: quote.imageUrl == null
-                        ? Theme.of(context).colorScheme.secondary
-                        : Colors.white,
-                    size: 32,
-                  ),
-                  const SizedBox(height: 12),
-                  RichContent(
-                    content: quote.content,
-                    compact: true,
-                    baseStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      height: 1.34,
-                      fontWeight: FontWeight.w700,
-                      color: quote.imageUrl == null ? null : Colors.white,
+                if (!_capturing)
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: IconButton.filledTonal(
+                      tooltip: 'Chia sẻ trích dẫn',
+                      onPressed: _showShareOptions,
+                      icon: const Icon(Icons.ios_share_outlined),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Lời nhắc hôm nay',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: quote.imageUrl == null
-                          ? null
-                          : Colors.white.withValues(alpha: .82),
-                    ),
-                  ),
-                ],
-              ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copyQuote() async {
+    await Clipboard.setData(ClipboardData(text: widget.quote.content));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Đã sao chép trích dẫn')));
+  }
+
+  Future<void> _showShareOptions() async {
+    final choice = await showModalBottomSheet<_QuoteShareMode>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.text_fields),
+              title: const Text('Chia sẻ dạng chữ'),
+              onTap: () => Navigator.pop(context, _QuoteShareMode.text),
+            ),
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Chia sẻ bằng hình ảnh'),
+              onTap: () => Navigator.pop(context, _QuoteShareMode.image),
             ),
           ],
         ),
       ),
     );
+    if (choice == _QuoteShareMode.text) {
+      unawaited(
+        SharePlus.instance.share(
+          ShareParams(
+            text: '${widget.quote.content}\n\n(Chia sẻ từ ứng dụng Pháp Tâm)',
+          ),
+        ),
+      );
+    } else if (choice == _QuoteShareMode.image) {
+      await _shareQuoteImage();
+    }
+  }
+
+  Future<void> _shareQuoteImage() async {
+    final imagePath = await _renderQuoteImage();
+    if (imagePath == null) return;
+
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(imagePath)],
+        text: 'Chia sẻ từ ứng dụng Pháp Tâm',
+      ),
+    );
+    if (!mounted) return;
+
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lưu ảnh?'),
+        content: const Text('Bạn muốn lưu ảnh trích dẫn này về máy không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Không'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Lưu ảnh'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSave == true) {
+      final saved = await _saveImageToGallery(imagePath);
+      unawaited(File(imagePath).delete().catchError((_) => File(imagePath)));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            saved ? 'Đã lưu ảnh vào bộ sưu tập' : 'Không lưu được ảnh',
+          ),
+        ),
+      );
+    } else {
+      unawaited(File(imagePath).delete().catchError((_) => File(imagePath)));
+    }
+  }
+
+  Future<String?> _renderQuoteImage() async {
+    try {
+      setState(() => _capturing = true);
+      await WidgetsBinding.instance.endOfFrame;
+      final boundary =
+          _captureKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null) return null;
+      final image = await boundary.toImage(pixelRatio: 3);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final size = Size(image.width.toDouble(), image.height.toDouble());
+      final paint = Paint();
+      canvas.drawImage(image, Offset.zero, paint);
+      final paragraphStyle = ui.ParagraphStyle(
+        textAlign: TextAlign.right,
+        fontSize: 34,
+        maxLines: 1,
+      );
+      final builder = ui.ParagraphBuilder(paragraphStyle)
+        ..pushStyle(
+          ui.TextStyle(
+            color:
+                (widget.quote.imageUrl != null &&
+                            widget.quote.imageUrl!.isNotEmpty
+                        ? Colors.white
+                        : const Color(0xFF6D4C41))
+                    .withValues(alpha: .92),
+            fontWeight: FontWeight.w600,
+          ),
+        )
+        ..addText('(Chia sẻ từ ứng dụng Pháp Tâm)');
+      final paragraph = builder.build()
+        ..layout(ui.ParagraphConstraints(width: size.width - 72));
+      canvas.drawParagraph(
+        paragraph,
+        Offset(36, size.height - paragraph.height - 32),
+      );
+      final picture = recorder.endRecording();
+      final finalImage = await picture.toImage(image.width, image.height);
+      final bytes = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      finalImage.dispose();
+      if (bytes == null) return null;
+      final directory = await getTemporaryDirectory();
+      final file = File(
+        '${directory.path}/phaptam_quote_${DateTime.now().millisecondsSinceEpoch}.png',
+      );
+      await file.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+      return file.path;
+    } catch (_) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không tạo được ảnh trích dẫn')),
+      );
+      return null;
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  Future<bool> _saveImageToGallery(String path) async {
+    try {
+      final result = await _mediaChannel.invokeMethod<bool>('saveImage', {
+        'path': path,
+      });
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 }
+
+enum _QuoteShareMode { text, image }
 
 class _BannerStrip extends StatelessWidget {
   const _BannerStrip({required this.banners});
