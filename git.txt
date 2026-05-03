@@ -1,0 +1,49 @@
+cd /home/phaptam/apps/phaptam/backend
+
+docker compose -f docker-compose.prod.yml --env-file .env ps
+docker compose -f docker-compose.prod.yml --env-file .env logs -f api
+docker compose -f docker-compose.prod.yml --env-file .env restart api
+
+
+
+cd /home/phaptam/apps/phaptam
+git pull
+cd backend
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+
+
+Access Key ID = 40908822f903961b222981ecca5c1ce9
+Secret Access Key = 6c958aefbce3a6e87bc569cac199a5f6775c101023d389419199a99ee57ebc23
+
+https://56391079ee7fd8fce3ce23d7eb674c80.r2.cloudflarestorage.com
+
+
+cd ~/apps/phaptam
+git pull
+
+cd admin
+sudo chown -R phaptam:phaptam .
+rm -rf node_modules dist
+npm ci
+VITE_API_BASE_URL=/api npm run build
+
+sudo systemctl reload nginx
+
+
+
+cd /home/phaptam/apps/phaptam
+git pull origin main
+
+cd backend
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build --force-recreate api admin
+
+cd backend
+docker compose -f docker-compose.prod.yml restart admin
+
+docker compose -f docker-compose.prod.yml exec backend node create-admin.ts
+
+flutter build apk --release --dart-define=API_BASE_URL=http://208.87.132.135:8002/api
+
+R2 usage token api cfut_NfQnwSjgou8gNZdHOZcNzHDS4VAisvhsGO6ycMAGd2f18f49zgjt ubjb ukel zaco
+
+Gmail app 
