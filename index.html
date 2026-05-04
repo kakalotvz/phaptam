@@ -451,6 +451,84 @@
         line-height: 1.75;
       }
 
+      .deletion-panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+        padding: 28px;
+        background: #fffaf0;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        box-shadow: 0 18px 46px rgba(109, 76, 65, 0.08);
+      }
+
+      .deletion-panel h2 {
+        margin-top: 14px;
+      }
+
+      .deletion-list {
+        display: grid;
+        gap: 12px;
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .deletion-list li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .deletion-list svg {
+        flex: 0 0 auto;
+        margin-top: 2px;
+        color: var(--brown);
+      }
+
+      .direct-section {
+        display: none;
+        scroll-margin-top: 88px;
+      }
+
+      body.show-deletion #xoa-tai-khoan,
+      body.show-privacy #chinh-sach-quyen-rieng-tu,
+      body.show-terms-page #dieu-khoan {
+        display: block;
+      }
+
+      .legal-panel {
+        padding: 30px;
+        background: #fffaf0;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        box-shadow: 0 18px 46px rgba(109, 76, 65, 0.08);
+      }
+
+      .legal-panel h2 {
+        margin-top: 14px;
+      }
+
+      .legal-copy {
+        display: grid;
+        gap: 18px;
+        color: #4d403a;
+        line-height: 1.75;
+      }
+
+      .legal-copy h3 {
+        margin: 6px 0 0;
+        color: var(--brown-deep);
+        font-family: "Noto Serif", serif;
+        font-size: 22px;
+      }
+
+      .legal-copy p {
+        margin: 0;
+      }
+
       .contact-panel .eyebrow {
         color: var(--brown);
         background: rgba(212, 175, 55, 0.16);
@@ -656,6 +734,7 @@
         .visual-grid,
         .calm-band,
         .contact-panel,
+        .deletion-panel,
         .footer-inner {
           grid-template-columns: 1fr;
         }
@@ -853,7 +932,7 @@
               </div>
             </div>
             <div class="lotus-panel">
-              <img src="mobile/assets/branding/lotus_logo.png" alt="Biểu tượng hoa sen Pháp Tâm" />
+              <img src="lotus_logo.png" alt="Biểu tượng hoa sen Pháp Tâm" />
             </div>
           </div>
         </section>
@@ -889,6 +968,129 @@
               <button class="store-button" type="submit">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13" /><path d="m22 2-7 20-4-9-9-4 20-7Z" /></svg>
                 Gửi liên hệ
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <section id="chinh-sach-quyen-rieng-tu" class="direct-section" aria-label="Chính sách quyền riêng tư">
+          <div class="legal-panel">
+            <span class="eyebrow">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="M9 12l2 2 4-4" /></svg>
+              Chính sách quyền riêng tư
+            </span>
+            <h2>Chính sách quyền riêng tư của Pháp Tâm</h2>
+            <div class="legal-copy">
+              <p>
+                Chính sách này mô tả cách Pháp Tâm thu thập, sử dụng, lưu trữ và bảo vệ dữ liệu khi bạn dùng ứng dụng nghe kinh, xem pháp thoại, đọc kinh, thiền tập, tải nội dung offline và gửi góp ý.
+              </p>
+              <h3>Dữ liệu có thể được thu thập</h3>
+              <p>
+                Khi bạn đăng ký hoặc đăng nhập, ứng dụng có thể lưu email, tên đăng nhập, họ tên, ngày sinh nếu bạn cung cấp, mã định danh tài khoản và thông tin phiên đăng nhập. Trong quá trình sử dụng, hệ thống có thể lưu danh sách yêu thích, playlist, danh sách đã tải, lịch sử xem/nghe, tiến trình đọc/nghe, lịch nhắc tụng kinh và nội dung góp ý/báo lỗi.
+              </p>
+              <h3>Mục đích sử dụng dữ liệu</h3>
+              <p>
+                Dữ liệu được dùng để vận hành tài khoản, đồng bộ trải nghiệm giữa các thiết bị, khôi phục danh sách tải offline, cá nhân hóa tiến trình học tập, gửi thông báo nhắc lịch nếu bạn bật và hỗ trợ quản trị viên xử lý góp ý hoặc lỗi nội dung.
+              </p>
+              <h3>Dữ liệu sinh trắc học và quyền thiết bị</h3>
+              <p>
+                Nếu bạn bật đăng nhập bằng vân tay hoặc Face ID, Pháp Tâm chỉ dùng cơ chế xác thực an toàn của thiết bị. Ứng dụng không thu thập, không lưu và không gửi dữ liệu vân tay/khuôn mặt lên máy chủ. Ứng dụng cần Internet để tải nội dung; thông báo để nhắc lịch nếu bạn bật; việc lưu ảnh trích dẫn sử dụng cơ chế lưu tệp của thiết bị và không đọc thư viện ảnh cá nhân.
+              </p>
+              <h3>Chia sẻ dữ liệu</h3>
+              <p>
+                Pháp Tâm không bán dữ liệu cá nhân của người dùng. Dữ liệu chỉ được xử lý để cung cấp dịch vụ, vận hành máy chủ, gửi email liên hệ hoặc đáp ứng yêu cầu pháp luật khi cần thiết.
+              </p>
+              <h3>Bảo mật và lưu trữ</h3>
+              <p>
+                Thông tin đăng nhập được lưu bằng cơ chế lưu trữ an toàn trên thiết bị khi có thể. Dữ liệu trên máy chủ được dùng trong phạm vi vận hành ứng dụng và được hạn chế truy cập theo vai trò quản trị.
+              </p>
+              <h3>Xóa tài khoản và dữ liệu</h3>
+              <p>
+                Bạn có thể yêu cầu xóa tài khoản và dữ liệu liên quan tại đường dẫn <a href="#xoa-tai-khoan">Yêu cầu xóa tài khoản và dữ liệu</a>. Sau khi xác minh, chúng tôi sẽ xử lý yêu cầu và phản hồi qua email. Một số dữ liệu sao lưu, nhật ký hệ thống hoặc dữ liệu cần giữ vì bảo mật/vận hành có thể được lưu tạm thời trong thời hạn cần thiết rồi xóa.
+              </p>
+              <h3>Liên hệ</h3>
+              <p>
+                Nếu có câu hỏi về quyền riêng tư hoặc dữ liệu cá nhân, vui lòng liên hệ qua email: leminhkhoa25794@gmail.com.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="dieu-khoan" class="direct-section" aria-label="Điều khoản sử dụng">
+          <div class="legal-panel">
+            <span class="eyebrow">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /><path d="M8 13h8" /><path d="M8 17h5" /></svg>
+              Điều khoản
+            </span>
+            <h2>Điều khoản sử dụng Pháp Tâm</h2>
+            <div class="legal-copy">
+              <p>
+                Khi sử dụng Pháp Tâm, bạn đồng ý dùng ứng dụng cho mục đích nghe, đọc, xem nội dung Phật pháp, thiền tập, lưu tiến trình cá nhân, tạo lịch nhắc tụng kinh và gửi góp ý/báo lỗi nội dung.
+              </p>
+              <p>
+                Tài khoản và dữ liệu cá nhân: khi đăng ký hoặc đăng nhập, ứng dụng có thể lưu thông tin tài khoản, danh sách yêu thích, playlist, lịch sử, tiến trình nghe/đọc và lịch nhắc tụng kinh để đồng bộ trải nghiệm của bạn. Nếu gửi góp ý khi chưa đăng nhập, họ tên và email bạn nhập chỉ dùng để quản trị viên liên hệ hoặc xử lý phản hồi.
+              </p>
+              <p>
+                Quyền trên thiết bị: ứng dụng cần Internet để tải nội dung; thông báo để nhắc lịch tụng kinh nếu bạn bật; quyền lưu tệp chỉ được dùng khi bạn chủ động tải nội dung offline hoặc lưu ảnh trích dẫn. Ứng dụng không tự ý đọc, tải lên hoặc chia sẻ ảnh cá nhân của bạn.
+              </p>
+              <p>
+                Nội dung và chia sẻ: nội dung trong ứng dụng nhằm hỗ trợ học hỏi, thực hành và tham khảo. Khi chia sẻ trích dẫn hoặc tin bài, bạn chịu trách nhiệm về ngữ cảnh chia sẻ và không sử dụng ứng dụng để phát tán nội dung trái pháp luật, xúc phạm, lừa đảo hoặc gây hại cho người khác.
+              </p>
+              <p>
+                Góp ý và báo lỗi: phản hồi của bạn được gửi đến hệ thống quản trị để kiểm tra, cải thiện chất lượng nội dung và trải nghiệm. Vui lòng không gửi mật khẩu, mã OTP, thông tin thanh toán hoặc dữ liệu nhạy cảm trong nội dung góp ý.
+              </p>
+              <p>
+                Pháp Tâm có thể cập nhật tính năng, nội dung và điều khoản để phù hợp yêu cầu vận hành, an toàn người dùng và chính sách phân phối ứng dụng. Việc tiếp tục sử dụng ứng dụng sau cập nhật được hiểu là bạn đồng ý với phiên bản điều khoản mới.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="xoa-tai-khoan" class="direct-section" aria-label="Yêu cầu xóa tài khoản và dữ liệu">
+          <div class="deletion-panel">
+            <div>
+              <span class="eyebrow">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" /></svg>
+                Xóa tài khoản
+              </span>
+              <h2>Yêu cầu xóa tài khoản và dữ liệu liên quan</h2>
+              <p class="contact-note">
+                Người dùng Pháp Tâm có thể gửi yêu cầu xóa tài khoản bất cứ lúc nào. Vui lòng dùng đúng email đã đăng ký để chúng tôi xác minh và xử lý yêu cầu.
+              </p>
+              <ul class="deletion-list">
+                <li>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                  Dữ liệu có thể xóa gồm tài khoản, thông tin hồ sơ, yêu thích, playlist, danh sách đã tải, lịch sử, tiến trình nghe/đọc, lịch nhắc và phản hồi gắn với tài khoản.
+                </li>
+                <li>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                  Một số dữ liệu sao lưu, nhật ký hệ thống hoặc thông tin cần giữ theo yêu cầu bảo mật/vận hành có thể được lưu tạm thời trong thời hạn cần thiết rồi tự động xóa.
+                </li>
+                <li>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                  Sau khi xác minh, yêu cầu sẽ được xử lý trong thời gian sớm nhất và bạn sẽ nhận phản hồi qua email.
+                </li>
+              </ul>
+            </div>
+            <form class="contact-form" action="https://formsubmit.co/leminhkhoa25794@gmail.com" method="POST">
+              <input type="hidden" name="_subject" value="Yêu cầu xóa tài khoản Pháp Tâm" />
+              <input type="hidden" name="_captcha" value="false" />
+              <input type="hidden" name="_template" value="table" />
+              <label class="field">
+                Email đã đăng ký
+                <input name="registered_email" type="email" autocomplete="email" required placeholder="email@example.com" />
+              </label>
+              <label class="field">
+                Họ tên
+                <input name="name" autocomplete="name" required placeholder="Nhập họ tên của bạn" />
+              </label>
+              <label class="field">
+                Nội dung yêu cầu
+                <textarea name="message" required>Vui lòng xóa tài khoản Pháp Tâm và các dữ liệu liên quan của tôi.</textarea>
+              </label>
+              <button class="store-button" type="submit">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></svg>
+                Gửi yêu cầu xóa
               </button>
             </form>
           </div>
@@ -932,6 +1134,33 @@ Pháp Tâm có thể cập nhật tính năng, nội dung và điều khoản đ
       const modal = document.getElementById("termsModal");
       const openButtons = document.querySelectorAll("[data-open-terms]");
       const closeButton = document.querySelector("[data-close-terms]");
+      const directSections = {
+        "#xoa-tai-khoan": {
+          className: "show-deletion",
+          element: document.getElementById("xoa-tai-khoan"),
+        },
+        "#chinh-sach-quyen-rieng-tu": {
+          className: "show-privacy",
+          element: document.getElementById("chinh-sach-quyen-rieng-tu"),
+        },
+        "#dieu-khoan": {
+          className: "show-terms-page",
+          element: document.getElementById("dieu-khoan"),
+        },
+      };
+
+      function syncDirectSections() {
+        Object.values(directSections).forEach((section) => {
+          document.body.classList.remove(section.className);
+        });
+        const current = directSections[window.location.hash];
+        if (current?.element) {
+          document.body.classList.add(current.className);
+          requestAnimationFrame(() => {
+            current.element.scrollIntoView({ block: "start" });
+          });
+        }
+      }
 
       function openTerms() {
         modal.classList.add("open");
@@ -951,6 +1180,8 @@ Pháp Tâm có thể cập nhật tính năng, nội dung và điều khoản đ
       window.addEventListener("keydown", (event) => {
         if (event.key === "Escape") closeTerms();
       });
+      window.addEventListener("hashchange", syncDirectSections);
+      syncDirectSections();
     </script>
   </body>
 </html>

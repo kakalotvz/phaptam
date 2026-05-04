@@ -1,4 +1,4 @@
-package com.example.mobile
+package com.thapcamai.phaptam
 
 import android.app.PictureInPictureParams
 import android.content.ContentValues

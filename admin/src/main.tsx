@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
-import { Node as TiptapNode, mergeAttributes } from '@tiptap/core';
+import { Extension, Node as TiptapNode, mergeAttributes } from '@tiptap/core';
 import ImageExtension from '@tiptap/extension-image';
 import LinkExtension from '@tiptap/extension-link';
 import PlaceholderExtension from '@tiptap/extension-placeholder';
@@ -1486,6 +1486,273 @@ const VideoEmbedExtension = TiptapNode.create({
   },
 });
 
+type EditorColorAction = 'color' | 'highlight';
+
+const editorFontFamilies = [
+  ['', 'Font mặc định'],
+  ['"Noto Sans", "Segoe UI", Arial, sans-serif', 'Noto Sans'],
+  ['"Noto Serif", "Times New Roman", serif', 'Noto Serif'],
+  ['Georgia, "Times New Roman", serif', 'Georgia'],
+  ['"Segoe UI", Arial, sans-serif', 'Segoe UI'],
+  ['Arial, sans-serif', 'Arial'],
+  ['Verdana, Geneva, sans-serif', 'Verdana'],
+  ['"Courier New", monospace', 'Courier New'],
+];
+
+const editorFontSizes = [
+  ['', 'Cỡ mặc định'],
+  ['13px', '13'],
+  ['14px', '14'],
+  ['16px', '16'],
+  ['18px', '18'],
+  ['20px', '20'],
+  ['24px', '24'],
+  ['28px', '28'],
+  ['32px', '32'],
+];
+
+const editorColorPalette = [
+  '#111827',
+  '#374151',
+  '#6d4c41',
+  '#8b5e3c',
+  '#b9922c',
+  '#dc2626',
+  '#ea580c',
+  '#ca8a04',
+  '#16a34a',
+  '#0891b2',
+  '#2563eb',
+  '#7c3aed',
+  '#db2777',
+  '#fef3c7',
+  '#dcfce7',
+  '#dbeafe',
+];
+
+const FontFamilyExtension = Extension.create({
+  name: 'editorFontFamily',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['textStyle'],
+        attributes: {
+          fontFamily: {
+            default: null,
+            parseHTML: (element) => element.style.fontFamily || null,
+            renderHTML: (attributes) => {
+              if (!attributes.fontFamily) return {};
+              return { style: `font-family: ${attributes.fontFamily}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
+const FontSizeExtension = Extension.create({
+  name: 'editorFontSize',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['textStyle'],
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: (element) => element.style.fontSize || null,
+            renderHTML: (attributes) => {
+              if (!attributes.fontSize) return {};
+              return { style: `font-size: ${attributes.fontSize}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
+function componentToHex(value: number) {
+  return Math.max(0, Math.min(255, value)).toString(16).padStart(2, '0');
+}
+
+function rgbToHex(red: number, green: number, blue: number) {
+  return `#${componentToHex(red)}${componentToHex(green)}${componentToHex(blue)}`;
+}
+
+function normalizeColorInput(value: string) {
+  const trimmed = value.trim();
+  const shortHex = /^#?([0-9a-f]{3})$/i.exec(trimmed);
+  if (shortHex) {
+    const [, hex] = shortHex;
+    return `#${hex.split('').map((digit) => digit + digit).join('')}`.toLowerCase();
+  }
+
+  const longHex = /^#?([0-9a-f]{6})$/i.exec(trimmed);
+  if (longHex) return `#${longHex[1]}`.toLowerCase();
+
+  const rgb = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i.exec(trimmed) ?? /^(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})$/i.exec(trimmed);
+  if (rgb) {
+    const channels = rgb.slice(1).map(Number);
+    if (channels.every((channel) => channel >= 0 && channel <= 255)) {
+      return rgbToHex(channels[0], channels[1], channels[2]);
+    }
+  }
+
+  return '';
+}
+
+function hexToRgbLabel(hex: string) {
+  const normalized = normalizeColorInput(hex);
+  if (!normalized) return '';
+  const red = parseInt(normalized.slice(1, 3), 16);
+  const green = parseInt(normalized.slice(3, 5), 16);
+  const blue = parseInt(normalized.slice(5, 7), 16);
+  return `rgb(${red}, ${green}, ${blue})`;
+}
+
+function normalizeFontFamilyValue(value?: string) {
+  return String(value ?? '')
+    .replace(/["']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function resolveFontFamilyValue(value?: string) {
+  const normalized = normalizeFontFamilyValue(value);
+  if (!normalized) return '';
+  return editorFontFamilies.find(([fontValue]) => normalizeFontFamilyValue(fontValue) === normalized)?.[0] ?? '';
+}
+
+function ColorPickerButton({
+  title,
+  icon,
+  defaultColor,
+  currentColor,
+  onSelect,
+  buttonStyle,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  defaultColor: string;
+  currentColor?: string;
+  onSelect: (color: string) => void;
+  buttonStyle: React.CSSProperties;
+}) {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const resolvedColor = normalizeColorInput(currentColor ?? '') || defaultColor;
+  const [selectedColor, setSelectedColor] = useState(resolvedColor);
+  const [customValue, setCustomValue] = useState(resolvedColor);
+  const [customError, setCustomError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    const nextColor = normalizeColorInput(currentColor ?? '') || defaultColor;
+    setSelectedColor(nextColor);
+    setCustomValue(nextColor);
+    setCustomError('');
+  }, [currentColor, defaultColor, open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick);
+  }, [open]);
+
+  function applyColor(color: string) {
+    const normalized = normalizeColorInput(color);
+    if (!normalized) {
+      setCustomError('Nhập HEX hoặc RGB hợp lệ.');
+      return;
+    }
+    setSelectedColor(normalized);
+    setCustomValue(normalized);
+    setCustomError('');
+    onSelect(normalized);
+    setOpen(false);
+  }
+
+  function updateCustomValue(value: string) {
+    setCustomValue(value);
+    const normalized = normalizeColorInput(value);
+    if (normalized) {
+      setSelectedColor(normalized);
+      setCustomError('');
+    }
+  }
+
+  return (
+    <div className="color-picker-wrap" ref={wrapRef}>
+      <button
+        style={buttonStyle}
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        title={title}
+        aria-label={title}
+        aria-expanded={open}
+      >
+        {icon}
+        <span className="color-button-swatch" style={{ background: resolvedColor }} />
+      </button>
+      {open && (
+        <div className="color-picker-popover" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="color-picker-top">
+            <span>{title}</span>
+            <span className="color-picker-value">{selectedColor}</span>
+          </div>
+          <div className="color-swatch-grid">
+            {editorColorPalette.map((color) => (
+              <button
+                key={color}
+                className={`color-swatch ${selectedColor === color ? 'active' : ''}`}
+                type="button"
+                onClick={() => applyColor(color)}
+                title={`${color} - ${hexToRgbLabel(color)}`}
+                aria-label={`Chọn màu ${color}`}
+                style={{ background: color }}
+              />
+            ))}
+          </div>
+          <label className="native-color-field">
+            <span>Bảng màu</span>
+            <input type="color" value={selectedColor} onChange={(event) => applyColor(event.target.value)} />
+          </label>
+          <label className="custom-color-field">
+            <span>HEX hoặc RGB</span>
+            <input
+              value={customValue}
+              onChange={(event) => updateCustomValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  applyColor(customValue);
+                }
+              }}
+              placeholder="#8b5e3c hoặc rgb(139, 94, 60)"
+            />
+          </label>
+          <div className="color-picker-footer">
+            <span>{hexToRgbLabel(selectedColor)}</span>
+            <button type="button" onClick={() => applyColor(customValue)}>
+              Áp dụng
+            </button>
+          </div>
+          {customError && <p className="color-picker-error">{customError}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RichTextEditor({
   value,
   onChange,
@@ -1533,6 +1800,8 @@ function RichTextEditor({
       }),
       Superscript,
       TextStyle,
+      FontFamilyExtension,
+      FontSizeExtension,
       Color,
       Highlight.configure({ multicolor: true }),
       VideoEmbedExtension,
@@ -1584,7 +1853,21 @@ function RichTextEditor({
     if (format === 'link' && commandValue === false) chain.unsetLink().run();
     if (format === 'superscript') chain.toggleSuperscript().run();
     if (format === 'color') chain.setColor(String(commandValue)).run();
-    if (format === 'highlight') chain.toggleHighlight({ color: String(commandValue) }).run();
+    if (format === 'highlight') chain.setHighlight({ color: String(commandValue) }).run();
+  }
+
+  function runColorCommand(format: EditorColorAction, color: string) {
+    runCommand(format, color);
+  }
+
+  function runFontFamily(fontFamily: string) {
+    if (!editor) return;
+    editor.chain().focus().setMark('textStyle', { fontFamily: fontFamily || null }).run();
+  }
+
+  function runFontSize(fontSize: string) {
+    if (!editor) return;
+    editor.chain().focus().setMark('textStyle', { fontSize: fontSize || null }).run();
   }
 
   function addLink() {
@@ -1645,6 +1928,8 @@ function RichTextEditor({
 
   const h2Active = Boolean(editor?.isActive('heading', { level: 2 }));
   const h3Active = Boolean(editor?.isActive('heading', { level: 3 }));
+  const currentFontFamily = resolveFontFamilyValue(editor?.getAttributes('textStyle').fontFamily);
+  const currentFontSize = String(editor?.getAttributes('textStyle').fontSize ?? '');
 
   const toolbarStyle: React.CSSProperties = {
     display: 'flex',
@@ -1676,11 +1961,46 @@ function RichTextEditor({
         <span style={{ width: '8px', height: '8px', background: '#34d399', borderRadius: '50%' }}></span>
         Trình soạn thảo Siêu Cấp (Hỗ trợ Ảnh & Video)
       </div>
-      <div style={toolbarStyle} onMouseDown={(event) => event.preventDefault()}>
+      <div
+        style={toolbarStyle}
+        onMouseDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (!target.closest('.color-picker-popover') && !target.closest('.editor-toolbar-control')) event.preventDefault();
+        }}
+      >
         {/* Headings */}
         <button style={btnStyle(h2Active)} type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề Lớn"><Heading2 size={16} /></button>
         <button style={btnStyle(h3Active)} type="button" onClick={() => runCommand('header', 3)} title="Tiêu đề Nhỏ"><Heading3 size={16} /></button>
         <button style={btnStyle(Boolean(editor?.isActive('paragraph')))} type="button" onClick={() => runCommand('header', false)} title="Đoạn văn thường"><span style={{ fontWeight: 'bold' }}>Aa</span></button>
+        <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
+
+        {/* Typography */}
+        <select
+          className="editor-toolbar-select editor-toolbar-control font-family-select"
+          value={currentFontFamily}
+          onChange={(event) => runFontFamily(event.target.value)}
+          title="Font chữ"
+          aria-label="Font chữ"
+        >
+          {editorFontFamilies.map(([fontValue, label]) => (
+            <option key={fontValue || 'default-font'} value={fontValue}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select
+          className="editor-toolbar-select editor-toolbar-control font-size-select"
+          value={currentFontSize}
+          onChange={(event) => runFontSize(event.target.value)}
+          title="Kích thước chữ"
+          aria-label="Kích thước chữ"
+        >
+          {editorFontSizes.map(([fontSize, label]) => (
+            <option key={fontSize || 'default-size'} value={fontSize}>
+              {label}
+            </option>
+          ))}
+        </select>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Inline Formatting */}
@@ -1692,14 +2012,22 @@ function RichTextEditor({
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Colors */}
-        <button style={btnStyle(false)} type="button" onClick={() => {
-          const color = window.prompt('Nhập mã màu (ví dụ: #ff0000 hoặc red)', '#ff0000');
-          if (color) runCommand('color', color);
-        }} title="Màu chữ"><Baseline size={16} /></button>
-        <button style={btnStyle(false)} type="button" onClick={() => {
-          const color = window.prompt('Nhập màu nền (ví dụ: #ffff00 hoặc yellow)', '#ffff00');
-          if (color) runCommand('highlight', color);
-        }} title="Tô sáng"><Highlighter size={16} /></button>
+        <ColorPickerButton
+          title="Màu chữ"
+          icon={<Baseline size={16} />}
+          defaultColor="#111827"
+          currentColor={editor?.getAttributes('textStyle').color}
+          onSelect={(color) => runColorCommand('color', color)}
+          buttonStyle={btnStyle(Boolean(editor?.getAttributes('textStyle').color))}
+        />
+        <ColorPickerButton
+          title="Màu tô sáng"
+          icon={<Highlighter size={16} />}
+          defaultColor="#fef3c7"
+          currentColor={editor?.getAttributes('highlight').color}
+          onSelect={(color) => runColorCommand('highlight', color)}
+          buttonStyle={btnStyle(Boolean(editor?.isActive('highlight')))}
+        />
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Blocks & Lists */}
