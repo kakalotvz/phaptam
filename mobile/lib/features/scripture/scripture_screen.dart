@@ -1115,6 +1115,7 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Đăng nhập để lưu tốc độ đọc theo tài khoản.'),
+          duration: const Duration(seconds: 3),
           action: SnackBarAction(
             label: 'Đăng nhập',
             onPressed: () => context.push('/login'),

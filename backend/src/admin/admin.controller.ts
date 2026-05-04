@@ -530,9 +530,15 @@ export class AdminController {
     },
   ) {
     const current = await this.quoteRotationSettings();
-    const quoteIds = data.quoteIds ? uniqueStrings(data.quoteIds) : current.quoteIds;
+    let quoteIds = data.quoteIds ? uniqueStrings(data.quoteIds) : current.quoteIds;
     const enabled = data.enabled ?? current.enabled;
-    if (enabled && quoteIds.length === 0) throw new BadRequestException('Chọn ít nhất một trích dẫn để auto chuyển.');
+    if (enabled && quoteIds.length === 0) {
+      quoteIds = (await this.prisma.quote.findMany({
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      })).map((quote) => quote.id);
+    }
+    if (enabled && quoteIds.length === 0) throw new BadRequestException('Chưa có trích dẫn để bật auto.');
 
     const quoteIdChanged = data.quoteIds !== undefined && quoteIds.join('|') !== current.quoteIds.join('|');
     const settings: QuoteRotationSettings = {

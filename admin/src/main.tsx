@@ -3232,11 +3232,16 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
 
   async function saveQuoteRotation(enabled: boolean) {
     const orderedIds = data.quotes.map((quote) => quote.id).filter((id) => selectedQuoteIds.includes(id));
+    const nextQuoteIds = enabled && orderedIds.length === 0 ? data.quotes.map((quote) => quote.id) : orderedIds;
     const ok = await run(
-      () => api.updateQuoteRotation({ enabled, quoteIds: orderedIds, paused: false }),
-      enabled ? 'Đã bật auto chuyển trích dẫn' : 'Đã tắt auto chuyển trích dẫn',
+      () => api.updateQuoteRotation({ enabled, quoteIds: nextQuoteIds, paused: false }),
+      enabled && orderedIds.length === 0
+        ? 'Đã bật auto cho toàn bộ trích dẫn'
+        : enabled
+          ? 'Đã bật auto chuyển trích dẫn'
+          : 'Đã tắt auto chuyển trích dẫn',
     );
-    if (ok) setSelectedQuoteIds(orderedIds);
+    if (ok) setSelectedQuoteIds(nextQuoteIds);
   }
 
   return (
@@ -3298,14 +3303,14 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
                   : 'Đang chạy, tự đổi sau 00:00 giờ Việt Nam.'
                 : selectedCount > 0
                   ? `Đã chọn ${selectedCount.toLocaleString('vi-VN')} trích dẫn.`
-                  : 'Chọn các trích dẫn theo thứ tự từ trên xuống dưới rồi bật auto.'}
+                  : 'Chưa chọn trích dẫn nào. Bật auto sẽ áp dụng cho toàn bộ danh sách.'}
             </span>
           </div>
           <div className="action-group">
             <button
               className="ghost"
               type="button"
-              disabled={selectedCount === 0}
+              disabled={data.quotes.length === 0}
               onClick={() => void saveQuoteRotation(!data.quoteRotation.enabled)}
             >
               <Power size={15} />
