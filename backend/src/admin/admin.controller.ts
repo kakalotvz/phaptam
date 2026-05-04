@@ -22,6 +22,7 @@ export class AdminController {
       feedbackCount,
       userCount,
       scriptureCount,
+      scriptureReadingCount,
       newsCount,
       newsCategoryCount,
       scriptureReminderCount,
@@ -34,7 +35,8 @@ export class AdminController {
       this.prisma.rssSource.count(),
       this.prisma.feedback.count(),
       this.prisma.user.count(),
-      this.prisma.scripture.count(),
+      this.prisma.scripture.count({ where: { kind: 'CHANT' } }),
+      this.prisma.scripture.count({ where: { kind: 'READING' } }),
       this.prisma.newsItem.count(),
       this.prisma.newsCategory.count(),
       this.prisma.scriptureReminder.count(),
@@ -50,6 +52,7 @@ export class AdminController {
       feedbackCount,
       userCount,
       scriptureCount,
+      scriptureReadingCount,
       newsCount,
       newsCategoryCount,
       scriptureReminderCount,
@@ -145,17 +148,31 @@ export class AdminController {
 
   @Get('audio-category')
   audioCategories() {
-    return this.prisma.audioCategory.findMany({ orderBy: { createdAt: 'desc' }, include: { _count: { select: { audios: true } } } });
+    return this.prisma.audioCategory.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        parent: true,
+        _count: { select: { audios: true, scriptures: true, children: true } },
+      },
+    });
   }
 
   @Post('audio-category')
-  createAudioCategory(@Body() data: { name: string; description?: string }) {
-    return this.prisma.audioCategory.create({ data });
+  createAudioCategory(@Body() data: { name: string; description?: string; parentId?: string }) {
+    return this.prisma.audioCategory.create({ data: { name: data.name, description: data.description, parentId: data.parentId || null } });
   }
 
   @Patch('audio-category/:id')
-  updateAudioCategory(@Param('id') id: string, @Body() data: { name?: string; description?: string }) {
-    return this.prisma.audioCategory.update({ where: { id }, data });
+  updateAudioCategory(@Param('id') id: string, @Body() data: { name?: string; description?: string; parentId?: string | null }) {
+    if (data.parentId === id) throw new BadRequestException('Danh mục cha không được trùng với danh mục đang sửa.');
+    return this.prisma.audioCategory.update({
+      where: { id },
+      data: {
+        name: data.name,
+        description: data.description,
+        parentId: data.parentId === undefined ? undefined : data.parentId || null,
+      },
+    });
   }
 
   @Delete('audio-category/:id')
@@ -215,9 +232,10 @@ export class AdminController {
   @Get('scripture')
   scriptures() {
     return this.prisma.scripture.findMany({
+      where: { kind: 'CHANT' },
       orderBy: { createdAt: 'desc' },
       include: {
-        category: true,
+        category: { include: { parent: true } },
         lines: { orderBy: { orderIndex: 'asc' } },
       },
       take: 100,
@@ -254,6 +272,7 @@ export class AdminController {
     return this.prisma.scripture.create({
       data: {
         title: data.title,
+        kind: 'CHANT',
         description: data.description,
         backgroundImageUrl: data.backgroundImageUrl,
         categoryId: data.categoryId || null,
@@ -266,7 +285,7 @@ export class AdminController {
         },
       },
       include: {
-        category: true,
+        category: { include: { parent: true } },
         lines: { orderBy: { orderIndex: 'asc' } },
       },
     });
@@ -306,6 +325,7 @@ export class AdminController {
         where: { id },
         data: {
           title: data.title,
+          kind: 'CHANT',
           description: data.description,
           backgroundImageUrl: data.backgroundImageUrl,
           categoryId: data.categoryId === undefined ? undefined : data.categoryId || null,
@@ -320,7 +340,7 @@ export class AdminController {
             : undefined,
         },
         include: {
-          category: true,
+          category: { include: { parent: true } },
           lines: { orderBy: { orderIndex: 'asc' } },
         },
       });
@@ -329,6 +349,80 @@ export class AdminController {
 
   @Delete('scripture/:id')
   deleteScripture(@Param('id') id: string) {
+    return this.prisma.scripture.delete({ where: { id } });
+  }
+
+  @Get('scripture-reading')
+  scriptureReadings() {
+    return this.prisma.scripture.findMany({
+      where: { kind: 'READING' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        category: { include: { parent: true } },
+        _count: { select: { lines: true } },
+      },
+      take: 100,
+    });
+  }
+
+  @Post('scripture-reading')
+  createScriptureReading(
+    @Body()
+    data: {
+      title: string;
+      description?: string;
+      content?: string;
+      categoryId?: string;
+    },
+  ) {
+    if (!data.title?.trim()) throw new BadRequestException('Tiêu đề Kinh đọc không được để trống.');
+    if (!data.content?.trim()) throw new BadRequestException('Nội dung Kinh đọc không được để trống.');
+    return this.prisma.scripture.create({
+      data: {
+        kind: 'READING',
+        title: data.title.trim(),
+        description: data.description,
+        content: data.content,
+        categoryId: data.categoryId || null,
+      },
+      include: {
+        category: { include: { parent: true } },
+        _count: { select: { lines: true } },
+      },
+    });
+  }
+
+  @Patch('scripture-reading/:id')
+  updateScriptureReading(
+    @Param('id') id: string,
+    @Body()
+    data: {
+      title?: string;
+      description?: string;
+      content?: string;
+      categoryId?: string;
+    },
+  ) {
+    if (data.title !== undefined && !data.title.trim()) throw new BadRequestException('Tiêu đề Kinh đọc không được để trống.');
+    if (data.content !== undefined && !data.content.trim()) throw new BadRequestException('Nội dung Kinh đọc không được để trống.');
+    return this.prisma.scripture.update({
+      where: { id },
+      data: {
+        kind: 'READING',
+        title: data.title?.trim(),
+        description: data.description,
+        content: data.content,
+        categoryId: data.categoryId === undefined ? undefined : data.categoryId || null,
+      },
+      include: {
+        category: { include: { parent: true } },
+        _count: { select: { lines: true } },
+      },
+    });
+  }
+
+  @Delete('scripture-reading/:id')
+  deleteScriptureReading(@Param('id') id: string) {
     return this.prisma.scripture.delete({ where: { id } });
   }
 

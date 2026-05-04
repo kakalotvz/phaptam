@@ -35,15 +35,16 @@ export class PublicController {
   @Get('scriptures')
   scriptures(@Query('category_id') categoryId?: string) {
     return this.prisma.scripture.findMany({
-      where: { categoryId },
+      where: { kind: 'CHANT', categoryId },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         title: true,
         description: true,
+        kind: true,
         backgroundImageUrl: true,
         categoryId: true,
-        category: true,
+        category: { include: { parent: true } },
         viewCount: true,
         createdAt: true,
         lines: {
@@ -64,8 +65,10 @@ export class PublicController {
         id: true,
         title: true,
         description: true,
+        kind: true,
         backgroundImageUrl: true,
         categoryId: true,
+        category: { include: { parent: true } },
         lines: {
           orderBy: { orderIndex: 'asc' },
           select: { content: true, startTime: true },
@@ -84,6 +87,53 @@ export class PublicController {
 
   @Post('scriptures/:id/view')
   scriptureView(@Param('id') id: string) {
+    return this.prisma.scripture.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+      select: { id: true, viewCount: true },
+    });
+  }
+
+  @Get('scripture-readings')
+  scriptureReadings(@Query('category_id') categoryId?: string) {
+    return this.prisma.scripture.findMany({
+      where: { kind: 'READING', categoryId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        description: true,
+        content: true,
+        categoryId: true,
+        category: { include: { parent: true } },
+        viewCount: true,
+        createdAt: true,
+      },
+      take: 50,
+    });
+  }
+
+  @Get('scripture-readings/:id')
+  scriptureReading(@Param('id') id: string) {
+    return this.prisma.scripture.findUniqueOrThrow({
+      where: { id },
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        description: true,
+        content: true,
+        categoryId: true,
+        category: { include: { parent: true } },
+        viewCount: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  @Post('scripture-readings/:id/view')
+  scriptureReadingView(@Param('id') id: string) {
     return this.prisma.scripture.update({
       where: { id },
       data: { viewCount: { increment: 1 } },

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/api_client.dart';
+import '../../shared/widgets/rich_content.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
@@ -18,7 +19,7 @@ class ScriptureScreen extends ConsumerWidget {
     final isLoggedIn = ref.watch(isLoggedInProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Đọc kinh')),
+      appBar: AppBar(title: const Text('Tụng kinh')),
       body: scripturesAsync.when(
         loading: () => _ScriptureContent(
           scriptures: const [],
@@ -238,7 +239,7 @@ class _ScriptureContentState extends State<_ScriptureContent> {
     );
     final scriptureGroups = _groupScriptures(visibleScriptures);
     final categories = widget.scriptures
-        .map((item) => item.category ?? item.title)
+        .map((item) => item.categoryParent ?? item.category ?? item.title)
         .where((item) => item.trim().isNotEmpty)
         .toSet()
         .toList();
@@ -334,7 +335,7 @@ class _ScriptureContentState extends State<_ScriptureContent> {
           const Card(
             child: ListTile(
               leading: Icon(Icons.menu_book_outlined),
-              title: Text('Chưa có bản Đọc Kinh'),
+              title: Text('Chưa có bản Kinh tụng'),
             ),
           ),
         for (final group in scriptureGroups) ...[
@@ -349,14 +350,17 @@ class _ScriptureContentState extends State<_ScriptureContent> {
     final query = _query.trim().toLowerCase();
     return items.where((item) {
       final category = item.category ?? '';
+      final parentCategory = item.categoryParent ?? '';
       final matchesQuery =
           query.isEmpty ||
           item.title.toLowerCase().contains(query) ||
           category.toLowerCase().contains(query) ||
+          parentCategory.toLowerCase().contains(query) ||
           (item.description ?? '').toLowerCase().contains(query);
       final matchesCategory =
           _categoryFilter == null ||
           category == _categoryFilter ||
+          parentCategory == _categoryFilter ||
           item.title == _categoryFilter;
       return matchesQuery && matchesCategory;
     }).toList();
@@ -443,7 +447,7 @@ class _ScriptureSearchControls extends StatelessWidget {
               child: TextField(
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.search),
-                  hintText: 'Tìm kiếm bản đọc',
+                  hintText: 'Tìm kiếm bản tụng',
                 ),
                 onChanged: onQueryChanged,
               ),
@@ -503,7 +507,9 @@ class _ScriptureGroup {
 List<_ScriptureGroup> _groupScriptures(List<Scripture> scriptures) {
   final grouped = <String, List<Scripture>>{};
   for (final scripture in scriptures) {
-    final title = (scripture.category?.trim().isNotEmpty ?? false)
+    final title = (scripture.categoryParent?.trim().isNotEmpty ?? false)
+        ? scripture.categoryParent!.trim()
+        : (scripture.category?.trim().isNotEmpty ?? false)
         ? scripture.category!.trim()
         : scripture.title.trim();
     grouped.putIfAbsent(title, () => []).add(scripture);
@@ -522,13 +528,20 @@ class _ScriptureGroupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shouldOpenSubcategory =
+        group.items.any(
+          (item) => item.categoryParent?.trim().isNotEmpty == true,
+        ) ||
         group.items.length > 1 ||
         ((group.items.first.category?.trim().isNotEmpty ?? false) &&
             group.items.first.title.trim() != group.title);
     if (!shouldOpenSubcategory) {
-      return _ScriptureListCard(scripture: group.items.first);
+      return _ScriptureListCard(
+        scripture: group.items.first,
+        sequence: group.items,
+      );
     }
 
+    final sortedItems = naturalSortScriptures(group.items);
     final totalLines = group.items.fold<int>(
       0,
       (sum, scripture) => sum + scripture.lines.length,
@@ -543,7 +556,7 @@ class _ScriptureGroupCard extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => _ScriptureCategoryScreen(
               title: group.title,
-              items: group.items,
+              items: sortedItems,
             ),
           ),
         ),
@@ -553,19 +566,31 @@ class _ScriptureGroupCard extends StatelessWidget {
 }
 
 class _ScriptureListCard extends StatelessWidget {
-  const _ScriptureListCard({required this.scripture});
+  const _ScriptureListCard({
+    required this.scripture,
+    required this.sequence,
+    this.sequenceIndex = 0,
+  });
 
   final Scripture scripture;
+  final List<Scripture> sequence;
+  final int sequenceIndex;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
         leading: const Icon(Icons.menu_book_outlined),
-        title: Text(scripture.title),
+        title: Text(
+          scripture.categoryParent != null
+              ? scripture.category ?? scripture.title
+              : scripture.title,
+        ),
         subtitle: Text(
           scripture.lines.isEmpty
               ? 'Chưa có dòng kinh'
+              : scripture.categoryParent != null
+              ? '${scripture.title} • ${scripture.lines.length} dòng'
               : scripture.description ?? '${scripture.lines.length} dòng',
         ),
         isThreeLine: scripture.lines.isNotEmpty,
@@ -576,7 +601,11 @@ class _ScriptureListCard extends StatelessWidget {
             ? null
             : () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => ScriptureReader(scripture: scripture),
+                  builder: (_) => ScriptureReader(
+                    scripture: scripture,
+                    chapterSequence: sequence,
+                    chapterIndex: sequenceIndex,
+                  ),
                 ),
               ),
       ),
@@ -597,14 +626,40 @@ class _ScriptureCategoryScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
         children: [
-          for (final scripture in items) ...[
-            _ScriptureListCard(scripture: scripture),
+          for (final entry in items.indexed) ...[
+            _ScriptureListCard(
+              scripture: entry.$2,
+              sequence: items,
+              sequenceIndex: entry.$1,
+            ),
             const SizedBox(height: 12),
           ],
         ],
       ),
     );
   }
+}
+
+List<Scripture> naturalSortScriptures(List<Scripture> items) {
+  final sorted = [...items];
+  sorted.sort((a, b) {
+    final aNumber = _chapterNumber(a.category ?? a.title);
+    final bNumber = _chapterNumber(b.category ?? b.title);
+    if (aNumber != null && bNumber != null && aNumber != bNumber) {
+      return aNumber.compareTo(bNumber);
+    }
+    if (aNumber != null && bNumber == null) return -1;
+    if (aNumber == null && bNumber != null) return 1;
+    return (a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+      b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  });
+  return sorted;
+}
+
+int? _chapterNumber(String value) {
+  final match = RegExp(r'(\d+)').firstMatch(value);
+  return match == null ? null : int.tryParse(match.group(1) ?? '');
 }
 
 class _EmptyReminderCard extends StatelessWidget {
@@ -622,17 +677,455 @@ class _EmptyReminderCard extends StatelessWidget {
   }
 }
 
+enum _ReadingFlow { horizontal, vertical }
+
+class ScriptureReadingScreen extends ConsumerWidget {
+  const ScriptureReadingScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final readingsAsync = ref.watch(scriptureReadingListProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Kinh đọc')),
+      body: readingsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) =>
+            const Center(child: Text('Không tải được Kinh đọc')),
+        data: (readings) => RefreshIndicator(
+          onRefresh: () async {
+            await refreshPublicContent(ref);
+            await ref.read(scriptureReadingListProvider.future);
+          },
+          child: readings.isEmpty
+              ? ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: const [
+                    Card(
+                      child: ListTile(
+                        leading: Icon(Icons.menu_book_outlined),
+                        title: Text('Chưa có Kinh đọc'),
+                      ),
+                    ),
+                  ],
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                  itemCount: readings.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final item = readings[index];
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.auto_stories_outlined),
+                        title: Text(item.title),
+                        subtitle: Text(
+                          (item.description?.trim().isNotEmpty ?? false)
+                              ? item.description!
+                              : _plainReadingPreview(item.content ?? ''),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ScriptureBookReader(reading: item),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class ScriptureBookReader extends StatefulWidget {
+  const ScriptureBookReader({required this.reading, super.key});
+
+  final Scripture reading;
+
+  @override
+  State<ScriptureBookReader> createState() => _ScriptureBookReaderState();
+}
+
+class _ScriptureBookReaderState extends State<ScriptureBookReader> {
+  double _fontSize = 18;
+  String _fontFamily = 'Serif';
+  _ReadingFlow _flow = _ReadingFlow.horizontal;
+  bool _blueLightFilter = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(
+      apiClient.post('/scripture-readings/${widget.reading.id}/view', {}),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = _readingPages(widget.reading.content ?? '');
+    final background = _blueLightFilter
+        ? const Color(0xFF2B221A)
+        : const Color(0xFFFFFBF1);
+    final textColor = _blueLightFilter
+        ? const Color(0xFFF5D7A1)
+        : const Color(0xFF2D2118);
+    final baseStyle = TextStyle(
+      color: textColor,
+      fontSize: _fontSize,
+      height: 1.62,
+      fontFamily: _fontFamily == 'Default' ? null : _fontFamily,
+    );
+
+    return Scaffold(
+      backgroundColor: background,
+      appBar: AppBar(
+        title: Text(widget.reading.title),
+        actions: [
+          IconButton(
+            tooltip: 'Tùy chỉnh đọc',
+            onPressed: () => _showReadingSettings(context),
+            icon: const Icon(Icons.tune),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          if (_flow == _ReadingFlow.horizontal)
+            PageView.builder(
+              itemCount: pages.length,
+              itemBuilder: (context, index) => _BookPage(
+                title: index == 0 ? widget.reading.title : null,
+                content: pages[index],
+                pageLabel: '${index + 1}/${pages.length}',
+                baseStyle: baseStyle,
+                blueLightFilter: _blueLightFilter,
+              ),
+            )
+          else
+            ListView(
+              padding: const EdgeInsets.fromLTRB(22, 18, 22, 96),
+              children: [
+                Text(
+                  widget.reading.title,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: textColor,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: _fontFamily == 'Default' ? null : _fontFamily,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                RichContent(
+                  content: widget.reading.content ?? '',
+                  baseStyle: baseStyle,
+                ),
+              ],
+            ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16 + MediaQuery.paddingOf(context).bottom,
+            child: _ReadingQuickBar(
+              fontSize: _fontSize,
+              blueLightFilter: _blueLightFilter,
+              flow: _flow,
+              onSmaller: () =>
+                  setState(() => _fontSize = (_fontSize - 1).clamp(15, 30)),
+              onLarger: () =>
+                  setState(() => _fontSize = (_fontSize + 1).clamp(15, 30)),
+              onToggleBlueLight: () =>
+                  setState(() => _blueLightFilter = !_blueLightFilter),
+              onToggleFlow: () => setState(
+                () => _flow = _flow == _ReadingFlow.horizontal
+                    ? _ReadingFlow.vertical
+                    : _ReadingFlow.horizontal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReadingSettings(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tùy chỉnh',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 12),
+                Text('Cỡ chữ ${_fontSize.toStringAsFixed(0)}'),
+                Slider(
+                  min: 15,
+                  max: 30,
+                  divisions: 15,
+                  value: _fontSize,
+                  onChanged: (value) {
+                    setSheetState(() => _fontSize = value);
+                    setState(() {});
+                  },
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: _fontFamily,
+                  decoration: const InputDecoration(labelText: 'Font chữ'),
+                  items: const [
+                    DropdownMenuItem(value: 'Serif', child: Text('Serif')),
+                    DropdownMenuItem(value: 'Sans', child: Text('Sans')),
+                    DropdownMenuItem(value: 'Mono', child: Text('Mono')),
+                    DropdownMenuItem(value: 'Default', child: Text('Mặc định')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setSheetState(() => _fontFamily = value);
+                    setState(() {});
+                  },
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Giảm ánh sáng xanh'),
+                  value: _blueLightFilter,
+                  onChanged: (value) {
+                    setSheetState(() => _blueLightFilter = value);
+                    setState(() {});
+                  },
+                ),
+                SegmentedButton<_ReadingFlow>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _ReadingFlow.horizontal,
+                      icon: Icon(Icons.swipe),
+                      label: Text('Lật ngang'),
+                    ),
+                    ButtonSegment(
+                      value: _ReadingFlow.vertical,
+                      icon: Icon(Icons.swap_vert),
+                      label: Text('Vuốt lên'),
+                    ),
+                  ],
+                  selected: {_flow},
+                  onSelectionChanged: (value) {
+                    setSheetState(() => _flow = value.first);
+                    setState(() {});
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BookPage extends StatelessWidget {
+  const _BookPage({
+    required this.content,
+    required this.pageLabel,
+    required this.baseStyle,
+    required this.blueLightFilter,
+    this.title,
+  });
+
+  final String content;
+  final String pageLabel;
+  final TextStyle baseStyle;
+  final bool blueLightFilter;
+  final String? title;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = baseStyle.color ?? const Color(0xFF2D2118);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 92),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: blueLightFilter
+              ? const Color(0xFF35281E)
+              : const Color(0xFFFFFFFA),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: blueLightFilter
+                ? const Color(0xFF6D5139)
+                : const Color(0xFFE5D5B8),
+          ),
+        ),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+          children: [
+            if (title != null) ...[
+              Text(
+                title!,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: textColor,
+                  fontWeight: FontWeight.w800,
+                  fontFamily: baseStyle.fontFamily,
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+            RichContent(content: content, baseStyle: baseStyle),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                pageLabel,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: textColor.withValues(alpha: .62),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReadingQuickBar extends StatelessWidget {
+  const _ReadingQuickBar({
+    required this.fontSize,
+    required this.blueLightFilter,
+    required this.flow,
+    required this.onSmaller,
+    required this.onLarger,
+    required this.onToggleBlueLight,
+    required this.onToggleFlow,
+  });
+
+  final double fontSize;
+  final bool blueLightFilter;
+  final _ReadingFlow flow;
+  final VoidCallback onSmaller;
+  final VoidCallback onLarger;
+  final VoidCallback onToggleBlueLight;
+  final VoidCallback onToggleFlow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 8,
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
+      borderRadius: BorderRadius.circular(999),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(
+              tooltip: 'Giảm cỡ chữ',
+              onPressed: onSmaller,
+              icon: const Icon(Icons.text_decrease),
+            ),
+            Text(fontSize.toStringAsFixed(0)),
+            IconButton(
+              tooltip: 'Tăng cỡ chữ',
+              onPressed: onLarger,
+              icon: const Icon(Icons.text_increase),
+            ),
+            IconButton(
+              tooltip: 'Giảm ánh sáng xanh',
+              onPressed: onToggleBlueLight,
+              icon: Icon(
+                blueLightFilter
+                    ? Icons.nightlight_round
+                    : Icons.nightlight_outlined,
+              ),
+            ),
+            IconButton(
+              tooltip: flow == _ReadingFlow.horizontal
+                  ? 'Đổi sang vuốt lên'
+                  : 'Đổi sang lật ngang',
+              onPressed: onToggleFlow,
+              icon: Icon(
+                flow == _ReadingFlow.horizontal ? Icons.swipe : Icons.swap_vert,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+List<String> _readingPages(String content) {
+  final blocks =
+      RegExp(
+            r'<(?:h[1-3]|p|blockquote|ul|ol|figure)[\s\S]*?</(?:h[1-3]|p|blockquote|ul|ol|figure)>',
+            caseSensitive: false,
+          )
+          .allMatches(content)
+          .map((match) => match.group(0) ?? '')
+          .where((block) => block.trim().isNotEmpty)
+          .toList();
+
+  final sourceBlocks = blocks.isEmpty
+      ? content
+            .split(RegExp(r'\n{2,}'))
+            .where((block) => block.trim().isNotEmpty)
+            .toList()
+      : blocks;
+  if (sourceBlocks.isEmpty) return [''];
+
+  final pages = <String>[];
+  final buffer = StringBuffer();
+  var chars = 0;
+  for (final block in sourceBlocks) {
+    final length = _plainReadingPreview(block).length;
+    if (buffer.isNotEmpty && chars + length > 1500) {
+      pages.add(buffer.toString());
+      buffer.clear();
+      chars = 0;
+    }
+    buffer.write(block);
+    buffer.write('\n\n');
+    chars += length;
+  }
+  if (buffer.isNotEmpty) pages.add(buffer.toString());
+  return pages.isEmpty ? [content] : pages;
+}
+
+String _plainReadingPreview(String content) {
+  return content
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), ' ')
+      .replaceAll(RegExp(r'<[^>]+>'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
 class ScriptureReader extends ConsumerStatefulWidget {
   const ScriptureReader({
     required this.scripture,
     this.reminderId,
     this.initialLineIndex = 0,
+    this.chapterSequence = const [],
+    this.chapterIndex = 0,
+    this.autoAdvanceChapters = false,
+    this.autoStart = false,
     super.key,
   });
 
   final Scripture scripture;
   final String? reminderId;
   final int initialLineIndex;
+  final List<Scripture> chapterSequence;
+  final int chapterIndex;
+  final bool autoAdvanceChapters;
+  final bool autoStart;
 
   @override
   ConsumerState<ScriptureReader> createState() => _ScriptureReaderState();
@@ -753,6 +1246,7 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
   final Set<String> _completedRitualPauseKeys = <String>{};
   Timer? _timer;
   Timer? _controlsHideTimer;
+  Timer? _chapterAdvanceTimer;
   _ScriptureRitualPause? _ritualPause;
   Duration _ritualPauseRemaining = Duration.zero;
   Duration _ritualPauseTotal = Duration.zero;
@@ -769,13 +1263,24 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
   String _backgroundUrl = '';
   Duration _elapsed = Duration.zero;
   bool _playing = false;
+  bool _autoAdvanceChapters = false;
   bool _controlsVisible = true;
+  int _chapterAdvanceCountdown = 0;
   DateTime? _lastTick;
   double _fontSize = 24;
 
   double get _itemHeight => (_fontSize * 3.8).clamp(82, 142);
   bool get _ritualPauseActive =>
       _ritualPause != null && _ritualPauseRemaining > Duration.zero;
+  bool get _hasChapterSequence =>
+      widget.chapterSequence.length > 1 &&
+      widget.chapterIndex >= 0 &&
+      widget.chapterIndex < widget.chapterSequence.length;
+  Scripture? get _nextChapter =>
+      _hasChapterSequence &&
+          widget.chapterIndex < widget.chapterSequence.length - 1
+      ? widget.chapterSequence[widget.chapterIndex + 1]
+      : null;
 
   @override
   void initState() {
@@ -788,10 +1293,12 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
     _activeIndex.value = safeIndex;
     _elapsed = widget.scripture.lines[safeIndex].startTime;
     _backgroundUrl = widget.scripture.backgroundImageUrl ?? '';
+    _autoAdvanceChapters = widget.autoAdvanceChapters;
     unawaited(_loadSavedSpeedPreference());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _centerLine(safeIndex, jump: true);
       _scheduleControlsHide();
+      if (widget.autoStart) _startPlayback();
     });
   }
 
@@ -799,6 +1306,7 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
   void dispose() {
     _timer?.cancel();
     _controlsHideTimer?.cancel();
+    _chapterAdvanceTimer?.cancel();
     _activeIndex.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -830,11 +1338,22 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
       }
     });
     if (shouldPlay) {
-      _lastTick = DateTime.now();
-      _timer = Timer.periodic(const Duration(milliseconds: 16), (_) => _tick());
+      _startPlayback();
     } else {
       _timer?.cancel();
     }
+  }
+
+  void _startPlayback() {
+    _chapterAdvanceTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _playing = true;
+      _chapterAdvanceCountdown = 0;
+    });
+    _lastTick = DateTime.now();
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(milliseconds: 16), (_) => _tick());
   }
 
   void _tick() {
@@ -939,6 +1458,44 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
     });
     _timer?.cancel();
     _setActiveIndex(_lastLineIndex);
+    if (_autoAdvanceChapters && _nextChapter != null) {
+      _scheduleNextChapter();
+    }
+  }
+
+  void _scheduleNextChapter() {
+    _chapterAdvanceTimer?.cancel();
+    setState(() => _chapterAdvanceCountdown = 3);
+    _chapterAdvanceTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_chapterAdvanceCountdown <= 1) {
+        timer.cancel();
+        _openNextChapter(autoStart: true);
+        return;
+      }
+      setState(() => _chapterAdvanceCountdown -= 1);
+    });
+  }
+
+  void _openNextChapter({bool autoStart = false}) {
+    final next = _nextChapter;
+    if (next == null) return;
+    _timer?.cancel();
+    _chapterAdvanceTimer?.cancel();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => ScriptureReader(
+          scripture: next,
+          chapterSequence: widget.chapterSequence,
+          chapterIndex: widget.chapterIndex + 1,
+          autoAdvanceChapters: _autoAdvanceChapters,
+          autoStart: autoStart,
+        ),
+      ),
+    );
   }
 
   int _indexFor(Duration elapsed) {
@@ -1012,9 +1569,11 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
 
   void _jumpToLine(int index) {
     _showControls();
+    _chapterAdvanceTimer?.cancel();
     setState(() {
       _elapsed = widget.scripture.lines[index].startTime;
       _completedRepeats = 0;
+      _chapterAdvanceCountdown = 0;
       _clearRitualPause();
       _completedRitualPauseKeys.clear();
     });
@@ -1026,7 +1585,7 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Đọc lại từ đầu?'),
+        title: const Text('Tụng lại từ đầu?'),
         content: const Text(
           'Tiến trình đang dừng sẽ được đưa về dòng đầu tiên của bài kinh.',
         ),
@@ -1042,13 +1601,15 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
                 _elapsed = _startTime;
                 _playing = false;
                 _completedRepeats = 0;
+                _chapterAdvanceCountdown = 0;
                 _clearRitualPause();
                 _completedRitualPauseKeys.clear();
                 _timer?.cancel();
+                _chapterAdvanceTimer?.cancel();
               });
               _setActiveIndex(0);
             },
-            child: const Text('Đọc lại'),
+            child: const Text('Tụng lại'),
           ),
         ],
       ),
@@ -1222,6 +1783,7 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
     setState(() {
       _repeatMode = value;
       _completedRepeats = 0;
+      _chapterAdvanceCountdown = 0;
       _completedRitualPauseKeys.clear();
       _clearRitualPause();
     });
@@ -1413,12 +1975,12 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
                                     icon: Icon(
                                       _playing ? Icons.pause : Icons.play_arrow,
                                     ),
-                                    label: Text(_playing ? 'Tạm dừng' : 'Đọc'),
+                                    label: Text(_playing ? 'Tạm dừng' : 'Tụng'),
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 IconButton.filledTonal(
-                                  tooltip: 'Đọc lại từ đầu',
+                                  tooltip: 'Tụng lại từ đầu',
                                   onPressed: _restart,
                                   icon: const Icon(Icons.restart_alt),
                                 ),
@@ -1555,6 +2117,38 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
                                     label: 'Cỡ ${_fontSize.toStringAsFixed(0)}',
                                   ),
                                 ),
+                                if (_hasChapterSequence)
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(999),
+                                    onTap: _nextChapter == null
+                                        ? null
+                                        : () => _openNextChapter(),
+                                    child: _ReaderControlChip(
+                                      icon: Icons.skip_next_outlined,
+                                      label: _nextChapter == null
+                                          ? 'Hết phẩm'
+                                          : 'Phẩm tiếp',
+                                      selected: false,
+                                      showArrow: false,
+                                    ),
+                                  ),
+                                if (_hasChapterSequence)
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(999),
+                                    onTap: () {
+                                      _showControls();
+                                      setState(
+                                        () => _autoAdvanceChapters =
+                                            !_autoAdvanceChapters,
+                                      );
+                                    },
+                                    child: _ReaderControlChip(
+                                      icon: Icons.playlist_play_outlined,
+                                      label: 'Tự qua phẩm',
+                                      selected: _autoAdvanceChapters,
+                                      showArrow: false,
+                                    ),
+                                  ),
                                 InkWell(
                                   borderRadius: BorderRadius.circular(999),
                                   onTap: _savingSpeedPreference
@@ -1654,6 +2248,16 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
                 ),
               ),
             ),
+            if (_chapterAdvanceCountdown > 0 && _nextChapter != null)
+              Positioned(
+                left: 18,
+                right: 18,
+                top: MediaQuery.paddingOf(context).top + kToolbarHeight + 86,
+                child: _ChapterAdvanceBanner(
+                  seconds: _chapterAdvanceCountdown,
+                  title: _nextChapter!.category ?? _nextChapter!.title,
+                ),
+              ),
             if (!_controlsVisible)
               Positioned(
                 left: 0,
@@ -1812,6 +2416,54 @@ class _RitualPauseBanner extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChapterAdvanceBanner extends StatelessWidget {
+  const _ChapterAdvanceBanner({required this.seconds, required this.title});
+
+  final int seconds;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF211A12).withValues(alpha: .92),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFFFFE8A3).withValues(alpha: .24),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: const Color(0xFFFFD36A),
+              foregroundColor: const Color(0xFF211A12),
+              child: Text(
+                '$seconds',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Sắp chuyển sang $title',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFFFFF8E8),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

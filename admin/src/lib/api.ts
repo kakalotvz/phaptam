@@ -2,8 +2,10 @@ export type AudioCategory = {
   id: string;
   name: string;
   description?: string;
+  parentId?: string | null;
+  parent?: AudioCategory | null;
   createdAt?: string;
-  _count?: { audios: number };
+  _count?: { audios: number; scriptures?: number; children?: number };
 };
 
 export type VideoCategory = {
@@ -36,8 +38,10 @@ export type ScriptureLine = {
 
 export type Scripture = {
   id: string;
+  kind?: 'CHANT' | 'READING';
   title: string;
   description?: string;
+  content?: string;
   backgroundImageUrl?: string;
   categoryId?: string;
   viewCount: number;
@@ -268,6 +272,7 @@ export const api = {
   videoCategories: () => request<VideoCategory[]>('/admin/video-category'),
   audios: () => request<Audio[]>('/admin/audio'),
   scriptures: () => request<Scripture[]>('/admin/scripture'),
+  scriptureReadings: () => request<Scripture[]>('/admin/scripture-reading'),
   generateScriptureTiming: (data: { lines: string[]; audioDuration?: number }) =>
     request<Array<{ content: string; start_time: number }>>('/admin/scripture/generate-timing', {
       method: 'POST',

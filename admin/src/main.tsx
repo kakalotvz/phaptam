@@ -103,7 +103,7 @@ const scriptureRawPlaceholder = 'Nam mô A Di Đà Phật\nNguyện đem công �
 
 const scriptureSampleJson = {
   title: 'Kinh A Di Đà - bản đọc mẫu',
-  description: 'Mẫu JSON cho chức năng Đọc Kinh. Mỗi dòng cần có content và start_time tính bằng giây.',
+  description: 'Mẫu JSON cho chức năng Kinh tụng. Mỗi dòng cần có content và start_time tính bằng giây.',
   categoryId: '',
   lines: [
     { content: 'Nam mô Bổn Sư Thích Ca Mâu Ni Phật', start_time: 0 },
@@ -182,7 +182,7 @@ async function extractDocxText(file: File) {
     .join('\n');
 }
 
-type Section = 'overview' | 'audio' | 'scripture' | 'reminder' | 'video' | 'meditation' | 'news' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
+type Section = 'overview' | 'audio' | 'scripture' | 'reading' | 'reminder' | 'video' | 'meditation' | 'news' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
 
 type DataState = {
   overview: Record<string, number>;
@@ -192,6 +192,7 @@ type DataState = {
   videoCategories: VideoCategory[];
   audios: Audio[];
   scriptures: Scripture[];
+  scriptureReadings: Scripture[];
   scriptureReminders: ScriptureReminder[];
   videos: Video[];
   meditationPrograms: MeditationProgram[];
@@ -213,6 +214,7 @@ const emptyData: DataState = {
   videoCategories: [],
   audios: [],
   scriptures: [],
+  scriptureReadings: [],
   scriptureReminders: [],
   videos: [],
   meditationPrograms: [],
@@ -229,7 +231,8 @@ const emptyData: DataState = {
 const nav = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'audio', label: 'Kinh audio', icon: BookAudio },
-  { id: 'scripture', label: 'Đọc Kinh', icon: BookOpenText },
+  { id: 'scripture', label: 'Kinh tụng', icon: BookOpenText },
+  { id: 'reading', label: 'Kinh đọc', icon: FileText },
   { id: 'reminder', label: 'Lịch nhắc tụng kinh', icon: CalendarClock },
   { id: 'video', label: 'Video giảng', icon: Clapperboard },
   { id: 'meditation', label: 'Thiền', icon: Pause },
@@ -389,7 +392,7 @@ function App() {
 
   const getHashSection = (): Section => {
     const hash = window.location.hash.slice(1);
-    const validSections: Section[] = ['overview', 'audio', 'video', 'scripture', 'reminder', 'news', 'quote', 'banner', 'meditation', 'rss', 'users', 'feedback', 'settings'];
+    const validSections: Section[] = ['overview', 'audio', 'video', 'scripture', 'reading', 'reminder', 'news', 'quote', 'banner', 'meditation', 'rss', 'users', 'feedback', 'settings'];
     return validSections.includes(hash as Section) ? (hash as Section) : 'overview';
   };
 
@@ -430,6 +433,7 @@ function App() {
         videoCategories,
         audios,
         scriptures,
+        scriptureReadings,
         scriptureReminders,
         videos,
         meditationPrograms,
@@ -449,6 +453,7 @@ function App() {
         safe(() => api.videoCategories(), []),
         safe(() => api.audios(), []),
         safe(() => api.scriptures(), []),
+        safe(() => api.scriptureReadings(), []),
         safe(() => api.scriptureReminders(), []),
         safe(() => api.videos(), []),
         safe(() => api.meditationPrograms(), []),
@@ -470,6 +475,7 @@ function App() {
         videoCategories,
         audios,
         scriptures,
+        scriptureReadings,
         scriptureReminders,
         videos,
         meditationPrograms,
@@ -536,7 +542,8 @@ function App() {
     ['overview', 'Tổng quan', <BarChart3 size={16} />],
     ['audio', 'Audio', <BookAudio size={16} />],
     ['video', 'Video', <Clapperboard size={16} />],
-    ['scripture', 'Đọc Kinh', <BookOpenText size={16} />],
+    ['scripture', 'Kinh tụng', <BookOpenText size={16} />],
+    ['reading', 'Kinh đọc', <FileText size={16} />],
     ['reminder', 'Lịch nhắc tụng kinh', <CalendarClock size={16} />],
     ['meditation', 'Chương trình thiền', <List size={16} />],
     ['news', 'Tin tức', <Newspaper size={16} />],
@@ -594,6 +601,7 @@ function App() {
               {section === 'overview' && <Overview data={data} />}
               {section === 'audio' && <AudioManager data={data} run={run} />}
               {section === 'scripture' && <ScriptureManager data={data} run={run} />}
+              {section === 'reading' && <ScriptureReadingManager data={data} run={run} />}
               {section === 'reminder' && <ScriptureReminderManager data={data} />}
               {section === 'video' && <VideoManager data={data} run={run} />}
               {section === 'meditation' && <MeditationManager data={data} run={run} />}
@@ -616,7 +624,8 @@ function Overview({ data }: { data: DataState }) {
   const cards = [
     ['Danh mục audio', data.overview.audioCategoryCount ?? 0, BookAudio],
     ['Bài kinh audio', data.overview.audioCount ?? 0, FileText],
-    ['Bản đọc Kinh', data.overview.scriptureCount ?? 0, BookOpenText],
+    ['Bản Kinh tụng', data.overview.scriptureCount ?? 0, BookOpenText],
+    ['Bài Kinh đọc', data.overview.scriptureReadingCount ?? 0, FileText],
     ['Lịch nhắc tụng kinh', data.overview.scriptureReminderCount ?? 0, CalendarClock],
     ['Video', data.overview.videoCount ?? 0, Clapperboard],
     ['Bài Thiền', data.overview.meditationProgramCount ?? 0, Pause],
@@ -864,6 +873,9 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
 
 function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingCategory, setEditingCategory] = useState<AudioCategory | null>(null);
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryDescription, setCategoryDescription] = useState('');
+  const [categoryParentId, setCategoryParentId] = useState('');
   const [selectedScriptureId, setSelectedScriptureId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -882,9 +894,16 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   );
   const hasUnsavedChanges = currentDraft !== savedDraftRef.current;
   const scriptureCategoryIds = new Set(data.scriptures.map((scripture) => scripture.categoryId).filter(Boolean));
-  const scriptureCategories = data.audioCategories.filter(
-    (item) => scriptureCategoryIds.has(item.id) || (item._count?.audios ?? 0) === 0,
+  const scriptureParentIds = new Set(
+    data.audioCategories
+      .filter((item) => scriptureCategoryIds.has(item.id))
+      .map((item) => item.parentId)
+      .filter(Boolean),
   );
+  const scriptureCategories = data.audioCategories.filter(
+    (item) => scriptureCategoryIds.has(item.id) || scriptureParentIds.has(item.id) || (item._count?.audios ?? 0) === 0,
+  );
+  const scriptureMainCategories = scriptureCategories.filter((item) => !item.parentId);
 
   useEffect(() => {
     return () => window.clearTimeout(autoTimingTimer.current);
@@ -892,6 +911,11 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
 
   function editCategory(row: AudioCategory) {
     setEditingCategory(row);
+  }
+
+  function countScripturesInCategory(row: AudioCategory) {
+    const childIds = new Set(scriptureCategories.filter((item) => item.parentId === row.id).map((item) => item.id));
+    return data.scriptures.filter((scripture) => scripture.categoryId === row.id || childIds.has(scripture.categoryId ?? '')).length;
   }
 
   function splitText() {
@@ -1017,7 +1041,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
 
   async function saveScripture() {
     setScriptureBusy(true);
-    setScriptureStatus(selectedScriptureId ? 'Đang cập nhật bản đọc...' : 'Đang lưu bản đọc...');
+    setScriptureStatus(selectedScriptureId ? 'Đang cập nhật bản tụng...' : 'Đang lưu bản tụng...');
     try {
       const saved = await run(
         () =>
@@ -1034,13 +1058,13 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             categoryId,
             lines,
           })),
-        selectedScriptureId ? 'Đã cập nhật bản Đọc Kinh' : 'Đã tạo bản Đọc Kinh',
+        selectedScriptureId ? 'Đã cập nhật bản Kinh tụng' : 'Đã tạo bản Kinh tụng',
       );
       if (saved) {
         savedDraftRef.current = currentDraft;
-        setScriptureStatus(selectedScriptureId ? 'Đã cập nhật bản đọc thành công.' : 'Đã lưu bản đọc thành công.');
+        setScriptureStatus(selectedScriptureId ? 'Đã cập nhật bản tụng thành công.' : 'Đã lưu bản tụng thành công.');
       } else {
-        setScriptureStatus('Không lưu được bản đọc. Chi tiết lỗi đã hiển thị ở popup.');
+        setScriptureStatus('Không lưu được bản tụng. Chi tiết lỗi đã hiển thị ở popup.');
       }
     } finally {
       setScriptureBusy(false);
@@ -1079,19 +1103,61 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
 
   return (
     <div className="single-column">
-      <Panel title="Tạo danh mục Đọc Kinh">
-        <SmartForm
-          fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
-          onSubmit={(values) => run(() => api.create('/admin/audio-category', values), 'Đã tạo danh mục Đọc Kinh')}
-        />
+      <Panel title="Tạo danh mục Kinh tụng">
+        <form
+          className="form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const saved = await run(
+              () =>
+                api.create('/admin/audio-category', {
+                  name: categoryName,
+                  description: categoryDescription,
+                  parentId: categoryParentId || undefined,
+                }),
+              categoryParentId ? 'Đã tạo phẩm Kinh tụng' : 'Đã tạo danh mục Kinh tụng',
+            );
+            if (saved) {
+              setCategoryName('');
+              setCategoryDescription('');
+              setCategoryParentId('');
+            }
+          }}
+        >
+          <label>
+            Tên danh mục / phẩm
+            <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required placeholder="Ví dụ: Kinh Địa Tạng hoặc Phẩm 1" />
+          </label>
+          <label>
+            Thuộc danh mục cha
+            <select value={categoryParentId} onChange={(event) => setCategoryParentId(event.target.value)}>
+              <option value="">Không chọn - tạo danh mục chính</option>
+              {scriptureMainCategories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <span className="field-note">Chọn danh mục cha khi muốn tạo Phẩm. Phẩm thuộc phần Kinh tụng/karaoke.</span>
+          </label>
+          <label>
+            Mô tả
+            <textarea value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} />
+          </label>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu danh mục
+          </button>
+        </form>
       </Panel>
-      <Panel title="Danh mục Đọc Kinh">
+      <Panel title="Danh mục Kinh tụng">
         <Table
           rows={scriptureCategories}
           columns={[
             ['name', 'Tên'],
+            [(row: AudioCategory) => row.parent?.name ?? '-', 'Danh mục cha'],
             ['description', 'Mô tả'],
-            [(row: AudioCategory) => data.scriptures.filter((scripture) => scripture.categoryId === row.id).length, 'Số bản đọc'],
+            [countScripturesInCategory, 'Số bản tụng'],
             [
               (row: AudioCategory) => (
                 <button className="ghost" type="button" onClick={() => editCategory(row)}>
@@ -1102,10 +1168,10 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               'Thao tác',
             ],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục Đọc Kinh')}
+          onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục Kinh tụng')}
         />
       </Panel>
-      <Panel title="Tạo bản Đọc Kinh">
+      <Panel title="Tạo bản Kinh tụng">
         <div className="scripture-create">
           {selectedScriptureId && (
             <div className="scripture-form-heading span">
@@ -1126,7 +1192,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           )}
           <label>
             Tiêu đề
-            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh A Di Đà - bản đọc chậm" />
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh A Di Đà - bản tụng chậm" />
           </label>
           <label>
             Danh mục
@@ -1134,7 +1200,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               <option value="">Không chọn</option>
               {scriptureCategories.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name}
+                  {item.parent?.name ? `${item.parent.name} - ${item.name}` : item.name}
                 </option>
               ))}
             </select>
@@ -1179,7 +1245,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               onClick={() => void saveScripture()}
             >
               <Save size={16} />
-              {selectedScriptureId ? 'Cập nhật bản đọc' : 'Lưu bản đọc'}
+              {selectedScriptureId ? 'Cập nhật bản tụng' : 'Lưu bản tụng'}
             </button>
           </div>
         </div>
@@ -1210,17 +1276,17 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             Thêm dòng
           </button>
         </Panel>
-        <Panel title="Preview đọc Kinh">
+        <Panel title="Preview tụng Kinh">
           <ScripturePreview lines={lines} />
         </Panel>
       </div>
 
-      <Panel title="Danh sách bản Đọc Kinh">
+      <Panel title="Danh sách bản Kinh tụng">
         <Table
           rows={data.scriptures}
           columns={[
             ['title', 'Tiêu đề'],
-            [(row: Scripture) => row.category?.name ?? '-', 'Danh mục'],
+            [(row: Scripture) => row.category?.parent?.name ? `${row.category.parent.name} - ${row.category.name}` : row.category?.name ?? '-', 'Danh mục'],
             [(row: Scripture) => row.lines?.length ?? row._count?.lines ?? 0, 'Số dòng'],
             [(row: Scripture) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
             [
@@ -1232,23 +1298,129 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               'Xem/Sửa',
             ],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/scripture/${row.id}`), 'Đã xóa bản Đọc Kinh')}
+          onDelete={(row) => run(() => api.remove(`/admin/scripture/${row.id}`), 'Đã xóa bản Kinh tụng')}
         />
       </Panel>
       {editingCategory && (
         <CategoryEditModal
-          title="Sửa danh mục Đọc Kinh"
+          title="Sửa danh mục Kinh tụng"
           category={editingCategory}
+          parentOptions={scriptureMainCategories.map((item) => [item.id, item.name])}
           onClose={() => setEditingCategory(null)}
           onSave={async (values) => {
             const saved = await run(
               () => api.update(`/admin/audio-category/${editingCategory.id}`, values),
-              'Đã cập nhật danh mục Đọc Kinh',
+              'Đã cập nhật danh mục Kinh tụng',
             );
             if (saved) setEditingCategory(null);
           }}
         />
       )}
+    </div>
+  );
+}
+
+function ScriptureReadingManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingId, setEditingId] = useState('');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [content, setContent] = useState('');
+
+  function editReading(row: Scripture) {
+    setEditingId(row.id);
+    setTitle(row.title);
+    setDescription(row.description ?? '');
+    setContent(row.content ?? '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetForm() {
+    setEditingId('');
+    setTitle('');
+    setDescription('');
+    setContent('');
+  }
+
+  return (
+    <div className="single-column">
+      <Panel title={editingId ? 'Sửa Kinh đọc' : 'Tạo Kinh đọc'}>
+        <div className="news-editor">
+          {editingId && (
+            <div className="scripture-form-heading span">
+              <div>
+                <strong>Đang sửa Kinh đọc</strong>
+                <span>Nội dung dùng chung khung soạn thảo với Tin tức.</span>
+              </div>
+              <button className="ghost" type="button" onClick={resetForm}>
+                <Plus size={16} />
+                Kinh đọc mới
+              </button>
+            </div>
+          )}
+          <label>
+            Tiêu đề
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh Người Áo Trắng" />
+          </label>
+          <label className="span">
+            Mô tả ngắn
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+          <div className="span" style={{ display: 'grid', gap: '7px', color: '#6a564e', fontSize: '13px', fontWeight: 700 }}>
+            Nội dung Kinh đọc
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              placeholder="Soạn nội dung Kinh đọc như một trang sách"
+              imageUploadKind="images/scripture"
+            />
+          </div>
+          <button
+            className="primary quote-save-button"
+            type="button"
+            disabled={!title.trim() || !content.trim()}
+            onClick={async () => {
+              const payload = {
+                title,
+                description,
+                content,
+              };
+              const ok = await run(
+                () =>
+                  editingId
+                    ? api.update(`/admin/scripture-reading/${editingId}`, payload)
+                    : api.create('/admin/scripture-reading', payload),
+                editingId ? 'Đã cập nhật Kinh đọc' : 'Đã tạo Kinh đọc',
+              );
+              if (ok) resetForm();
+            }}
+          >
+            <Save size={16} />
+            {editingId ? 'Cập nhật Kinh đọc' : 'Lưu Kinh đọc'}
+          </button>
+        </div>
+      </Panel>
+
+      <Panel title="Danh sách Kinh đọc">
+        <Table
+          rows={data.scriptureReadings}
+          columns={[
+            ['title', 'Tiêu đề'],
+            [(row: Scripture) => row.description || '-', 'Mô tả'],
+            [(row: Scripture) => newsContentToPlainText(row.content ?? '').slice(0, 120), 'Nội dung'],
+            [(row: Scripture) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
+            [
+              (row: Scripture) => (
+                <button className="ghost" type="button" onClick={() => editReading(row)}>
+                  <Pencil size={15} />
+                  Sửa
+                </button>
+              ),
+              'Thao tác',
+            ],
+          ]}
+          onDelete={(row) => run(() => api.remove(`/admin/scripture-reading/${row.id}`), 'Đã xóa Kinh đọc')}
+        />
+      </Panel>
     </div>
   );
 }
@@ -1628,17 +1800,20 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 function CategoryEditModal({
   title,
   category,
+  parentOptions,
   onClose,
   onSave,
 }: {
   title: string;
-  category: { name: string; description?: string };
+  category: { id?: string; name: string; description?: string; parentId?: string | null };
+  parentOptions?: Array<[string, string]>;
   onClose: () => void;
-  onSave: (values: { name: string; description: string }) => Promise<void>;
+  onSave: (values: { name: string; description: string; parentId?: string }) => Promise<void>;
 }) {
   const [values, setValues] = useState({
     name: category.name,
     description: category.description ?? '',
+    parentId: category.parentId ?? '',
   });
 
   return (
@@ -1647,7 +1822,7 @@ function CategoryEditModal({
         className="form"
         onSubmit={(event) => {
           event.preventDefault();
-          void onSave(values);
+          void onSave(parentOptions ? values : { name: values.name, description: values.description });
         }}
       >
         <label>
@@ -1658,6 +1833,21 @@ function CategoryEditModal({
           Mô tả
           <textarea value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
         </label>
+        {parentOptions && (
+          <label>
+            Danh mục cha
+            <select value={values.parentId} onChange={(event) => setValues({ ...values, parentId: event.target.value })}>
+              <option value="">Không chọn - danh mục chính</option>
+              {parentOptions
+                .filter(([id]) => id !== category.id)
+                .map(([id, label]) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         <div className="modal-actions">
           <button className="ghost" type="button" onClick={onClose}>
             Hủy

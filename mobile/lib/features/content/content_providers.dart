@@ -99,6 +99,22 @@ final scriptureListProvider = FutureProvider<List<Scripture>>((ref) async {
   return remoteScriptures;
 });
 
+final scriptureReadingListProvider = FutureProvider<List<Scripture>>((
+  ref,
+) async {
+  _refreshPeriodically(ref);
+  final items = await PublicListCache.getList(ref, '/scripture-readings');
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(Scripture.fromJson)
+      .where(
+        (item) =>
+            item.title.trim().isNotEmpty &&
+            (item.content ?? '').trim().isNotEmpty,
+      )
+      .toList();
+});
+
 const publicCachePaths = [
   '/categories/audio',
   '/audio',
@@ -108,6 +124,7 @@ const publicCachePaths = [
   '/quotes',
   '/banners',
   '/scriptures',
+  '/scripture-readings',
 ];
 
 Future<void> refreshPublicContent(WidgetRef ref) async {
@@ -120,6 +137,7 @@ Future<void> refreshPublicContent(WidgetRef ref) async {
   ref.invalidate(dailyQuotesProvider);
   ref.invalidate(homeBannersProvider);
   ref.invalidate(scriptureListProvider);
+  ref.invalidate(scriptureReadingListProvider);
   ref.invalidate(scriptureReminderProvider);
 }
 

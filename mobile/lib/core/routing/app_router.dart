@@ -3,10 +3,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/audio/audio_screen.dart';
 import '../../features/home/home_screen.dart';
-import '../../features/meditation/meditation_screen.dart';
+import '../../features/practice/practice_screen.dart';
 import '../../features/profile/auth_screen.dart';
 import '../../features/profile/profile_screen.dart';
-import '../../features/scripture/scripture_screen.dart';
 import '../../features/video/video_screen.dart';
 
 final appRouter = GoRouter(
@@ -41,16 +40,8 @@ final appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/scripture',
-              builder: (context, state) => const ScriptureScreen(),
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/meditation',
-              builder: (context, state) => const MeditationScreen(),
+              path: '/practice',
+              builder: (context, state) => const PracticeScreen(),
             ),
           ],
         ),
@@ -111,14 +102,9 @@ class AppShell extends StatelessWidget {
             label: 'Video',
           ),
           NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'Đọc',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.self_improvement_outlined),
-            selectedIcon: Icon(Icons.self_improvement),
-            label: 'Thiền',
+            icon: Icon(Icons.spa_outlined),
+            selectedIcon: Icon(Icons.spa),
+            label: 'Tu tập',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

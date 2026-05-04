@@ -232,10 +232,14 @@ class Scripture {
     required this.id,
     required this.title,
     required this.lines,
+    this.kind = 'CHANT',
     this.description,
+    this.content,
     this.backgroundImageUrl,
     this.categoryId,
     this.category,
+    this.categoryParentId,
+    this.categoryParent,
     this.createdAt,
     this.viewCount = 0,
   });
@@ -252,12 +256,24 @@ class Scripture {
         : <ScriptureLine>[];
     return Scripture(
       id: json['id'] as String,
-      title: json['title'] as String? ?? 'Bản đọc Kinh',
+      kind: json['kind'] as String? ?? 'CHANT',
+      title: json['title'] as String? ?? 'Bản Kinh tụng',
       description: json['description'] as String?,
+      content: json['content'] as String?,
       backgroundImageUrl: json['backgroundImageUrl'] as String?,
       categoryId: json['categoryId'] as String?,
       category: category is Map<String, dynamic>
           ? category['name'] as String? ?? 'Đọc kinh'
+          : null,
+      categoryParentId:
+          category is Map<String, dynamic> &&
+              category['parent'] is Map<String, dynamic>
+          ? (category['parent'] as Map<String, dynamic>)['id'] as String?
+          : null,
+      categoryParent:
+          category is Map<String, dynamic> &&
+              category['parent'] is Map<String, dynamic>
+          ? (category['parent'] as Map<String, dynamic>)['name'] as String?
           : null,
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ??
@@ -268,11 +284,15 @@ class Scripture {
   }
 
   final String id;
+  final String kind;
   final String title;
   final String? description;
+  final String? content;
   final String? backgroundImageUrl;
   final String? categoryId;
   final String? category;
+  final String? categoryParentId;
+  final String? categoryParent;
   final DateTime? createdAt;
   final int viewCount;
   final List<ScriptureLine> lines;
@@ -344,7 +364,7 @@ class ScriptureReminder {
     final scriptureJson = json['scripture'];
     final scripture = scriptureJson is Map<String, dynamic>
         ? Scripture.fromJson(scriptureJson)
-        : const Scripture(id: '', title: 'Bản đọc Kinh', lines: []);
+        : const Scripture(id: '', title: 'Bản Kinh tụng', lines: []);
     return ScriptureReminder(
       id: json['id'] as String,
       title: json['title'] as String? ?? 'Nhắc tụng kinh',

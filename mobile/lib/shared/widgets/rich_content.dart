@@ -294,6 +294,19 @@ String _normalize(String value) {
         (match) => '__${match.group(1) ?? ''}__',
       )
       .replaceAllMapped(
+        RegExp(r'<sup[^>]*>(.*?)</sup>', caseSensitive: false, dotAll: true),
+        (match) => '[sup]${match.group(1) ?? ''}[/sup]',
+      )
+      .replaceAllMapped(
+        RegExp(
+          r"""<(?:span|mark)[^>]*style=["']([^"']+)["'][^>]*>(.*?)</(?:span|mark)>""",
+          caseSensitive: false,
+          dotAll: true,
+        ),
+        (match) =>
+            '[style=${match.group(1) ?? ''}]${match.group(2) ?? ''}[/style]',
+      )
+      .replaceAllMapped(
         RegExp(
           r'<(?:s|strike)[^>]*>(.*?)</(?:s|strike)>',
           caseSensitive: false,
@@ -365,7 +378,7 @@ String _normalize(String value) {
 List<InlineSpan> _inlineSpans(String value, BuildContext context) {
   final spans = <InlineSpan>[];
   final pattern = RegExp(
-    r'\*\*(.+?)\*\*|__(.+?)__|~~(.+?)~~|\*(.+?)\*|\[(.+?)\]\((https?:\/\/[^)]+)\)',
+    r'\[style=([^\]]+)\]([\s\S]+?)\[/style\]|\[sup\]([\s\S]+?)\[/sup\]|\*\*(.+?)\*\*|__(.+?)__|~~(.+?)~~|\*(.+?)\*|\[(.+?)\]\((https?:\/\/[^)]+)\)',
   );
   var cursor = 0;
 
@@ -374,13 +387,28 @@ List<InlineSpan> _inlineSpans(String value, BuildContext context) {
       spans.add(TextSpan(text: value.substring(cursor, match.start)));
     }
 
-    final bold = match.group(1);
-    final underline = match.group(2);
-    final strike = match.group(3);
-    final italic = match.group(4);
-    final linkText = match.group(5);
-    final linkUrl = match.group(6);
-    if (bold != null) {
+    final styledCss = match.group(1);
+    final styledText = match.group(2);
+    final superscript = match.group(3);
+    final bold = match.group(4);
+    final underline = match.group(5);
+    final strike = match.group(6);
+    final italic = match.group(7);
+    final linkText = match.group(8);
+    final linkUrl = match.group(9);
+    if (styledCss != null && styledText != null) {
+      spans.add(TextSpan(text: styledText, style: _styleFromCss(styledCss)));
+    } else if (superscript != null) {
+      spans.add(
+        TextSpan(
+          text: superscript,
+          style: const TextStyle(
+            fontSize: 11,
+            fontFeatures: [FontFeature.superscripts()],
+          ),
+        ),
+      );
+    } else if (bold != null) {
       spans.add(
         TextSpan(
           text: bold,
@@ -427,6 +455,62 @@ List<InlineSpan> _inlineSpans(String value, BuildContext context) {
 
   if (cursor < value.length) spans.add(TextSpan(text: value.substring(cursor)));
   return spans;
+}
+
+TextStyle _styleFromCss(String css) {
+  Color? color;
+  Color? backgroundColor;
+  double? fontSize;
+  String? fontFamily;
+
+  for (final part in css.split(';')) {
+    final pieces = part.split(':');
+    if (pieces.length < 2) continue;
+    final key = pieces.first.trim().toLowerCase();
+    final value = pieces.sublist(1).join(':').trim();
+    if (key == 'color') color = _cssColor(value);
+    if (key == 'background-color') backgroundColor = _cssColor(value);
+    if (key == 'font-size') {
+      fontSize = double.tryParse(value.replaceAll(RegExp(r'[^0-9.]'), ''));
+    }
+    if (key == 'font-family') {
+      fontFamily = value.split(',').first.replaceAll('"', '').trim();
+    }
+  }
+
+  return TextStyle(
+    color: color,
+    backgroundColor: backgroundColor,
+    fontSize: fontSize,
+    fontFamily: fontFamily?.isEmpty == true ? null : fontFamily,
+  );
+}
+
+Color? _cssColor(String value) {
+  final trimmed = value.trim();
+  final hex = RegExp(
+    r'^#([0-9a-f]{3}|[0-9a-f]{6})$',
+    caseSensitive: false,
+  ).firstMatch(trimmed);
+  if (hex != null) {
+    var raw = hex.group(1)!;
+    if (raw.length == 3) {
+      raw = raw.split('').map((char) => '$char$char').join();
+    }
+    return Color(int.parse('FF$raw', radix: 16));
+  }
+
+  final rgb = RegExp(
+    r'rgba?\((\d+),\s*(\d+),\s*(\d+)',
+    caseSensitive: false,
+  ).firstMatch(trimmed);
+  if (rgb == null) return null;
+  return Color.fromARGB(
+    255,
+    int.parse(rgb.group(1)!).clamp(0, 255),
+    int.parse(rgb.group(2)!).clamp(0, 255),
+    int.parse(rgb.group(3)!).clamp(0, 255),
+  );
 }
 
 class _VideoLinkCard extends StatelessWidget {
