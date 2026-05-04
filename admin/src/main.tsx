@@ -875,7 +875,6 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingCategory, setEditingCategory] = useState<AudioCategory | null>(null);
   const [categoryName, setCategoryName] = useState('');
   const [categoryDescription, setCategoryDescription] = useState('');
-  const [categoryParentId, setCategoryParentId] = useState('');
   const [selectedScriptureId, setSelectedScriptureId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -894,16 +893,9 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   );
   const hasUnsavedChanges = currentDraft !== savedDraftRef.current;
   const scriptureCategoryIds = new Set(data.scriptures.map((scripture) => scripture.categoryId).filter(Boolean));
-  const scriptureParentIds = new Set(
-    data.audioCategories
-      .filter((item) => scriptureCategoryIds.has(item.id))
-      .map((item) => item.parentId)
-      .filter(Boolean),
-  );
   const scriptureCategories = data.audioCategories.filter(
-    (item) => scriptureCategoryIds.has(item.id) || scriptureParentIds.has(item.id) || (item._count?.audios ?? 0) === 0,
+    (item) => !item.parentId && (scriptureCategoryIds.has(item.id) || (item._count?.audios ?? 0) === 0),
   );
-  const scriptureMainCategories = scriptureCategories.filter((item) => !item.parentId);
 
   useEffect(() => {
     return () => window.clearTimeout(autoTimingTimer.current);
@@ -914,8 +906,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   }
 
   function countScripturesInCategory(row: AudioCategory) {
-    const childIds = new Set(scriptureCategories.filter((item) => item.parentId === row.id).map((item) => item.id));
-    return data.scriptures.filter((scripture) => scripture.categoryId === row.id || childIds.has(scripture.categoryId ?? '')).length;
+    return data.scriptures.filter((scripture) => scripture.categoryId === row.id).length;
   }
 
   function splitText() {
@@ -1113,32 +1104,18 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
                 api.create('/admin/audio-category', {
                   name: categoryName,
                   description: categoryDescription,
-                  parentId: categoryParentId || undefined,
                 }),
-              categoryParentId ? 'Đã tạo phẩm Kinh tụng' : 'Đã tạo danh mục Kinh tụng',
+              'Đã tạo danh mục Kinh tụng',
             );
             if (saved) {
               setCategoryName('');
               setCategoryDescription('');
-              setCategoryParentId('');
             }
           }}
         >
           <label>
-            Tên danh mục / phẩm
-            <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required placeholder="Ví dụ: Kinh Địa Tạng hoặc Phẩm 1" />
-          </label>
-          <label>
-            Thuộc danh mục cha
-            <select value={categoryParentId} onChange={(event) => setCategoryParentId(event.target.value)}>
-              <option value="">Không chọn - tạo danh mục chính</option>
-              {scriptureMainCategories.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <span className="field-note">Chọn danh mục cha khi muốn tạo Phẩm. Phẩm thuộc phần Kinh tụng/karaoke.</span>
+            Tên danh mục
+            <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required placeholder="Ví dụ: Kinh A Di Đà" />
           </label>
           <label>
             Mô tả
@@ -1155,7 +1132,6 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           rows={scriptureCategories}
           columns={[
             ['name', 'Tên'],
-            [(row: AudioCategory) => row.parent?.name ?? '-', 'Danh mục cha'],
             ['description', 'Mô tả'],
             [countScripturesInCategory, 'Số bản tụng'],
             [
@@ -1200,7 +1176,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               <option value="">Không chọn</option>
               {scriptureCategories.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.parent?.name ? `${item.parent.name} - ${item.name}` : item.name}
+                  {item.name}
                 </option>
               ))}
             </select>
@@ -1286,7 +1262,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           rows={data.scriptures}
           columns={[
             ['title', 'Tiêu đề'],
-            [(row: Scripture) => row.category?.parent?.name ? `${row.category.parent.name} - ${row.category.name}` : row.category?.name ?? '-', 'Danh mục'],
+            [(row: Scripture) => row.category?.name ?? '-', 'Danh mục'],
             [(row: Scripture) => row.lines?.length ?? row._count?.lines ?? 0, 'Số dòng'],
             [(row: Scripture) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
             [
@@ -1305,7 +1281,6 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
         <CategoryEditModal
           title="Sửa danh mục Kinh tụng"
           category={editingCategory}
-          parentOptions={scriptureMainCategories.map((item) => [item.id, item.name])}
           onClose={() => setEditingCategory(null)}
           onSave={async (values) => {
             const saved = await run(
@@ -1321,16 +1296,38 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function ScriptureReadingManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingCategory, setEditingCategory] = useState<AudioCategory | null>(null);
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryDescription, setCategoryDescription] = useState('');
+  const [categoryParentId, setCategoryParentId] = useState('');
   const [editingId, setEditingId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const readingCategoryIds = new Set(data.scriptureReadings.map((scripture) => scripture.categoryId).filter(Boolean));
+  const readingParentIds = new Set(
+    data.audioCategories
+      .filter((item) => readingCategoryIds.has(item.id))
+      .map((item) => item.parentId)
+      .filter(Boolean),
+  );
+  const readingCategories = data.audioCategories.filter(
+    (item) => readingCategoryIds.has(item.id) || readingParentIds.has(item.id) || (item._count?.audios ?? 0) === 0,
+  );
+  const readingMainCategories = readingCategories.filter((item) => !item.parentId);
+
+  function countReadingsInCategory(row: AudioCategory) {
+    const childIds = new Set(readingCategories.filter((item) => item.parentId === row.id).map((item) => item.id));
+    return data.scriptureReadings.filter((scripture) => scripture.categoryId === row.id || childIds.has(scripture.categoryId ?? '')).length;
+  }
 
   function editReading(row: Scripture) {
     setEditingId(row.id);
     setTitle(row.title);
     setDescription(row.description ?? '');
     setContent(row.content ?? '');
+    setCategoryId(row.categoryId ?? '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1339,10 +1336,81 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
     setTitle('');
     setDescription('');
     setContent('');
+    setCategoryId('');
   }
 
   return (
     <div className="single-column">
+      <Panel title="Tạo danh mục / phẩm Kinh đọc">
+        <form
+          className="form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const saved = await run(
+              () =>
+                api.create('/admin/audio-category', {
+                  name: categoryName,
+                  description: categoryDescription,
+                  parentId: categoryParentId || undefined,
+                }),
+              categoryParentId ? 'Đã tạo phẩm Kinh đọc' : 'Đã tạo danh mục Kinh đọc',
+            );
+            if (saved) {
+              setCategoryName('');
+              setCategoryDescription('');
+              setCategoryParentId('');
+            }
+          }}
+        >
+          <label>
+            Tên danh mục / phẩm
+            <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required placeholder="Ví dụ: Kinh Pháp Cú hoặc Phẩm Song Yếu" />
+          </label>
+          <label>
+            Thuộc danh mục cha
+            <select value={categoryParentId} onChange={(event) => setCategoryParentId(event.target.value)}>
+              <option value="">Không chọn - tạo bộ kinh chính</option>
+              {readingMainCategories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <span className="field-note">Chọn danh mục cha khi muốn tạo Phẩm trong Kinh đọc.</span>
+          </label>
+          <label>
+            Mô tả
+            <textarea value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} />
+          </label>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu danh mục
+          </button>
+        </form>
+      </Panel>
+
+      <Panel title="Danh mục / phẩm Kinh đọc">
+        <Table
+          rows={readingCategories}
+          columns={[
+            ['name', 'Tên'],
+            [(row: AudioCategory) => row.parent?.name ?? '-', 'Danh mục cha'],
+            ['description', 'Mô tả'],
+            [countReadingsInCategory, 'Số bài đọc'],
+            [
+              (row: AudioCategory) => (
+                <button className="ghost" type="button" onClick={() => setEditingCategory(row)}>
+                  <Pencil size={15} />
+                  Sửa
+                </button>
+              ),
+              'Thao tác',
+            ],
+          ]}
+          onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục Kinh đọc')}
+        />
+      </Panel>
+
       <Panel title={editingId ? 'Sửa Kinh đọc' : 'Tạo Kinh đọc'}>
         <div className="news-editor">
           {editingId && (
@@ -1360,6 +1428,17 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
           <label>
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh Người Áo Trắng" />
+          </label>
+          <label>
+            Danh mục / phẩm
+            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+              <option value="">Không chọn</option>
+              {readingCategories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.parent?.name ? `${item.parent.name} - ${item.name}` : item.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="span">
             Mô tả ngắn
@@ -1383,6 +1462,7 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
                 title,
                 description,
                 content,
+                categoryId,
               };
               const ok = await run(
                 () =>
@@ -1405,6 +1485,7 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
           rows={data.scriptureReadings}
           columns={[
             ['title', 'Tiêu đề'],
+            [(row: Scripture) => row.category?.parent?.name ? `${row.category.parent.name} - ${row.category.name}` : row.category?.name ?? '-', 'Danh mục / phẩm'],
             [(row: Scripture) => row.description || '-', 'Mô tả'],
             [(row: Scripture) => newsContentToPlainText(row.content ?? '').slice(0, 120), 'Nội dung'],
             [(row: Scripture) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
@@ -1421,6 +1502,21 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
           onDelete={(row) => run(() => api.remove(`/admin/scripture-reading/${row.id}`), 'Đã xóa Kinh đọc')}
         />
       </Panel>
+      {editingCategory && (
+        <CategoryEditModal
+          title="Sửa danh mục Kinh đọc"
+          category={editingCategory}
+          parentOptions={readingMainCategories.map((item) => [item.id, item.name])}
+          onClose={() => setEditingCategory(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/audio-category/${editingCategory.id}`, values),
+              'Đã cập nhật danh mục Kinh đọc',
+            );
+            if (saved) setEditingCategory(null);
+          }}
+        />
+      )}
     </div>
   );
 }

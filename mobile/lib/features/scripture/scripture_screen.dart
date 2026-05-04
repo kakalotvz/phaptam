@@ -710,33 +710,135 @@ class ScriptureReadingScreen extends ConsumerWidget {
                 )
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-                  itemCount: readings.length,
+                  itemCount: _groupReadings(readings).length,
                   separatorBuilder: (context, index) =>
                       const SizedBox(height: 12),
                   itemBuilder: (context, index) {
-                    final item = readings[index];
-                    return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.auto_stories_outlined),
-                        title: Text(item.title),
-                        subtitle: Text(
-                          (item.description?.trim().isNotEmpty ?? false)
-                              ? item.description!
-                              : _plainReadingPreview(item.content ?? ''),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ScriptureBookReader(reading: item),
-                          ),
-                        ),
-                      ),
-                    );
+                    final groups = _groupReadings(readings);
+                    return _ReadingGroupCard(group: groups[index]);
                   },
                 ),
         ),
+      ),
+    );
+  }
+}
+
+class _ReadingGroup {
+  const _ReadingGroup({required this.title, required this.items});
+
+  final String title;
+  final List<Scripture> items;
+}
+
+List<_ReadingGroup> _groupReadings(List<Scripture> readings) {
+  final grouped = <String, List<Scripture>>{};
+  for (final reading in readings) {
+    final title = (reading.categoryParent?.trim().isNotEmpty ?? false)
+        ? reading.categoryParent!.trim()
+        : (reading.category?.trim().isNotEmpty ?? false)
+        ? reading.category!.trim()
+        : reading.title.trim();
+    grouped.putIfAbsent(title, () => []).add(reading);
+  }
+  return [
+    for (final entry in grouped.entries)
+      _ReadingGroup(
+        title: entry.key,
+        items: naturalSortScriptures(entry.value),
+      ),
+  ];
+}
+
+class _ReadingGroupCard extends StatelessWidget {
+  const _ReadingGroupCard({required this.group});
+
+  final _ReadingGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final shouldOpenPhams =
+        group.items.any(
+          (item) => item.categoryParent?.trim().isNotEmpty == true,
+        ) ||
+        group.items.length > 1 ||
+        ((group.items.first.category?.trim().isNotEmpty ?? false) &&
+            group.items.first.title.trim() != group.title);
+    if (!shouldOpenPhams) {
+      return _ReadingListCard(reading: group.items.first);
+    }
+
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.auto_stories_outlined),
+        title: Text(group.title),
+        subtitle: Text('${group.items.length} phẩm / bài đọc'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => _ScriptureReadingCategoryScreen(
+              title: group.title,
+              items: group.items,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReadingListCard extends StatelessWidget {
+  const _ReadingListCard({required this.reading});
+
+  final Scripture reading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.auto_stories_outlined),
+        title: Text(
+          reading.categoryParent != null
+              ? reading.category ?? reading.title
+              : reading.title,
+        ),
+        subtitle: Text(
+          (reading.description?.trim().isNotEmpty ?? false)
+              ? reading.description!
+              : _plainReadingPreview(reading.content ?? ''),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ScriptureBookReader(reading: reading),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScriptureReadingCategoryScreen extends StatelessWidget {
+  const _ScriptureReadingCategoryScreen({
+    required this.title,
+    required this.items,
+  });
+
+  final String title;
+  final List<Scripture> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+        itemCount: items.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) =>
+            _ReadingListCard(reading: items[index]),
       ),
     );
   }
