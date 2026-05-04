@@ -25,6 +25,9 @@ export class R2Service {
   private readonly publicBaseUrl: string;
   private readonly accountId: string;
   private readonly cloudflareApiToken?: string;
+  private readonly storageLimitBytes: number;
+  private readonly bandwidth30dLimitBytes: number;
+  private readonly requests30dLimit: number;
 
   constructor(config: ConfigService) {
     const accountId = config.getOrThrow<string>('R2_ACCOUNT_ID');
@@ -32,6 +35,9 @@ export class R2Service {
     this.bucket = config.getOrThrow<string>('R2_BUCKET');
     this.publicBaseUrl = config.getOrThrow<string>('R2_PUBLIC_BASE_URL');
     this.cloudflareApiToken = config.get<string>('CLOUDFLARE_API_TOKEN') || config.get<string>('R2_API_TOKEN');
+    this.storageLimitBytes = parseNumericLimit(config.get<string>('R2_STORAGE_LIMIT_BYTES'), 10 * 1024 ** 3);
+    this.bandwidth30dLimitBytes = parseNumericLimit(config.get<string>('R2_BANDWIDTH_30D_LIMIT_BYTES'), 100 * 1024 ** 3);
+    this.requests30dLimit = parseNumericLimit(config.get<string>('R2_REQUESTS_30D_LIMIT'), 10_000_000);
     this.client = new S3Client({
       region: 'auto',
       endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -94,6 +100,11 @@ export class R2Service {
       bucket: this.bucket,
       objectCount,
       storageBytes,
+      limits: {
+        storageBytes: this.storageLimitBytes,
+        bandwidth30dBytes: this.bandwidth30dLimitBytes,
+        requests30d: this.requests30dLimit,
+      },
       bandwidth: await this.cloudflareBandwidth(),
     };
   }
@@ -142,4 +153,9 @@ export class R2Service {
       return { available: false, reason: 'cloudflare metrics unavailable', requests: null, bytes: null };
     }
   }
+}
+
+function parseNumericLimit(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }

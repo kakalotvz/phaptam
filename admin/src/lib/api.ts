@@ -185,6 +185,11 @@ export type R2Usage = {
   bucket: string;
   objectCount: number;
   storageBytes: number;
+  limits: {
+    storageBytes: number;
+    bandwidth30dBytes: number;
+    requests30d: number;
+  };
   bandwidth: {
     available: boolean;
     reason: string | null;

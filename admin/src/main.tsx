@@ -184,6 +184,7 @@ type Section = 'overview' | 'audio' | 'scripture' | 'reminder' | 'video' | 'medi
 
 type DataState = {
   overview: Record<string, number>;
+  r2Usage: R2Usage | null;
   settings: AppSettings;
   audioCategories: AudioCategory[];
   videoCategories: VideoCategory[];
@@ -204,6 +205,7 @@ type DataState = {
 
 const emptyData: DataState = {
   overview: {},
+  r2Usage: null,
   settings: { contentPageSize: 10 },
   audioCategories: [],
   videoCategories: [],
@@ -397,6 +399,7 @@ function App() {
 
       const [
         overview,
+        r2Usage,
         settings,
         audioCategories,
         videoCategories,
@@ -415,6 +418,7 @@ function App() {
         users,
       ] = await Promise.all([
         safe(() => api.overview(), {}),
+        safe(() => api.r2Usage(), null),
         safe(() => api.settings(), { contentPageSize: 10 }),
         safe(() => api.audioCategories(), []),
         safe(() => api.videoCategories(), []),
@@ -435,6 +439,7 @@ function App() {
 
       setData({
         overview,
+        r2Usage,
         settings,
         audioCategories,
         videoCategories,
@@ -596,22 +601,120 @@ function Overview({ data }: { data: DataState }) {
   ];
 
   return (
-    <section className="grid metrics">
-      {cards.map(([label, value, Icon]) => (
-        <article className="metric-card" key={label as string}>
-          {React.createElement(Icon as typeof BookAudio, { size: 22 })}
-          <span>{label as string}</span>
-          <strong>{value as number}</strong>
+    <div className="overview-stack">
+      <R2UsageOverview usage={data.r2Usage} />
+      <section className="grid metrics">
+        {cards.map(([label, value, Icon]) => (
+          <article className="metric-card" key={label as string}>
+            {React.createElement(Icon as typeof BookAudio, { size: 22 })}
+            <span>{label as string}</span>
+            <strong>{value as number}</strong>
+          </article>
+        ))}
+        <article className="wide-card">
+          <BarChart3 size={22} />
+          <div>
+            <h2>Trang quản trị đã sẵn sàng</h2>
+            <p>Quản lý danh mục, audio, video, RSS, banner, trích dẫn, lịch nhắc tụng kinh và góp ý. Media được upload trực tiếp lên Cloudflare R2 bằng URL ký tạm thời từ backend.</p>
+          </div>
         </article>
-      ))}
-      <article className="wide-card">
-        <BarChart3 size={22} />
-        <div>
-          <h2>Trang quản trị đã sẵn sàng</h2>
-          <p>Quản lý danh mục, audio, video, RSS, banner, trích dẫn, lịch nhắc tụng kinh và góp ý. Media được upload trực tiếp lên Cloudflare R2 bằng URL ký tạm thời từ backend.</p>
+      </section>
+    </div>
+  );
+}
+
+function R2UsageOverview({ usage }: { usage: R2Usage | null }) {
+  if (!usage) {
+    return (
+      <section className="r2-dashboard">
+        <div className="r2-dashboard-heading">
+          <div>
+            <span>Cloudflare R2</span>
+            <h2>Usage R2</h2>
+          </div>
+          <strong>Chưa tải được dữ liệu</strong>
         </div>
-      </article>
+        <p className="field-note">Kiểm tra cấu hình R2 hoặc bấm Làm mới ở góc phải để tải lại số liệu.</p>
+      </section>
+    );
+  }
+
+  const bandwidthUsed = usage.bandwidth.available ? usage.bandwidth.bytes ?? 0 : null;
+  const requestsUsed = usage.bandwidth.available ? usage.bandwidth.requests ?? 0 : null;
+  const metrics = [
+    {
+      label: 'Dung lượng',
+      used: usage.storageBytes,
+      limit: usage.limits.storageBytes,
+      value: `${formatBytes(usage.storageBytes)} / ${formatBytes(usage.limits.storageBytes)}`,
+      color: '#8b5e3c',
+    },
+    {
+      label: 'Băng thông 30 ngày',
+      used: bandwidthUsed,
+      limit: usage.limits.bandwidth30dBytes,
+      value: bandwidthUsed === null ? `Chưa có dữ liệu / ${formatBytes(usage.limits.bandwidth30dBytes)}` : `${formatBytes(bandwidthUsed)} / ${formatBytes(usage.limits.bandwidth30dBytes)}`,
+      color: '#2563eb',
+    },
+    {
+      label: 'Requests 30 ngày',
+      used: requestsUsed,
+      limit: usage.limits.requests30d,
+      value: requestsUsed === null ? `Chưa có dữ liệu / ${usage.limits.requests30d.toLocaleString('vi-VN')}` : `${requestsUsed.toLocaleString('vi-VN')} / ${usage.limits.requests30d.toLocaleString('vi-VN')}`,
+      color: '#16a34a',
+    },
+  ];
+
+  return (
+    <section className="r2-dashboard">
+      <div className="r2-dashboard-heading">
+        <div>
+          <span>Cloudflare R2</span>
+          <h2>Usage R2</h2>
+        </div>
+        <strong>{usage.bucket}</strong>
+      </div>
+      <div className="r2-dashboard-grid">
+        {metrics.map((metric) => (
+          <R2UsageMetric key={metric.label} {...metric} />
+        ))}
+      </div>
+      <div className="r2-dashboard-meta">
+        <span>{usage.objectCount.toLocaleString('vi-VN')} object trong bucket</span>
+        {usage.bandwidth.reason && <span>Cần cấu hình CLOUDFLARE_API_TOKEN để đọc băng thông và requests.</span>}
+      </div>
     </section>
+  );
+}
+
+function R2UsageMetric({
+  label,
+  used,
+  limit,
+  value,
+  color,
+}: {
+  label: string;
+  used: number | null;
+  limit: number;
+  value: string;
+  color: string;
+}) {
+  const percent = usagePercent(used ?? 0, limit);
+
+  return (
+    <article className="r2-usage-card">
+      <div className="r2-ring" style={{ background: `conic-gradient(${color} ${percent * 3.6}deg, rgba(109, 76, 65, .12) 0deg)` }}>
+        <span>{formatPercent(percent)}</span>
+      </div>
+      <div className="r2-usage-body">
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <div className="r2-progress" aria-hidden="true">
+          <i style={{ width: `${percent}%`, background: color }} />
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -3180,21 +3283,6 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
   const [value, setValue] = useState(getApiBaseUrl());
   const settings = React.useContext(SettingsContext);
   const [contentPageSize, setContentPageSize] = useState(String(settings.contentPageSize));
-  const [usage, setUsage] = useState<R2Usage | null>(null);
-  const [usageError, setUsageError] = useState('');
-
-  async function loadUsage() {
-    setUsageError('');
-    try {
-      setUsage(await api.r2Usage());
-    } catch (error) {
-      setUsageError(error instanceof Error ? error.message : 'Không tải được usage R2');
-    }
-  }
-
-  useEffect(() => {
-    void loadUsage();
-  }, []);
 
   useEffect(() => {
     setContentPageSize(String(settings.contentPageSize));
@@ -3209,7 +3297,6 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
             event.preventDefault();
             setApiBaseUrl(value);
             void onSaved();
-            void loadUsage();
           }}
         >
           <label>
@@ -3247,36 +3334,6 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
             Lưu số bài mỗi trang
           </button>
         </form>
-      </Panel>
-      <Panel title="Usage R2">
-        <div className="usage-grid">
-          <article>
-            <span>Bucket</span>
-            <strong>{usage?.bucket ?? '-'}</strong>
-          </article>
-          <article>
-            <span>Dung lượng</span>
-            <strong>{usage ? formatBytes(usage.storageBytes) : '-'}</strong>
-          </article>
-          <article>
-            <span>Số object</span>
-            <strong>{usage?.objectCount ?? '-'}</strong>
-          </article>
-          <article>
-            <span>Băng thông 30 ngày</span>
-            <strong>{usage?.bandwidth.available ? formatBytes(usage.bandwidth.bytes ?? 0) : 'Chưa có dữ liệu'}</strong>
-          </article>
-          <article>
-            <span>Requests 30 ngày</span>
-            <strong>{usage?.bandwidth.available ? usage.bandwidth.requests?.toLocaleString('vi-VN') : '-'}</strong>
-          </article>
-        </div>
-        {usage?.bandwidth.reason && <p className="field-note">Băng thông cần cấu hình CLOUDFLARE_API_TOKEN trên backend để đọc Cloudflare GraphQL.</p>}
-        {usageError && <p className="error">{usageError}</p>}
-        <button className="ghost" type="button" onClick={() => void loadUsage()}>
-          <RefreshCcw size={16} />
-          Tải lại usage
-        </button>
       </Panel>
     </div>
   );
@@ -3329,6 +3386,15 @@ function formatDurationSeconds(seconds?: number) {
   const minutes = Math.floor((safe % 3600) / 60).toString().padStart(2, '0');
   const rest = Math.floor(safe % 60).toString().padStart(2, '0');
   return hours > 0 ? `${hours}:${minutes}:${rest}` : `${minutes}:${rest}`;
+}
+
+function usagePercent(used: number, limit: number) {
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return 0;
+  return Math.max(0, Math.min(100, (used / limit) * 100));
+}
+
+function formatPercent(value: number) {
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)}%`;
 }
 
 function formatBytes(bytes?: number | null) {
