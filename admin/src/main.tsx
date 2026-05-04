@@ -2184,7 +2184,8 @@ function RichTextEditor({
       }),
       UnderlineExtension,
       LinkExtension.configure({
-        autolink: true,
+        autolink: false,
+        linkOnPaste: false,
         defaultProtocol: 'https',
         openOnClick: false,
       }),
@@ -2289,6 +2290,11 @@ function RichTextEditor({
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
   }
 
+  function removeLink() {
+    if (!editor) return;
+    editor.chain().focus().extendMarkRange('link').unsetLink().run();
+  }
+
   function addImageUrl() {
     const url = window.prompt('Dán URL hình ảnh https://...');
     if (!url) return;
@@ -2343,6 +2349,7 @@ function RichTextEditor({
   const currentFontFamily = resolveFontFamilyValue(editor?.getAttributes('textStyle').fontFamily);
   const currentFontSize = String(editor?.getAttributes('textStyle').fontSize ?? '');
   const inlineTextAlign = String(editor?.getAttributes('textStyle').textAlign ?? '');
+  const linkActive = Boolean(editor?.isActive('link'));
 
   const toolbarStyle: React.CSSProperties = {
     display: 'flex',
@@ -2456,7 +2463,8 @@ function RichTextEditor({
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Media & Links */}
-        <button style={btnStyle(Boolean(editor?.isActive('link')))} type="button" onClick={addLink} title="Chèn liên kết"><Link2 size={16} /></button>
+        <button style={btnStyle(linkActive)} type="button" onClick={addLink} title="Chèn liên kết"><Link2 size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={removeLink} title="Bỏ liên kết"><Unlink size={16} /></button>
         <button style={btnStyle(false)} type="button" onClick={addImageUrl} title="Chèn ảnh từ URL"><Image size={16} /></button>
         <button style={btnStyle(false)} type="button" onClick={() => imageInputRef.current?.click()} title="Tải ảnh lên (R2)">{uploadingImage ? '...' : <ImagePlus size={16} />}</button>
         <button style={btnStyle(false)} type="button" onClick={addVideo} title="Chèn video từ URL"><VideoIcon size={16} /></button>
