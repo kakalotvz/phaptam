@@ -233,11 +233,26 @@ async function request<T>(path: string, options?: RequestInit, authenticate = tr
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    throw new Error(readApiErrorMessage(text, response.status));
   }
 
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+function readApiErrorMessage(text: string, status: number) {
+  if (!text) return `Request failed: ${status}`;
+
+  try {
+    const parsed = JSON.parse(text) as { message?: string | string[]; error?: string; statusCode?: number };
+    const message = Array.isArray(parsed.message) ? parsed.message.join('\n') : parsed.message;
+    if (message) return message;
+    if (parsed.error) return parsed.error;
+  } catch {
+    // Response không phải JSON, dùng nguyên văn nội dung backend trả về.
+  }
+
+  return text;
 }
 
 export const api = {

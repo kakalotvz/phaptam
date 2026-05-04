@@ -28,6 +28,7 @@
     "lucide-react": "^0.561.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "sweetalert2": "^11.26.24",
     "typescript": "^5.9.3",
     "vite": "^7.2.7"
   },

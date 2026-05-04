@@ -1,6 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
+import Swal from 'sweetalert2';
 import { Extension, Node as TiptapNode, mergeAttributes } from '@tiptap/core';
 import ImageExtension from '@tiptap/extension-image';
 import LinkExtension from '@tiptap/extension-link';
@@ -21,6 +22,7 @@ import '@fontsource/noto-sans/800.css';
 import '@fontsource/noto-serif/600.css';
 import '@fontsource/noto-serif/700.css';
 import '@fontsource/noto-serif/800.css';
+import 'sweetalert2/dist/sweetalert2.min.css';
 import {
   BarChart3,
   Bold,
@@ -241,6 +243,29 @@ const nav = [
 ] as const;
 
 const SettingsContext = React.createContext<AppSettings>({ contentPageSize: 10 });
+
+const adminToast = Swal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 2800,
+  timerProgressBar: true,
+});
+
+function notifySuccess(message: string) {
+  void adminToast.fire({
+    icon: 'success',
+    title: message,
+  });
+}
+
+function notifyError(message: string) {
+  void adminToast.fire({
+    icon: 'error',
+    title: 'Thao tác thất bại',
+    text: message,
+  });
+}
 
 
 function Login({ onLogin }: { onLogin: () => void }) {
@@ -478,11 +503,13 @@ function App() {
     try {
       await action();
       setNotice(message);
+      notifySuccess(message);
       void load();
       return true;
     } catch (caught) {
       const msg = caught instanceof Error ? caught.message : 'Thao tác thất bại';
       setError(msg);
+      notifyError(msg);
       if (msg.includes('401') || msg.includes('Unauthorized') || msg.includes('403')) {
         localStorage.removeItem('phaptam_admin_token');
         setIsAuthenticated(false);
@@ -509,7 +536,7 @@ function App() {
     ['overview', 'Tổng quan', <BarChart3 size={16} />],
     ['audio', 'Audio', <BookAudio size={16} />],
     ['video', 'Video', <Clapperboard size={16} />],
-    ['scripture', 'Kinh điển', <BookOpenText size={16} />],
+    ['scripture', 'Đọc Kinh', <BookOpenText size={16} />],
     ['reminder', 'Lịch nhắc tụng kinh', <CalendarClock size={16} />],
     ['meditation', 'Chương trình thiền', <List size={16} />],
     ['news', 'Tin tức', <Newspaper size={16} />],
@@ -981,24 +1008,35 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   }
 
   async function saveScripture() {
-    const saved = await run(
-      () =>
-        (selectedScriptureId ? api.update(`/admin/scripture/${selectedScriptureId}`, {
-          title,
-          description,
-          backgroundImageUrl,
-          categoryId,
-          lines,
-        }) : api.create('/admin/scripture', {
-          title,
-          description,
-          backgroundImageUrl,
-          categoryId,
-          lines,
-        })),
-      selectedScriptureId ? 'Đã cập nhật bản Đọc Kinh' : 'Đã tạo bản Đọc Kinh',
-    );
-    if (saved) savedDraftRef.current = currentDraft;
+    setScriptureBusy(true);
+    setScriptureStatus(selectedScriptureId ? 'Đang cập nhật bản đọc...' : 'Đang lưu bản đọc...');
+    try {
+      const saved = await run(
+        () =>
+          (selectedScriptureId ? api.update(`/admin/scripture/${selectedScriptureId}`, {
+            title,
+            description,
+            backgroundImageUrl,
+            categoryId,
+            lines,
+          }) : api.create('/admin/scripture', {
+            title,
+            description,
+            backgroundImageUrl,
+            categoryId,
+            lines,
+          })),
+        selectedScriptureId ? 'Đã cập nhật bản Đọc Kinh' : 'Đã tạo bản Đọc Kinh',
+      );
+      if (saved) {
+        savedDraftRef.current = currentDraft;
+        setScriptureStatus(selectedScriptureId ? 'Đã cập nhật bản đọc thành công.' : 'Đã lưu bản đọc thành công.');
+      } else {
+        setScriptureStatus('Không lưu được bản đọc. Chi tiết lỗi đã hiển thị ở popup.');
+      }
+    } finally {
+      setScriptureBusy(false);
+    }
   }
 
   function updateLine(index: number, patch: Partial<{ content: string; start_time: number }>, shouldRetiming = false) {
