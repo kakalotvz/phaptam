@@ -638,11 +638,126 @@ class ScriptureReader extends StatefulWidget {
   State<ScriptureReader> createState() => _ScriptureReaderState();
 }
 
+class _ScriptureRitualPause {
+  const _ScriptureRitualPause({
+    required this.note,
+    required this.summary,
+    required this.duration,
+  });
+
+  final String note;
+  final String summary;
+  final Duration duration;
+}
+
+_ScriptureRitualPause? _detectScriptureRitualPause(String content) {
+  final match = RegExp(
+    r'[\(\[]([^()\[\]]{1,140})[\)\]]\s*[.!?。．]*\s*$',
+    caseSensitive: false,
+  ).firstMatch(content.trim());
+  if (match == null) return null;
+
+  final note = match.group(1)?.trim() ?? '';
+  if (note.isEmpty) return null;
+
+  final rawNote = note.toLowerCase();
+  final normalized = _foldVietnamese(note);
+  final hasMo = rawNote.contains('mõ');
+  final hasRitualKeyword =
+      normalized.contains('lay') ||
+      normalized.contains('xa') ||
+      normalized.contains('chuong') ||
+      normalized.contains('khanh') ||
+      hasMo;
+  if (!hasRitualKeyword) return null;
+
+  var seconds = 0;
+  final parts = normalized
+      .split(RegExp(r'[,;+/]|\s+va\s+'))
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty);
+
+  for (final part in parts) {
+    final count = _extractRitualCount(part);
+    if (part.contains('lay')) {
+      seconds += count * 5;
+    } else if (part.contains('xa')) {
+      seconds += count * 4;
+    } else if (part.contains('chuong') ||
+        part.contains('khanh') ||
+        (hasMo && part.contains('mo'))) {
+      seconds += count * 3;
+    }
+  }
+
+  if (seconds == 0 && hasRitualKeyword) seconds = 4;
+  final duration = Duration(seconds: seconds.clamp(3, 90).toInt());
+  return _ScriptureRitualPause(
+    note: note,
+    summary: _ritualSummary(note),
+    duration: duration,
+  );
+}
+
+int _extractRitualCount(String text) {
+  final numeric = RegExp(r'\b(\d{1,3})\b').firstMatch(text);
+  if (numeric != null) return int.tryParse(numeric.group(1) ?? '') ?? 1;
+
+  const words = {
+    'mot': 1,
+    'hai': 2,
+    'ba': 3,
+    'bon': 4,
+    'tu': 4,
+    'nam': 5,
+    'sau': 6,
+    'bay': 7,
+    'tam': 8,
+    'chin': 9,
+    'muoi': 10,
+  };
+  for (final entry in words.entries) {
+    if (RegExp('\\b${entry.key}\\b').hasMatch(text)) return entry.value;
+  }
+  return 1;
+}
+
+String _foldVietnamese(String value) {
+  const groups = {
+    'a': 'àáạảãâầấậẩẫăằắặẳẵ',
+    'e': 'èéẹẻẽêềếệểễ',
+    'i': 'ìíịỉĩ',
+    'o': 'òóọỏõôồốộổỗơờớợởỡ',
+    'u': 'ùúụủũưừứựửữ',
+    'y': 'ỳýỵỷỹ',
+    'd': 'đ',
+  };
+  var result = value.toLowerCase();
+  for (final entry in groups.entries) {
+    for (final char in entry.value.split('')) {
+      result = result.replaceAll(char, entry.key);
+    }
+  }
+  return result;
+}
+
+String _ritualSummary(String note) {
+  final text = note.trim();
+  if (text.isEmpty) return 'Thao tác nghi lễ';
+  return text[0].toUpperCase() + text.substring(1);
+}
+
 class _ScriptureReaderState extends State<ScriptureReader> {
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<int> _activeIndex = ValueNotifier<int>(0);
+  final Set<String> _completedRitualPauseKeys = <String>{};
   Timer? _timer;
   Timer? _controlsHideTimer;
+  _ScriptureRitualPause? _ritualPause;
+  Duration _ritualPauseRemaining = Duration.zero;
+  Duration _ritualPauseTotal = Duration.zero;
+  Duration? _ritualPauseResumeElapsed;
+  int? _ritualPauseIndex;
   double _speed = 1;
   String _speedMode = 'normal';
   String _repeatMode = 'off';
@@ -656,6 +771,8 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   double _fontSize = 24;
 
   double get _itemHeight => (_fontSize * 3.8).clamp(82, 142);
+  bool get _ritualPauseActive =>
+      _ritualPause != null && _ritualPauseRemaining > Duration.zero;
 
   @override
   void initState() {
@@ -703,6 +820,8 @@ class _ScriptureReaderState extends State<ScriptureReader> {
       if (shouldPlay && _elapsed >= _endTime) {
         _elapsed = _startTime;
         _completedRepeats = 0;
+        _clearRitualPause();
+        _completedRitualPauseKeys.clear();
         _setActiveIndex(0);
       }
     });
@@ -718,12 +837,53 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     final now = DateTime.now();
     final delta = now.difference(_lastTick ?? now);
     _lastTick = now;
-    _elapsed += Duration(milliseconds: (delta.inMilliseconds * _speed).round());
-    if (_elapsed >= _endTime) {
+
+    if (_ritualPauseActive) {
+      final remaining = _ritualPauseRemaining - delta;
+      if (remaining > Duration.zero) {
+        setState(() => _ritualPauseRemaining = remaining);
+        return;
+      }
+
+      final resumeElapsed = _ritualPauseResumeElapsed ?? _elapsed;
+      final pauseIndex = _ritualPauseIndex;
+      if (pauseIndex != null) {
+        _completedRitualPauseKeys.add(_ritualPauseKey(pauseIndex));
+      }
+      setState(() {
+        _elapsed = resumeElapsed;
+        _clearRitualPause();
+      });
+      if (_elapsed >= _endTime) {
+        _handleCompletedPass();
+        return;
+      }
+      _setActiveIndex(_indexFor(_elapsed));
+      return;
+    }
+
+    final nextElapsed =
+        _elapsed +
+        Duration(milliseconds: (delta.inMilliseconds * _speed).round());
+    final currentIndex = _activeIndex.value;
+    final nextIndex = _indexFor(nextElapsed);
+
+    if (nextElapsed >= _endTime) {
+      if (_maybeStartRitualPause(currentIndex, _endTime)) return;
       _handleCompletedPass();
       return;
     }
-    _setActiveIndex(_indexFor(_elapsed));
+
+    if (nextIndex > currentIndex &&
+        _maybeStartRitualPause(
+          currentIndex,
+          widget.scripture.lines[nextIndex].startTime,
+        )) {
+      return;
+    }
+
+    _elapsed = nextElapsed;
+    _setActiveIndex(nextIndex);
   }
 
   Duration get _endTime {
@@ -797,6 +957,38 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     _centerLine(index);
   }
 
+  bool _maybeStartRitualPause(int index, Duration resumeElapsed) {
+    if (index < 0 || index >= widget.scripture.lines.length) return false;
+    if (_completedRitualPauseKeys.contains(_ritualPauseKey(index))) {
+      return false;
+    }
+
+    final pause = _detectScriptureRitualPause(
+      widget.scripture.lines[index].content,
+    );
+    if (pause == null) return false;
+
+    setState(() {
+      _ritualPause = pause;
+      _ritualPauseIndex = index;
+      _ritualPauseTotal = pause.duration;
+      _ritualPauseRemaining = pause.duration;
+      _ritualPauseResumeElapsed = resumeElapsed;
+    });
+    _centerLine(index);
+    return true;
+  }
+
+  String _ritualPauseKey(int index) => '$_completedRepeats:$index';
+
+  void _clearRitualPause() {
+    _ritualPause = null;
+    _ritualPauseIndex = null;
+    _ritualPauseRemaining = Duration.zero;
+    _ritualPauseTotal = Duration.zero;
+    _ritualPauseResumeElapsed = null;
+  }
+
   void _centerLine(int index, {bool jump = false}) {
     if (!_scrollController.hasClients) return;
     final offset = (index * _itemHeight) + (_itemHeight / 2);
@@ -819,6 +1011,8 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     setState(() {
       _elapsed = widget.scripture.lines[index].startTime;
       _completedRepeats = 0;
+      _clearRitualPause();
+      _completedRitualPauseKeys.clear();
     });
     _setActiveIndex(index);
   }
@@ -844,6 +1038,8 @@ class _ScriptureReaderState extends State<ScriptureReader> {
                 _elapsed = _startTime;
                 _playing = false;
                 _completedRepeats = 0;
+                _clearRitualPause();
+                _completedRitualPauseKeys.clear();
                 _timer?.cancel();
               });
               _setActiveIndex(0);
@@ -870,6 +1066,8 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     setState(() {
       _repeatMode = value;
       _completedRepeats = 0;
+      _completedRitualPauseKeys.clear();
+      _clearRitualPause();
     });
   }
 
@@ -1258,6 +1456,26 @@ class _ScriptureReaderState extends State<ScriptureReader> {
                 ),
               ),
             ),
+            Positioned(
+              left: 18,
+              right: 18,
+              top: MediaQuery.paddingOf(context).top + kToolbarHeight + 10,
+              child: IgnorePointer(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: _ritualPauseActive && _ritualPause != null
+                      ? _RitualPauseBanner(
+                          key: ValueKey(_ritualPauseIndex),
+                          pause: _ritualPause!,
+                          remaining: _ritualPauseRemaining,
+                          total: _ritualPauseTotal,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ),
             if (!_controlsVisible)
               Positioned(
                 left: 0,
@@ -1304,6 +1522,119 @@ class _SpeedMenuLabel extends StatelessWidget {
           if (speed.isNotEmpty)
             Text(speed, style: Theme.of(context).textTheme.bodySmall),
         ],
+      ),
+    );
+  }
+}
+
+class _RitualPauseBanner extends StatelessWidget {
+  const _RitualPauseBanner({
+    required this.pause,
+    required this.remaining,
+    required this.total,
+    super.key,
+  });
+
+  final _ScriptureRitualPause pause;
+  final Duration remaining;
+  final Duration total;
+
+  @override
+  Widget build(BuildContext context) {
+    final remainingSeconds = (remaining.inMilliseconds / 1000).ceil().clamp(
+      1,
+      999,
+    );
+    final progress = total.inMilliseconds <= 0
+        ? 0.0
+        : (remaining.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+
+    return Semantics(
+      liveRegion: true,
+      label: 'Đang tạm nghỉ cho ${pause.summary}, còn $remainingSeconds giây.',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFF211A12).withValues(alpha: .92),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: const Color(0xFFFFE8A3).withValues(alpha: .26),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 24,
+              offset: Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 13),
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: 48,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CircularProgressIndicator(
+                      value: progress,
+                      strokeWidth: 4,
+                      backgroundColor: const Color(
+                        0xFFFFF8E8,
+                      ).withValues(alpha: .14),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFFFFD36A),
+                      ),
+                    ),
+                    Center(
+                      child: Text(
+                        '$remainingSeconds',
+                        style: const TextStyle(
+                          color: Color(0xFFFFF8E8),
+                          fontWeight: FontWeight.w800,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Tạm nghỉ nghi lễ',
+                      style: TextStyle(
+                        color: Color(0xFFFFE8A3),
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      pause.summary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFFFFF8E8),
+                        fontWeight: FontWeight.w600,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Icon(
+                Icons.hourglass_bottom_rounded,
+                color: Color(0xFFFFD36A),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
