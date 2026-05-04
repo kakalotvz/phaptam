@@ -622,7 +622,7 @@ class _EmptyReminderCard extends StatelessWidget {
   }
 }
 
-class ScriptureReader extends StatefulWidget {
+class ScriptureReader extends ConsumerStatefulWidget {
   const ScriptureReader({
     required this.scripture,
     this.reminderId,
@@ -635,7 +635,7 @@ class ScriptureReader extends StatefulWidget {
   final int initialLineIndex;
 
   @override
-  State<ScriptureReader> createState() => _ScriptureReaderState();
+  ConsumerState<ScriptureReader> createState() => _ScriptureReaderState();
 }
 
 class _ScriptureRitualPause {
@@ -747,7 +747,7 @@ String _ritualSummary(String note) {
   return text[0].toUpperCase() + text.substring(1);
 }
 
-class _ScriptureReaderState extends State<ScriptureReader> {
+class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<int> _activeIndex = ValueNotifier<int>(0);
   final Set<String> _completedRitualPauseKeys = <String>{};
@@ -760,6 +760,9 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   int? _ritualPauseIndex;
   double _speed = 1;
   String _speedMode = 'normal';
+  bool _speedTouched = false;
+  bool _savingSpeedPreference = false;
+  String? _loadedSpeedScope;
   String _repeatMode = 'off';
   int _customRepeatCount = 5;
   int _completedRepeats = 0;
@@ -785,6 +788,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     _activeIndex.value = safeIndex;
     _elapsed = widget.scripture.lines[safeIndex].startTime;
     _backgroundUrl = widget.scripture.backgroundImageUrl ?? '';
+    unawaited(_loadSavedSpeedPreference());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _centerLine(safeIndex, jump: true);
       _scheduleControlsHide();
@@ -949,7 +953,7 @@ class _ScriptureReaderState extends State<ScriptureReader> {
     if (_activeIndex.value == index) return;
     _activeIndex.value = index;
     if (widget.reminderId != null) {
-      ProviderScope.containerOf(context)
+      ref
           .read(scriptureReminderProvider.notifier)
           .saveProgress(widget.reminderId!, index)
           .ignore();
@@ -1054,11 +1058,162 @@ class _ScriptureReaderState extends State<ScriptureReader> {
   void _selectSpeed(String value) {
     _showControls();
     setState(() {
+      _speedTouched = true;
+      _loadedSpeedScope = null;
       _speedMode = value;
       if (value == 'slow') _speed = .75;
       if (value == 'normal') _speed = 1;
       if (value == 'fast') _speed = 1.25;
     });
+  }
+
+  Future<void> _loadSavedSpeedPreference() async {
+    if (apiClient.accessToken == null) return;
+    try {
+      final payload = await apiClient.getMap(
+        '/me/scripture-reading-preferences?scriptureId=${Uri.encodeComponent(widget.scripture.id)}',
+      );
+      final effective = payload['effective'];
+      if (effective is! Map<String, dynamic>) return;
+      final speed = _readPreferenceSpeed(effective['speed']);
+      if (speed == null) return;
+      final speedMode = _normalizeSpeedMode(effective['speedMode'], speed);
+      final scope = effective['scope'] as String?;
+      if (!mounted || _speedTouched) return;
+      setState(() {
+        _speed = speed.clamp(.25, 3).toDouble();
+        _speedMode = speedMode;
+        _loadedSpeedScope = scope;
+      });
+    } catch (_) {
+      // Không chặn màn đọc nếu phiên đăng nhập hết hạn hoặc mạng chập chờn.
+    }
+  }
+
+  double? _readPreferenceSpeed(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  String _normalizeSpeedMode(Object? value, double speed) {
+    final mode = value is String ? value : '';
+    if (mode == 'slow' ||
+        mode == 'normal' ||
+        mode == 'fast' ||
+        mode == 'custom') {
+      return mode;
+    }
+    if (speed <= .8) return 'slow';
+    if (speed >= 1.2) return 'fast';
+    return 'normal';
+  }
+
+  void _showSaveSpeedSheet() {
+    _showControls();
+    if (apiClient.accessToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Đăng nhập để lưu tốc độ đọc theo tài khoản.'),
+          action: SnackBarAction(
+            label: 'Đăng nhập',
+            onPressed: () => context.push('/login'),
+          ),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Lưu tốc độ đọc',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Tốc độ hiện tại: ${_speed.toStringAsFixed(2)}x - $_speedLabel',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 14),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.menu_book_outlined),
+                  title: const Text('Lưu cho riêng bộ kinh này'),
+                  subtitle: Text(widget.scripture.title),
+                  onTap: () {
+                    Navigator.pop(context);
+                    unawaited(_saveSpeedPreference('SCRIPTURE'));
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.account_circle_outlined),
+                  title: const Text('Lưu cho toàn bộ tài khoản'),
+                  subtitle: const Text(
+                    'Các bài kinh sau sẽ tự dùng tốc độ này.',
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    unawaited(_saveSpeedPreference('GLOBAL'));
+                  },
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Hủy'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _saveSpeedPreference(String scope) async {
+    if (_savingSpeedPreference) return;
+    setState(() => _savingSpeedPreference = true);
+    try {
+      await apiClient.post('/me/scripture-reading-preferences', {
+        'scope': scope,
+        if (scope == 'SCRIPTURE') 'scriptureId': widget.scripture.id,
+        'speed': _speed.clamp(.25, 3),
+        'speedMode': _speedMode,
+      });
+      if (!mounted) return;
+      setState(() => _loadedSpeedScope = scope);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            scope == 'SCRIPTURE'
+                ? 'Đã lưu tốc độ cho riêng bộ kinh này.'
+                : 'Đã lưu tốc độ cho toàn bộ tài khoản.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không lưu được tốc độ đọc: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingSpeedPreference = false);
+    }
   }
 
   void _selectRepeat(String value) {
@@ -1399,6 +1554,24 @@ class _ScriptureReaderState extends State<ScriptureReader> {
                                     label: 'Cỡ ${_fontSize.toStringAsFixed(0)}',
                                   ),
                                 ),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(999),
+                                  onTap: _savingSpeedPreference
+                                      ? null
+                                      : _showSaveSpeedSheet,
+                                  child: _ReaderControlChip(
+                                    icon: _savingSpeedPreference
+                                        ? Icons.sync
+                                        : Icons.bookmark_added_outlined,
+                                    label: _loadedSpeedScope == 'SCRIPTURE'
+                                        ? 'Đã lưu bài này'
+                                        : _loadedSpeedScope == 'GLOBAL'
+                                        ? 'Đã lưu chung'
+                                        : 'Lưu thói quen',
+                                    selected: _loadedSpeedScope != null,
+                                    showArrow: false,
+                                  ),
+                                ),
                               ],
                             ),
                             if (_speedMode == 'custom')
@@ -1417,7 +1590,11 @@ class _ScriptureReaderState extends State<ScriptureReader> {
                                       value: _speed,
                                       onChanged: (value) {
                                         _showControls();
-                                        setState(() => _speed = value);
+                                        setState(() {
+                                          _speedTouched = true;
+                                          _loadedSpeedScope = null;
+                                          _speed = value;
+                                        });
                                       },
                                     ),
                                   ),
@@ -1671,11 +1848,13 @@ class _ReaderControlChip extends StatelessWidget {
     required this.icon,
     required this.label,
     this.selected = false,
+    this.showArrow = true,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
+  final bool showArrow;
 
   @override
   Widget build(BuildContext context) {
@@ -1707,8 +1886,10 @@ class _ReaderControlChip extends StatelessWidget {
             label,
             style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(width: 4),
-          Icon(Icons.keyboard_arrow_down, size: 18, color: foreground),
+          if (showArrow) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.keyboard_arrow_down, size: 18, color: foreground),
+          ],
         ],
       ),
     );
