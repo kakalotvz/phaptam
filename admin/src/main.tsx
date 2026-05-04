@@ -747,17 +747,14 @@ function R2UsageMetric({
 
 function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingAudio, setEditingAudio] = useState<Audio | null>(null);
+  const [editingCategory, setEditingCategory] = useState<AudioCategory | null>(null);
   const scriptureCategoryIds = new Set(data.scriptures.map((scripture) => scripture.categoryId).filter(Boolean));
   const audioCategories = data.audioCategories.filter(
     (item) => (item._count?.audios ?? 0) > 0 || !scriptureCategoryIds.has(item.id),
   );
 
   function editCategory(row: AudioCategory) {
-    const name = askText('Tên danh mục', row.name);
-    if (name === undefined) return;
-    const description = askText('Mô tả', row.description ?? '');
-    if (description === undefined) return;
-    void run(() => api.update(`/admin/audio-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục audio');
+    setEditingCategory(row);
   }
 
   function editAudio(row: Audio) {
@@ -847,11 +844,26 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
           }}
         />
       )}
+      {editingCategory && (
+        <CategoryEditModal
+          title="Sửa danh mục audio"
+          category={editingCategory}
+          onClose={() => setEditingCategory(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/audio-category/${editingCategory.id}`, values),
+              'Đã cập nhật danh mục audio',
+            );
+            if (saved) setEditingCategory(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingCategory, setEditingCategory] = useState<AudioCategory | null>(null);
   const [selectedScriptureId, setSelectedScriptureId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -879,11 +891,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   }, []);
 
   function editCategory(row: AudioCategory) {
-    const name = askText('Tên danh mục Đọc Kinh', row.name);
-    if (name === undefined) return;
-    const description = askText('Mô tả', row.description ?? '');
-    if (description === undefined) return;
-    void run(() => api.update(`/admin/audio-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục Đọc Kinh');
+    setEditingCategory(row);
   }
 
   function splitText() {
@@ -1227,6 +1235,20 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           onDelete={(row) => run(() => api.remove(`/admin/scripture/${row.id}`), 'Đã xóa bản Đọc Kinh')}
         />
       </Panel>
+      {editingCategory && (
+        <CategoryEditModal
+          title="Sửa danh mục Đọc Kinh"
+          category={editingCategory}
+          onClose={() => setEditingCategory(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/audio-category/${editingCategory.id}`, values),
+              'Đã cập nhật danh mục Đọc Kinh',
+            );
+            if (saved) setEditingCategory(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1338,13 +1360,10 @@ function ScriptureReminderManager({ data }: { data: DataState }) {
 
 function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  const [editingCategory, setEditingCategory] = useState<VideoCategory | null>(null);
 
   function editCategory(row: VideoCategory) {
-    const name = askText('Tên danh mục', row.name);
-    if (name === undefined) return;
-    const description = askText('Mô tả', row.description ?? '');
-    if (description === undefined) return;
-    void run(() => api.update(`/admin/video-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục video');
+    setEditingCategory(row);
   }
 
   function editVideo(row: Video) {
@@ -1426,6 +1445,20 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
               'Đã cập nhật video',
             );
             if (saved) setEditingVideo(null);
+          }}
+        />
+      )}
+      {editingCategory && (
+        <CategoryEditModal
+          title="Sửa danh mục video"
+          category={editingCategory}
+          onClose={() => setEditingCategory(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/video-category/${editingCategory.id}`, values),
+              'Đã cập nhật danh mục video',
+            );
+            if (saved) setEditingCategory(null);
           }}
         />
       )}
@@ -1589,6 +1622,211 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
         {children}
       </section>
     </div>
+  );
+}
+
+function CategoryEditModal({
+  title,
+  category,
+  onClose,
+  onSave,
+}: {
+  title: string;
+  category: { name: string; description?: string };
+  onClose: () => void;
+  onSave: (values: { name: string; description: string }) => Promise<void>;
+}) {
+  const [values, setValues] = useState({
+    name: category.name,
+    description: category.description ?? '',
+  });
+
+  return (
+    <Modal title={title} onClose={onClose}>
+      <form
+        className="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave(values);
+        }}
+      >
+        <label>
+          Tên danh mục
+          <input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required />
+        </label>
+        <label>
+          Mô tả
+          <textarea value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" type="button" onClick={onClose}>
+            Hủy
+          </button>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RssEditModal({
+  source,
+  onClose,
+  onSave,
+}: {
+  source: RssSource;
+  onClose: () => void;
+  onSave: (values: { name: string; url: string }) => Promise<void>;
+}) {
+  const [values, setValues] = useState({
+    name: source.name,
+    url: source.url,
+  });
+
+  return (
+    <Modal title="Sửa nguồn RSS" onClose={onClose}>
+      <form
+        className="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave(values);
+        }}
+      >
+        <label>
+          Tên website
+          <input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required />
+        </label>
+        <label>
+          RSS URL
+          <input value={values.url} onChange={(event) => setValues({ ...values, url: event.target.value })} required />
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" type="button" onClick={onClose}>
+            Hủy
+          </button>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function BannerEditModal({
+  banner,
+  onClose,
+  onSave,
+}: {
+  banner: Banner;
+  onClose: () => void;
+  onSave: (values: { imageUrl: string; link: string }) => Promise<void>;
+}) {
+  const [values, setValues] = useState({
+    imageUrl: banner.imageUrl,
+    link: banner.link ?? '',
+  });
+
+  return (
+    <Modal title="Sửa banner" onClose={onClose}>
+      <form
+        className="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave(values);
+        }}
+      >
+        <label>
+          Ảnh banner
+          <UploadField kind="images/banner" value={values.imageUrl} onUploaded={(imageUrl) => setValues({ ...values, imageUrl })} />
+        </label>
+        <label>
+          Liên kết
+          <input value={values.link} onChange={(event) => setValues({ ...values, link: event.target.value })} />
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" type="button" onClick={onClose}>
+            Hủy
+          </button>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function UserEditModal({
+  user,
+  onClose,
+  onSave,
+}: {
+  user: AdminUser;
+  onClose: () => void;
+  onSave: (values: { name: string; username: string; email: string; birthDate: string; password: string; role: AdminUser['role'] }) => Promise<void>;
+}) {
+  const [values, setValues] = useState({
+    name: user.name ?? '',
+    username: user.username ?? '',
+    email: user.email,
+    birthDate: dateInputValue(user.birthDate),
+    password: '',
+    role: user.role,
+  });
+
+  return (
+    <Modal title="Sửa tài khoản" onClose={onClose}>
+      <form
+        className="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave(values);
+        }}
+      >
+        <label>
+          Họ tên
+          <input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} />
+        </label>
+        <label>
+          Tài khoản
+          <input value={values.username} onChange={(event) => setValues({ ...values, username: event.target.value })} />
+        </label>
+        <label>
+          Email
+          <input type="email" value={values.email} onChange={(event) => setValues({ ...values, email: event.target.value })} required />
+        </label>
+        <label>
+          Ngày sinh
+          <input type="date" value={values.birthDate} onChange={(event) => setValues({ ...values, birthDate: event.target.value })} />
+        </label>
+        <label>
+          Mật khẩu mới
+          <input type="password" value={values.password} onChange={(event) => setValues({ ...values, password: event.target.value })} placeholder="Để trống nếu không đổi" />
+        </label>
+        <label>
+          Vai trò
+          <select value={values.role} onChange={(event) => setValues({ ...values, role: event.target.value as AdminUser['role'] })}>
+            <option value="USER">Người dùng</option>
+            <option value="ADMIN">Quản trị viên</option>
+          </select>
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" type="button" onClick={onClose}>
+            Hủy
+          </button>
+          <button className="primary" type="submit">
+            <Save size={16} />
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -2568,6 +2806,7 @@ function bbcodeInlineToHtml(value: string) {
 }
 
 function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingCategory, setEditingCategory] = useState<NewsCategory | null>(null);
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [content, setContent] = useState('');
@@ -2578,11 +2817,7 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingNewsId, setEditingNewsId] = useState('');
 
   function editCategory(row: NewsCategory) {
-    const name = askText('Tên danh mục', row.name);
-    if (name === undefined) return;
-    const description = askText('Mô tả', row.description ?? '');
-    if (description === undefined) return;
-    void run(() => api.update(`/admin/news-category/${row.id}`, { name, description }), 'Đã cập nhật danh mục tin');
+    setEditingCategory(row);
   }
 
 function editNews(row: NewsItem) {
@@ -2757,6 +2992,20 @@ function editNews(row: NewsItem) {
           onDelete={(row) => run(() => api.remove(`/admin/news/${row.id}`), 'Đã xóa tin')}
         />
       </Panel>
+      {editingCategory && (
+        <CategoryEditModal
+          title="Sửa danh mục tin tức"
+          category={editingCategory}
+          onClose={() => setEditingCategory(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/news-category/${editingCategory.id}`, values),
+              'Đã cập nhật danh mục tin',
+            );
+            if (saved) setEditingCategory(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2881,12 +3130,10 @@ function MeditationEditModal({
 }
 
 function RssManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingRss, setEditingRss] = useState<RssSource | null>(null);
+
   function editRss(row: RssSource) {
-    const name = askText('Tên website', row.name);
-    if (name === undefined) return;
-    const url = askText('RSS URL', row.url);
-    if (url === undefined) return;
-    void run(() => api.update(`/admin/rss/${row.id}`, { name, url }), 'Đã cập nhật RSS');
+    setEditingRss(row);
   }
 
   return (
@@ -2927,6 +3174,19 @@ function RssManager({ data, run }: { data: DataState; run: RunAction }) {
           onDelete={(row) => run(() => api.remove(`/admin/rss/${row.id}`), 'Đã xóa RSS')}
         />
       </Panel>
+      {editingRss && (
+        <RssEditModal
+          source={editingRss}
+          onClose={() => setEditingRss(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/rss/${editingRss.id}`, values),
+              'Đã cập nhật RSS',
+            );
+            if (saved) setEditingRss(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -3126,12 +3386,10 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
 }
 
 function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
+
   function editBanner(row: Banner) {
-    const imageUrl = askText('Ảnh banner URL', row.imageUrl);
-    if (imageUrl === undefined) return;
-    const link = askText('Liên kết', row.link ?? '');
-    if (link === undefined) return;
-    void run(() => api.update(`/admin/banner/${row.id}`, { imageUrl, link }), 'Đã cập nhật banner');
+    setEditingBanner(row);
   }
 
   return (
@@ -3172,11 +3430,26 @@ function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
           onDelete={(row) => run(() => api.remove(`/admin/banner/${row.id}`), 'Đã xóa banner')}
         />
       </Panel>
+      {editingBanner && (
+        <BannerEditModal
+          banner={editingBanner}
+          onClose={() => setEditingBanner(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/banner/${editingBanner.id}`, values),
+              'Đã cập nhật banner',
+            );
+            if (saved) setEditingBanner(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 function UserManager({ data, run }: { data: DataState; run: RunAction }) {
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+
   return (
     <div className="single-column">
       <Panel title="Tạo tài khoản">
@@ -3228,13 +3501,7 @@ function UserManager({ data, run }: { data: DataState; run: RunAction }) {
                   <button
                     className="ghost"
                     type="button"
-                    onClick={() => {
-                      const name = window.prompt('Họ tên', row.name ?? '');
-                      if (name === null) return;
-                      const username = window.prompt('Tài khoản', row.username ?? '');
-                      if (username === null) return;
-                      void run(() => api.update(`/admin/users/${row.id}`, { name, username }), 'Đã cập nhật tài khoản');
-                    }}
+                    onClick={() => setEditingUser(row)}
                   >
                     Sửa
                   </button>
@@ -3253,6 +3520,22 @@ function UserManager({ data, run }: { data: DataState; run: RunAction }) {
           onDelete={(row) => run(() => api.remove(`/admin/users/${row.id}`), 'Đã xóa tài khoản')}
         />
       </Panel>
+      {editingUser && (
+        <UserEditModal
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          onSave={async (values) => {
+            const saved = await run(
+              () => api.update(`/admin/users/${editingUser.id}`, compactPayload({
+                ...values,
+                password: values.password || undefined,
+              })),
+              'Đã cập nhật tài khoản',
+            );
+            if (saved) setEditingUser(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -3380,19 +3663,15 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
 type RunAction = (action: () => Promise<unknown>, message: string) => Promise<boolean>;
 type Field = [name: string, label: string, type?: string, options?: string[][]];
 
-function askText(label: string, current = '') {
-  return window.prompt(label, current) ?? undefined;
-}
-
-function askNumber(label: string, current: number) {
-  const value = window.prompt(label, String(current));
-  if (value === null) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 function compactPayload(values: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+}
+
+function dateInputValue(value?: string) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
 }
 
 function detectMediaDuration(url: string, kind: 'audio' | 'video'): Promise<number> {
