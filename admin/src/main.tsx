@@ -1572,6 +1572,27 @@ const FontSizeExtension = Extension.create({
   },
 });
 
+const InlineTextAlignExtension = Extension.create({
+  name: 'editorInlineTextAlign',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['textStyle'],
+        attributes: {
+          textAlign: {
+            default: null,
+            parseHTML: (element) => element.style.textAlign || null,
+            renderHTML: (attributes) => {
+              if (!attributes.textAlign) return {};
+              return { style: `display: block; text-align: ${attributes.textAlign}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
 function componentToHex(value: number) {
   return Math.max(0, Math.min(255, value)).toString(16).padStart(2, '0');
 }
@@ -1802,6 +1823,7 @@ function RichTextEditor({
       TextStyle,
       FontFamilyExtension,
       FontSizeExtension,
+      InlineTextAlignExtension,
       Color,
       Highlight.configure({ multicolor: true }),
       VideoEmbedExtension,
@@ -1849,11 +1871,22 @@ function RichTextEditor({
     if (format === 'strike') chain.toggleStrike().run();
     if (format === 'list' && commandValue === 'ordered') chain.toggleOrderedList().run();
     if (format === 'list' && commandValue !== 'ordered') chain.toggleBulletList().run();
-    if (format === 'align') chain.setTextAlign(commandValue ? String(commandValue) : 'left').run();
+    if (format === 'align') runAlignCommand(commandValue ? String(commandValue) : 'left');
     if (format === 'link' && commandValue === false) chain.unsetLink().run();
     if (format === 'superscript') chain.toggleSuperscript().run();
     if (format === 'color') chain.setColor(String(commandValue)).run();
     if (format === 'highlight') chain.setHighlight({ color: String(commandValue) }).run();
+  }
+
+  function runAlignCommand(textAlign: string) {
+    if (!editor) return;
+    const chain = editor.chain().focus();
+    if (editor.state.selection.empty) {
+      chain.setTextAlign(textAlign).run();
+      return;
+    }
+
+    chain.setMark('textStyle', { textAlign }).run();
   }
 
   function runColorCommand(format: EditorColorAction, color: string) {
@@ -1930,6 +1963,7 @@ function RichTextEditor({
   const h3Active = Boolean(editor?.isActive('heading', { level: 3 }));
   const currentFontFamily = resolveFontFamilyValue(editor?.getAttributes('textStyle').fontFamily);
   const currentFontSize = String(editor?.getAttributes('textStyle').fontSize ?? '');
+  const inlineTextAlign = String(editor?.getAttributes('textStyle').textAlign ?? '');
 
   const toolbarStyle: React.CSSProperties = {
     display: 'flex',
@@ -2037,9 +2071,9 @@ function RichTextEditor({
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Alignment */}
-        <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'left' })))} type="button" onClick={() => runCommand('align', false)} title="Căn trái"><AlignLeft size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'center' })))} type="button" onClick={() => runCommand('align', 'center')} title="Căn giữa"><AlignCenter size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive({ textAlign: 'right' })))} type="button" onClick={() => runCommand('align', 'right')} title="Căn phải"><AlignRight size={16} /></button>
+        <button style={btnStyle(inlineTextAlign === 'left' || Boolean(editor?.isActive({ textAlign: 'left' })))} type="button" onClick={() => runCommand('align', false)} title="Căn trái"><AlignLeft size={16} /></button>
+        <button style={btnStyle(inlineTextAlign === 'center' || Boolean(editor?.isActive({ textAlign: 'center' })))} type="button" onClick={() => runCommand('align', 'center')} title="Căn giữa"><AlignCenter size={16} /></button>
+        <button style={btnStyle(inlineTextAlign === 'right' || Boolean(editor?.isActive({ textAlign: 'right' })))} type="button" onClick={() => runCommand('align', 'right')} title="Căn phải"><AlignRight size={16} /></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Media & Links */}
