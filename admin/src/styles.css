@@ -1303,6 +1303,44 @@ th {
   gap: 8px;
 }
 
+.category-tree {
+  display: grid;
+  gap: 10px;
+}
+
+.category-tree-node {
+  display: grid;
+  gap: 10px;
+}
+
+.category-tree-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 252, 240, .72);
+  border: 1px solid rgba(109, 76, 65, .13);
+  border-radius: 12px;
+}
+
+.category-tree-row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.category-tree-row strong {
+  color: #2e2420;
+}
+
+.category-tree-row span,
+.category-tree-row small {
+  color: #7a655b;
+  font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .pagination {
   display: flex;
   justify-content: space-between;

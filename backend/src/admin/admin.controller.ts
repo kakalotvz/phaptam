@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard } from '../auth/admin.guard';
-import { NewsSourceType, ReminderResumeMode, Role } from '@prisma/client';
+import { AudioCategoryKind, NewsSourceType, ReminderResumeMode, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateScriptureTiming, validateScriptureLines } from '../scripture/timing';
@@ -147,7 +147,8 @@ export class AdminController {
   }
 
   @Get('audio-category')
-  audioCategories() {
+  async audioCategories() {
+    await this.backfillAudioCategoryKinds();
     return this.prisma.audioCategory.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -158,16 +159,39 @@ export class AdminController {
   }
 
   @Post('audio-category')
-  createAudioCategory(@Body() data: { name: string; description?: string; parentId?: string }) {
-    return this.prisma.audioCategory.create({ data: { name: data.name, description: data.description, parentId: data.parentId || null } });
+  async createAudioCategory(@Body() data: { name: string; description?: string; parentId?: string; kind?: AudioCategoryKind }) {
+    const parent = data.parentId
+      ? await this.prisma.audioCategory.findUniqueOrThrow({ where: { id: data.parentId } })
+      : null;
+    const kind = parent?.kind ?? data.kind ?? AudioCategoryKind.AUDIO;
+    return this.prisma.audioCategory.create({
+      data: {
+        kind,
+        name: data.name,
+        description: data.description,
+        parentId: parent?.id ?? null,
+      },
+    });
   }
 
   @Patch('audio-category/:id')
-  updateAudioCategory(@Param('id') id: string, @Body() data: { name?: string; description?: string; parentId?: string | null }) {
+  async updateAudioCategory(
+    @Param('id') id: string,
+    @Body() data: { name?: string; description?: string; parentId?: string | null; kind?: AudioCategoryKind },
+  ) {
     if (data.parentId === id) throw new BadRequestException('Danh mục cha không được trùng với danh mục đang sửa.');
+    const current = await this.prisma.audioCategory.findUniqueOrThrow({ where: { id } });
+    const parent = data.parentId
+      ? await this.prisma.audioCategory.findUniqueOrThrow({ where: { id: data.parentId } })
+      : null;
+    const kind = parent?.kind ?? data.kind;
+    if (parent && parent.kind !== current.kind && data.kind === undefined) {
+      throw new BadRequestException('Danh mục cha phải cùng loại với danh mục đang sửa.');
+    }
     return this.prisma.audioCategory.update({
       where: { id },
       data: {
+        kind,
         name: data.name,
         description: data.description,
         parentId: data.parentId === undefined ? undefined : data.parentId || null,
@@ -206,13 +230,15 @@ export class AdminController {
   }
 
   @Post('audio')
-  createAudio(@Body() data: { title: string; description?: string; audioUrl: string; thumbnailUrl?: string; categoryId: string; duration?: number }) {
+  async createAudio(@Body() data: { title: string; description?: string; audioUrl: string; thumbnailUrl?: string; categoryId: string; duration?: number }) {
+    await this.ensureAudioCategoryKind(data.categoryId, AudioCategoryKind.AUDIO);
     return this.prisma.audio.create({ data: { ...data, duration: Number(data.duration || 0) } });
   }
 
   @Patch('audio/:id')
   async updateAudio(@Param('id') id: string, @Body() data: { title?: string; description?: string; audioUrl?: string; thumbnailUrl?: string; categoryId?: string; duration?: number }) {
     const current = await this.prisma.audio.findUniqueOrThrow({ where: { id } });
+    if (data.categoryId) await this.ensureAudioCategoryKind(data.categoryId, AudioCategoryKind.AUDIO);
     const updated = await this.prisma.audio.update({ where: { id }, data });
     await this.deleteReplacedR2Media([
       [current.audioUrl, data.audioUrl],
@@ -258,6 +284,7 @@ export class AdminController {
       lines: Array<{ content: string; start_time?: number; startTime?: number }>;
     },
   ) {
+    if (data.categoryId) await this.ensureAudioCategoryKind(data.categoryId, AudioCategoryKind.CHANT);
     const lines = (data.lines ?? []).map((line) => ({
       content: line.content,
       start_time: Number(line.start_time ?? line.startTime),
@@ -307,6 +334,7 @@ export class AdminController {
       content: line.content,
       start_time: Number(line.start_time ?? line.startTime),
     }));
+    if (data.categoryId) await this.ensureAudioCategoryKind(data.categoryId, AudioCategoryKind.CHANT);
 
     if (lines) {
       try {
@@ -377,6 +405,16 @@ export class AdminController {
   ) {
     if (!data.title?.trim()) throw new BadRequestException('Tiêu đề Kinh đọc không được để trống.');
     if (!data.content?.trim()) throw new BadRequestException('Nội dung Kinh đọc không được để trống.');
+    return this.createScriptureReadingChecked(data);
+  }
+
+  private async createScriptureReadingChecked(data: {
+    title: string;
+    description?: string;
+    content?: string;
+    categoryId?: string;
+  }) {
+    if (data.categoryId) await this.ensureAudioCategoryKind(data.categoryId, AudioCategoryKind.READING);
     return this.prisma.scripture.create({
       data: {
         kind: 'READING',
@@ -393,7 +431,7 @@ export class AdminController {
   }
 
   @Patch('scripture-reading/:id')
-  updateScriptureReading(
+  async updateScriptureReading(
     @Param('id') id: string,
     @Body()
     data: {
@@ -405,6 +443,7 @@ export class AdminController {
   ) {
     if (data.title !== undefined && !data.title.trim()) throw new BadRequestException('Tiêu đề Kinh đọc không được để trống.');
     if (data.content !== undefined && !data.content.trim()) throw new BadRequestException('Nội dung Kinh đọc không được để trống.');
+    if (data.categoryId) await this.ensureAudioCategoryKind(data.categoryId, AudioCategoryKind.READING);
     return this.prisma.scripture.update({
       where: { id },
       data: {
@@ -854,6 +893,59 @@ export class AdminController {
 
   private async deleteReplacedR2Media(pairs: Array<[string | null | undefined, string | null | undefined]>) {
     await this.r2.deletePublicUrls(pairs.filter(([previous, next]) => next !== undefined && previous !== next).map(([previous]) => previous));
+  }
+
+  private async ensureAudioCategoryKind(categoryId: string | null | undefined, kind: AudioCategoryKind) {
+    if (!categoryId) return;
+    const category = await this.prisma.audioCategory.findUniqueOrThrow({
+      where: { id: categoryId },
+      select: { kind: true },
+    });
+    if (category.kind !== kind) {
+      const label = kind === AudioCategoryKind.AUDIO ? 'audio' : kind === AudioCategoryKind.CHANT ? 'Kinh tụng' : 'Kinh đọc';
+      throw new BadRequestException(`Danh mục đã chọn không thuộc phần ${label}.`);
+    }
+  }
+
+  private async backfillAudioCategoryKinds() {
+    const categories = await this.prisma.audioCategory.findMany({
+      where: { kind: AudioCategoryKind.AUDIO },
+      select: {
+        id: true,
+        _count: { select: { audios: true } },
+        scriptures: { select: { kind: true }, take: 20 },
+      },
+    });
+
+    await Promise.all(
+      categories.map((category) => {
+        if ((category._count.audios ?? 0) > 0 || category.scriptures.length === 0) return Promise.resolve();
+        const kinds = new Set(category.scriptures.map((scripture) => scripture.kind));
+        if (kinds.size !== 1) return Promise.resolve();
+        const [kind] = Array.from(kinds);
+        return this.prisma.audioCategory.update({
+          where: { id: category.id },
+          data: { kind: kind === 'CHANT' ? AudioCategoryKind.CHANT : AudioCategoryKind.READING },
+        });
+      }),
+    );
+
+    for (let pass = 0; pass < 3; pass += 1) {
+      const parents = await this.prisma.audioCategory.findMany({
+        where: { kind: AudioCategoryKind.AUDIO, audios: { none: {} }, children: { some: { kind: { not: AudioCategoryKind.AUDIO } } } },
+        select: { id: true, children: { select: { kind: true } } },
+      });
+      const updates = parents
+        .map((parent) => {
+          const childKinds = new Set(parent.children.filter((child) => child.kind !== AudioCategoryKind.AUDIO).map((child) => child.kind));
+          if (childKinds.size !== 1) return null;
+          const [kind] = Array.from(childKinds);
+          return this.prisma.audioCategory.update({ where: { id: parent.id }, data: { kind } });
+        })
+        .filter((update): update is ReturnType<typeof this.prisma.audioCategory.update> => update !== null);
+      if (updates.length === 0) break;
+      await Promise.all(updates);
+    }
   }
 
   private async contentPageSize() {

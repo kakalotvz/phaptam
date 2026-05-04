@@ -1,5 +1,6 @@
 export type AudioCategory = {
   id: string;
+  kind?: 'AUDIO' | 'CHANT' | 'READING';
   name: string;
   description?: string;
   parentId?: string | null;

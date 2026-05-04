@@ -757,10 +757,7 @@ function R2UsageMetric({
 function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingAudio, setEditingAudio] = useState<Audio | null>(null);
   const [editingCategory, setEditingCategory] = useState<AudioCategory | null>(null);
-  const scriptureCategoryIds = new Set(data.scriptures.map((scripture) => scripture.categoryId).filter(Boolean));
-  const audioCategories = data.audioCategories.filter(
-    (item) => (item._count?.audios ?? 0) > 0 || !scriptureCategoryIds.has(item.id),
-  );
+  const audioCategories = data.audioCategories.filter((item) => item.kind === 'AUDIO' && !item.parentId);
 
   function editCategory(row: AudioCategory) {
     setEditingCategory(row);
@@ -775,7 +772,7 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
       <Panel title="Tạo danh mục audio">
         <SmartForm
           fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
-          onSubmit={(values) => run(() => api.create('/admin/audio-category', values), 'Đã tạo danh mục audio')}
+          onSubmit={(values) => run(() => api.create('/admin/audio-category', { ...values, kind: 'AUDIO' }), 'Đã tạo danh mục audio')}
         />
       </Panel>
       <Panel title="Thêm kinh audio">
@@ -892,9 +889,8 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     [title, description, backgroundImageUrl, categoryId, rawText, lines],
   );
   const hasUnsavedChanges = currentDraft !== savedDraftRef.current;
-  const scriptureCategoryIds = new Set(data.scriptures.map((scripture) => scripture.categoryId).filter(Boolean));
   const scriptureCategories = data.audioCategories.filter(
-    (item) => !item.parentId && (scriptureCategoryIds.has(item.id) || (item._count?.audios ?? 0) === 0),
+    (item) => item.kind === 'CHANT' && !item.parentId,
   );
 
   useEffect(() => {
@@ -1102,6 +1098,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             const saved = await run(
               () =>
                 api.create('/admin/audio-category', {
+                  kind: 'CHANT',
                   name: categoryName,
                   description: categoryDescription,
                 }),
@@ -1128,22 +1125,11 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
         </form>
       </Panel>
       <Panel title="Danh mục Kinh tụng">
-        <Table
+        <CategoryTree
           rows={scriptureCategories}
-          columns={[
-            ['name', 'Tên'],
-            ['description', 'Mô tả'],
-            [countScripturesInCategory, 'Số bản tụng'],
-            [
-              (row: AudioCategory) => (
-                <button className="ghost" type="button" onClick={() => editCategory(row)}>
-                  <Pencil size={15} />
-                  Sửa
-                </button>
-              ),
-              'Thao tác',
-            ],
-          ]}
+          countLabel="bản tụng"
+          countFor={countScripturesInCategory}
+          onEdit={editCategory}
           onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục Kinh tụng')}
         />
       </Panel>
@@ -1299,23 +1285,17 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
   const [editingCategory, setEditingCategory] = useState<AudioCategory | null>(null);
   const [categoryName, setCategoryName] = useState('');
   const [categoryDescription, setCategoryDescription] = useState('');
-  const [categoryParentId, setCategoryParentId] = useState('');
+  const [chapterName, setChapterName] = useState('');
+  const [chapterDescription, setChapterDescription] = useState('');
+  const [chapterParentId, setChapterParentId] = useState('');
   const [editingId, setEditingId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const readingCategoryIds = new Set(data.scriptureReadings.map((scripture) => scripture.categoryId).filter(Boolean));
-  const readingParentIds = new Set(
-    data.audioCategories
-      .filter((item) => readingCategoryIds.has(item.id))
-      .map((item) => item.parentId)
-      .filter(Boolean),
-  );
-  const readingCategories = data.audioCategories.filter(
-    (item) => readingCategoryIds.has(item.id) || readingParentIds.has(item.id) || (item._count?.audios ?? 0) === 0,
-  );
+  const readingCategories = data.audioCategories.filter((item) => item.kind === 'READING');
   const readingMainCategories = readingCategories.filter((item) => !item.parentId);
+  const readingCategoryOptions = categoryTreeOptions(readingCategories);
 
   function countReadingsInCategory(row: AudioCategory) {
     const childIds = new Set(readingCategories.filter((item) => item.parentId === row.id).map((item) => item.id));
@@ -1341,72 +1321,98 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
 
   return (
     <div className="single-column">
-      <Panel title="Tạo danh mục / phẩm Kinh đọc">
-        <form
-          className="form"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const saved = await run(
-              () =>
-                api.create('/admin/audio-category', {
-                  name: categoryName,
-                  description: categoryDescription,
-                  parentId: categoryParentId || undefined,
-                }),
-              categoryParentId ? 'Đã tạo phẩm Kinh đọc' : 'Đã tạo danh mục Kinh đọc',
-            );
-            if (saved) {
-              setCategoryName('');
-              setCategoryDescription('');
-              setCategoryParentId('');
-            }
-          }}
-        >
-          <label>
-            Tên danh mục / phẩm
-            <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required placeholder="Ví dụ: Kinh Pháp Cú hoặc Phẩm Song Yếu" />
-          </label>
-          <label>
-            Thuộc danh mục cha
-            <select value={categoryParentId} onChange={(event) => setCategoryParentId(event.target.value)}>
-              <option value="">Không chọn - tạo bộ kinh chính</option>
-              {readingMainCategories.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <span className="field-note">Chọn danh mục cha khi muốn tạo Phẩm trong Kinh đọc.</span>
-          </label>
-          <label>
-            Mô tả
-            <textarea value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} />
-          </label>
-          <button className="primary" type="submit">
-            <Save size={16} />
-            Lưu danh mục
-          </button>
-        </form>
-      </Panel>
+      <div className="two-column">
+        <Panel title="Tạo bộ Kinh đọc">
+          <form
+            className="form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const saved = await run(
+                () =>
+                  api.create('/admin/audio-category', {
+                    kind: 'READING',
+                    name: categoryName,
+                    description: categoryDescription,
+                  }),
+                'Đã tạo bộ Kinh đọc',
+              );
+              if (saved) {
+                setCategoryName('');
+                setCategoryDescription('');
+              }
+            }}
+          >
+            <label>
+              Tên bộ kinh
+              <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required placeholder="Ví dụ: Kinh Pháp Cú" />
+            </label>
+            <label>
+              Mô tả
+              <textarea value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} />
+            </label>
+            <button className="primary" type="submit">
+              <Save size={16} />
+              Lưu bộ kinh
+            </button>
+          </form>
+        </Panel>
+
+        <Panel title="Tạo phẩm trong bộ Kinh đọc">
+          <form
+            className="form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const saved = await run(
+                () =>
+                  api.create('/admin/audio-category', {
+                    kind: 'READING',
+                    name: chapterName,
+                    description: chapterDescription,
+                    parentId: chapterParentId,
+                  }),
+                'Đã tạo phẩm Kinh đọc',
+              );
+              if (saved) {
+                setChapterName('');
+                setChapterDescription('');
+                setChapterParentId('');
+              }
+            }}
+          >
+            <label>
+              Bộ kinh cha
+              <select value={chapterParentId} onChange={(event) => setChapterParentId(event.target.value)} required>
+                <option value="">Chọn bộ kinh...</option>
+                {readingMainCategories.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              <span className="field-note">Tạo bộ kinh trước, sau đó thêm các phẩm vào bên trong.</span>
+            </label>
+            <label>
+              Tên phẩm
+              <input value={chapterName} onChange={(event) => setChapterName(event.target.value)} required placeholder="Ví dụ: Phẩm Song Yếu" />
+            </label>
+            <label>
+              Mô tả
+              <textarea value={chapterDescription} onChange={(event) => setChapterDescription(event.target.value)} />
+            </label>
+            <button className="primary" type="submit" disabled={!chapterParentId}>
+              <Save size={16} />
+              Lưu phẩm
+            </button>
+          </form>
+        </Panel>
+      </div>
 
       <Panel title="Danh mục / phẩm Kinh đọc">
-        <Table
+        <CategoryTree
           rows={readingCategories}
-          columns={[
-            ['name', 'Tên'],
-            [(row: AudioCategory) => row.parent?.name ?? '-', 'Danh mục cha'],
-            ['description', 'Mô tả'],
-            [countReadingsInCategory, 'Số bài đọc'],
-            [
-              (row: AudioCategory) => (
-                <button className="ghost" type="button" onClick={() => setEditingCategory(row)}>
-                  <Pencil size={15} />
-                  Sửa
-                </button>
-              ),
-              'Thao tác',
-            ],
-          ]}
+          countLabel="bài đọc"
+          countFor={countReadingsInCategory}
+          onEdit={setEditingCategory}
           onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục Kinh đọc')}
         />
       </Panel>
@@ -1433,9 +1439,9 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
             Danh mục / phẩm
             <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
               <option value="">Không chọn</option>
-              {readingCategories.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.parent?.name ? `${item.parent.name} - ${item.name}` : item.name}
+              {readingCategoryOptions.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
                 </option>
               ))}
             </select>
@@ -4227,6 +4233,128 @@ function Table<T extends { id: string }>({
       )}
     </>
   );
+}
+
+function CategoryTree({
+  rows,
+  countLabel,
+  countFor,
+  onEdit,
+  onDelete,
+}: {
+  rows: AudioCategory[];
+  countLabel: string;
+  countFor: (row: AudioCategory) => number;
+  onEdit: (row: AudioCategory) => void;
+  onDelete: (row: AudioCategory) => void;
+}) {
+  const roots = rows.filter((row) => !row.parentId);
+  const childrenByParent = rows.reduce<Record<string, AudioCategory[]>>((acc, row) => {
+    if (!row.parentId) return acc;
+    acc[row.parentId] = [...(acc[row.parentId] ?? []), row];
+    return acc;
+  }, {});
+
+  const sortedRoots = [...roots].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+  if (rows.length === 0) return <div className="empty">Chưa có danh mục.</div>;
+
+  return (
+    <div className="category-tree">
+      {sortedRoots.map((row) => (
+        <CategoryTreeNode
+          key={row.id}
+          row={row}
+          depth={0}
+          childrenByParent={childrenByParent}
+          countLabel={countLabel}
+          countFor={countFor}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CategoryTreeNode({
+  row,
+  depth,
+  childrenByParent,
+  countLabel,
+  countFor,
+  onEdit,
+  onDelete,
+}: {
+  row: AudioCategory;
+  depth: number;
+  childrenByParent: Record<string, AudioCategory[]>;
+  countLabel: string;
+  countFor: (row: AudioCategory) => number;
+  onEdit: (row: AudioCategory) => void;
+  onDelete: (row: AudioCategory) => void;
+}) {
+  const children = [...(childrenByParent[row.id] ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  const count = countFor(row);
+  return (
+    <div className="category-tree-node" style={{ marginLeft: depth * 22 }}>
+      <div className="category-tree-row">
+        <div>
+          <strong>{row.name}</strong>
+          <span>{children.length > 0 ? `${children.length} phẩm • ` : ''}{count.toLocaleString('vi-VN')} {countLabel}</span>
+          {row.description && <small>{row.description}</small>}
+        </div>
+        <div className="action-group">
+          <button className="ghost" type="button" onClick={() => onEdit(row)}>
+            <Pencil size={15} />
+            Sửa
+          </button>
+          <button
+            className="danger"
+            type="button"
+            onClick={() => {
+              if (window.confirm('Xóa danh mục này? Thao tác này không thể hoàn tác.')) onDelete(row);
+            }}
+          >
+            <Trash2 size={15} />
+            Xóa
+          </button>
+        </div>
+      </div>
+      {children.map((child) => (
+        <CategoryTreeNode
+          key={child.id}
+          row={child}
+          depth={depth + 1}
+          childrenByParent={childrenByParent}
+          countLabel={countLabel}
+          countFor={countFor}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
+
+function categoryTreeOptions(rows: AudioCategory[]) {
+  const childrenByParent = rows.reduce<Record<string, AudioCategory[]>>((acc, row) => {
+    if (!row.parentId) return acc;
+    acc[row.parentId] = [...(acc[row.parentId] ?? []), row];
+    return acc;
+  }, {});
+  const roots = rows.filter((row) => !row.parentId).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  const options: Array<[string, string]> = [];
+
+  function visit(row: AudioCategory, depth: number) {
+    options.push([row.id, `${depth > 0 ? `${'-- '.repeat(depth)}` : ''}${row.name}`]);
+    for (const child of [...(childrenByParent[row.id] ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'vi'))) {
+      visit(child, depth + 1);
+    }
+  }
+
+  roots.forEach((root) => visit(root, 0));
+  return options;
 }
 
 function paginationPages(current: number, total: number) {
