@@ -14,12 +14,16 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import {
+  IsArray,
+  IsBoolean,
   IsEnum,
+  IsEmail,
   IsIn,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Max,
   Min,
 } from "class-validator";
@@ -80,15 +84,25 @@ class FeedbackDto {
 
   @IsOptional()
   @IsString()
-  userId?: string;
-
-  @IsOptional()
-  @IsString()
   guestName?: string;
 
   @IsOptional()
-  @IsString()
+  @IsEmail()
   guestEmail?: string;
+}
+
+class HistoryDto {
+  @IsString()
+  videoId!: string;
+}
+
+class AudioProgressDto {
+  @IsString()
+  audioId!: string;
+
+  @IsNumber()
+  @Min(0)
+  lastPosition!: number;
 }
 
 class ScriptureReminderDto {
@@ -99,14 +113,54 @@ class ScriptureReminderDto {
   title!: string;
 
   @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   timeOfDay!: string;
 
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
   weekdays!: number[];
 
   @IsEnum(ReminderResumeMode)
   resumeMode!: ReminderResumeMode;
 
   @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  lastLineIndex?: number;
+}
+
+class UpdateScriptureReminderDto {
+  @IsOptional()
+  @IsString()
+  scriptureId?: string;
+
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  timeOfDay?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  weekdays?: number[];
+
+  @IsOptional()
+  @IsEnum(ReminderResumeMode)
+  resumeMode?: ReminderResumeMode;
+
+  @IsOptional()
+  @IsBoolean()
   active?: boolean;
 
   @IsOptional()
@@ -159,6 +213,20 @@ export class UserController {
     }
   }
 
+  private async optionalUserIdFromRequest(request: Request) {
+    const authorization = request.headers.authorization;
+    if (!authorization?.startsWith("Bearer ")) return undefined;
+    return this.userIdFromRequest(request);
+  }
+
+  private async ensurePlaylistOwner(playlistId: string, userId: string) {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: { id: playlistId, userId },
+      select: { id: true },
+    });
+    if (!playlist) throw new NotFoundException("Không tìm thấy danh sách phát");
+  }
+
   @Post("playlist")
   async createPlaylist(@Req() request: Request, @Body() dto: PlaylistDto) {
     const userId = await this.userIdFromRequest(request);
@@ -177,7 +245,13 @@ export class UserController {
   }
 
   @Put("playlist/:id")
-  renamePlaylist(@Param("id") id: string, @Body() dto: PlaylistDto) {
+  async renamePlaylist(
+    @Req() request: Request,
+    @Param("id") id: string,
+    @Body() dto: PlaylistDto,
+  ) {
+    const userId = await this.userIdFromRequest(request);
+    await this.ensurePlaylistOwner(id, userId);
     return this.prisma.playlist.update({
       where: { id },
       data: { name: dto.name },
@@ -185,12 +259,20 @@ export class UserController {
   }
 
   @Delete("playlist/:id")
-  deletePlaylist(@Param("id") id: string) {
+  async deletePlaylist(@Req() request: Request, @Param("id") id: string) {
+    const userId = await this.userIdFromRequest(request);
+    await this.ensurePlaylistOwner(id, userId);
     return this.prisma.playlist.delete({ where: { id } });
   }
 
   @Post("playlist/:id/add-audio")
-  addAudio(@Param("id") playlistId: string, @Body() dto: PlaylistAudioDto) {
+  async addAudio(
+    @Req() request: Request,
+    @Param("id") playlistId: string,
+    @Body() dto: PlaylistAudioDto,
+  ) {
+    const userId = await this.userIdFromRequest(request);
+    await this.ensurePlaylistOwner(playlistId, userId);
     return this.prisma.playlistItem.create({
       data: {
         playlistId,
@@ -201,9 +283,15 @@ export class UserController {
   }
 
   @Post("playlist/:id/remove-audio")
-  removeAudio(@Param("id") playlistId: string, @Body() dto: PlaylistAudioDto) {
-    return this.prisma.playlistItem.delete({
-      where: { playlistId_audioId: { playlistId, audioId: dto.audioId } },
+  async removeAudio(
+    @Req() request: Request,
+    @Param("id") playlistId: string,
+    @Body() dto: PlaylistAudioDto,
+  ) {
+    const userId = await this.userIdFromRequest(request);
+    await this.ensurePlaylistOwner(playlistId, userId);
+    return this.prisma.playlistItem.deleteMany({
+      where: { playlistId, audioId: dto.audioId },
     });
   }
 
@@ -278,15 +366,15 @@ export class UserController {
   }
 
   @Post("history")
-  async history(@Req() request: Request, @Body("videoId") videoId: string) {
+  async history(@Req() request: Request, @Body() dto: HistoryDto) {
     const userId = await this.userIdFromRequest(request);
-    return this.prisma.history.create({ data: { userId, videoId } });
+    return this.prisma.history.create({ data: { userId, videoId: dto.videoId } });
   }
 
   @Post("audio-progress")
   async progress(
     @Req() request: Request,
-    @Body() dto: { audioId: string; lastPosition: number },
+    @Body() dto: AudioProgressDto,
   ) {
     const userId = await this.userIdFromRequest(request);
     return this.prisma.audioProgress.upsert({
@@ -357,7 +445,7 @@ export class UserController {
   async updateScriptureReminder(
     @Req() request: Request,
     @Param("id") id: string,
-    @Body() dto: Partial<ScriptureReminderDto>,
+    @Body() dto: UpdateScriptureReminderDto,
   ) {
     const userId = await this.userIdFromRequest(request);
     const existing = await this.prisma.scriptureReminder.findFirst({
@@ -483,17 +571,20 @@ export class UserController {
   }
 
   @Post("feedback")
-  feedback(@Body() dto: FeedbackDto) {
-    const content = dto.userId
-      ? dto.content.trim()
+  async feedback(@Req() request: Request, @Body() dto: FeedbackDto) {
+    const userId = await this.optionalUserIdFromRequest(request);
+    const message = dto.content.trim();
+    if (!message) throw new BadRequestException("Nội dung góp ý không được để trống");
+    const content = userId
+      ? message
       : JSON.stringify({
           source: "guest",
           name: dto.guestName?.trim() || "Khách",
           email: dto.guestEmail?.trim() || "",
-          message: dto.content.trim(),
+          message,
         });
     return this.prisma.feedback.create({
-      data: { userId: dto.userId || null, content, type: dto.type },
+      data: { userId: userId ?? null, content, type: dto.type },
     });
   }
 

@@ -1,5 +1,6 @@
-import { BadRequestException, Body, Controller, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { IsIn, IsString } from 'class-validator';
+import { AdminAuthGuard } from '../auth/admin.guard';
 import { R2Service } from '../storage/r2.service';
 
 class PresignedUrlDto {
@@ -40,6 +41,7 @@ export class UploadController {
   constructor(private readonly r2: R2Service) {}
 
   @Post('presigned-url')
+  @UseGuards(AdminAuthGuard)
   presignedUrl(@Body() dto: PresignedUrlDto) {
     if (!['audio/mpeg', 'video/mp4', 'image/webp'].includes(dto.contentType)) {
       throw new BadRequestException('Unsupported MIME type');

@@ -46,6 +46,16 @@ class ResetPasswordDto {
   newPassword!: string;
 }
 
+class ForgotPasswordDto {
+  @IsOptional()
+  @IsString()
+  identifier?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
@@ -61,8 +71,8 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  forgotPassword(@Body('identifier') identifier: string) {
-    return this.auth.forgotPassword(identifier);
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.auth.forgotPassword(dto.identifier ?? dto.email ?? '');
   }
 
   @Post('reset-password')

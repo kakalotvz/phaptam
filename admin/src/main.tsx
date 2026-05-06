@@ -3706,7 +3706,7 @@ function BbCodeTextarea({
       />
       <div className={`bbcode-preview ${compact ? 'compact' : ''}`}>
         <span className="bbcode-preview-label">Xem trước</span>
-        <div dangerouslySetInnerHTML={{ __html: bbcodeToPreviewHtml(value) }} />
+        <div dangerouslySetInnerHTML={{ __html: sanitizePreviewHtml(bbcodeToPreviewHtml(value)) }} />
       </div>
     </div>
   );
@@ -3749,6 +3749,63 @@ function bbcodeToPreviewHtml(value: string) {
       return `<p>${bbcodeInlineToHtml(block).replace(/\n/g, '<br>')}</p>`;
     })
     .join('');
+}
+
+function sanitizePreviewHtml(html: string) {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const allowedTags = new Set([
+    'A',
+    'BLOCKQUOTE',
+    'BR',
+    'DIV',
+    'EM',
+    'FIGURE',
+    'IMG',
+    'LI',
+    'OL',
+    'P',
+    'S',
+    'SPAN',
+    'STRONG',
+    'U',
+    'UL',
+  ]);
+
+  template.content.querySelectorAll('script, style, iframe, object, embed').forEach((node) => node.remove());
+  template.content.querySelectorAll('*').forEach((node) => {
+    const element = node as HTMLElement;
+    if (!allowedTags.has(element.tagName)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      return;
+    }
+
+    Array.from(element.attributes).forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      if (name.startsWith('on') || name === 'style') {
+        element.removeAttribute(attribute.name);
+        return;
+      }
+
+      if (element.tagName === 'A') {
+        if (name !== 'href' && name !== 'target' && name !== 'rel') element.removeAttribute(attribute.name);
+        if (name === 'href' && !isSafeMediaUrl(attribute.value)) element.removeAttribute(attribute.name);
+        element.setAttribute('target', '_blank');
+        element.setAttribute('rel', 'noreferrer');
+        return;
+      }
+
+      if (element.tagName === 'IMG') {
+        if (name !== 'src' && name !== 'alt') element.removeAttribute(attribute.name);
+        if (name === 'src' && !isSafeMediaUrl(attribute.value)) element.removeAttribute(attribute.name);
+        return;
+      }
+
+      if (!['class', 'data-video'].includes(name)) element.removeAttribute(attribute.name);
+    });
+  });
+
+  return template.innerHTML;
 }
 
 function bbcodeInlineToHtml(value: string) {
