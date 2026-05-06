@@ -1368,19 +1368,6 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
         </form>
       </Panel>
 
-      <Panel title="Danh mục Kinh">
-        <CategoryTree
-          rows={readingCategories}
-          countLabel="bài đọc"
-          countFor={countReadingsInCategory}
-          dropdown
-          maxChildDepth={5}
-          onAddChild={setAddingParent}
-          onEdit={setEditingCategory}
-          onDelete={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục Kinh đọc')}
-        />
-      </Panel>
-
       <Panel title={editingId ? 'Sửa Kinh đọc' : 'Tạo Kinh đọc'}>
         <div className="news-editor">
           {editingId && (
@@ -1455,6 +1442,11 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
           readings={data.scriptureReadings}
           categories={readingCategories}
           childrenByParent={readingChildrenByParent}
+          countForCategory={countReadingsInCategory}
+          maxChildDepth={5}
+          onAddCategoryChild={setAddingParent}
+          onEditCategory={setEditingCategory}
+          onDeleteCategory={(row) => run(() => api.remove(`/admin/audio-category/${row.id}`), 'Đã xóa danh mục Kinh đọc')}
           onEdit={editReading}
           onDelete={(row) => run(() => api.remove(`/admin/scripture-reading/${row.id}`), 'Đã xóa Kinh đọc')}
         />
@@ -1502,12 +1494,22 @@ function ScriptureReadingArchive({
   readings,
   categories,
   childrenByParent,
+  countForCategory,
+  maxChildDepth,
+  onAddCategoryChild,
+  onEditCategory,
+  onDeleteCategory,
   onEdit,
   onDelete,
 }: {
   readings: Scripture[];
   categories: AudioCategory[];
   childrenByParent: Record<string, AudioCategory[]>;
+  countForCategory: (row: AudioCategory) => number;
+  maxChildDepth: number;
+  onAddCategoryChild: (row: AudioCategory) => void;
+  onEditCategory: (row: AudioCategory) => void;
+  onDeleteCategory: (row: AudioCategory) => void;
   onEdit: (row: Scripture) => void;
   onDelete: (row: Scripture) => void;
 }) {
@@ -1539,6 +1541,8 @@ function ScriptureReadingArchive({
   }, [categories, childrenByParent, childFilter, dateFilter, parentFilter, query, readings]);
 
   const visibleCount = Object.values(readingsByCategory).reduce((sum, items) => sum + items.length, 0);
+  const hasActiveFilter = Boolean(query.trim() || parentFilter || childFilter || dateFilter);
+  const hasCategories = rootCategories.length > 0;
 
   return (
     <div className="reading-archive">
@@ -1599,7 +1603,7 @@ function ScriptureReadingArchive({
         <span>Gấp/mở từng danh mục để xem danh mục con và nội dung rút gọn.</span>
       </div>
 
-      {visibleCount === 0 ? (
+      {visibleCount === 0 && (!hasCategories || hasActiveFilter) ? (
         <div className="empty">Không tìm thấy bài Kinh đọc phù hợp.</div>
       ) : (
         <div className="reading-dropdown-list">
@@ -1610,6 +1614,12 @@ function ScriptureReadingArchive({
               depth={0}
               childrenByParent={childrenByParent}
               readingsByCategory={readingsByCategory}
+              showEmptyCategories={!hasActiveFilter}
+              countForCategory={countForCategory}
+              maxChildDepth={maxChildDepth}
+              onAddCategoryChild={onAddCategoryChild}
+              onEditCategory={onEditCategory}
+              onDeleteCategory={onDeleteCategory}
               onEdit={onEdit}
               onDelete={onDelete}
             />
@@ -1636,6 +1646,12 @@ function ScriptureReadingCategoryDropdown({
   depth,
   childrenByParent,
   readingsByCategory,
+  showEmptyCategories,
+  countForCategory,
+  maxChildDepth,
+  onAddCategoryChild,
+  onEditCategory,
+  onDeleteCategory,
   onEdit,
   onDelete,
 }: {
@@ -1643,22 +1659,58 @@ function ScriptureReadingCategoryDropdown({
   depth: number;
   childrenByParent: Record<string, AudioCategory[]>;
   readingsByCategory: Record<string, Scripture[]>;
+  showEmptyCategories: boolean;
+  countForCategory: (row: AudioCategory) => number;
+  maxChildDepth: number;
+  onAddCategoryChild: (row: AudioCategory) => void;
+  onEditCategory: (row: AudioCategory) => void;
+  onDeleteCategory: (row: AudioCategory) => void;
   onEdit: (row: Scripture) => void;
   onDelete: (row: Scripture) => void;
 }) {
   const children = [...(childrenByParent[category.id] ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   const count = readingCountForCategory(category.id, childrenByParent, readingsByCategory);
-  if (count === 0) return null;
+  const totalCount = countForCategory(category);
+  const displayCount = showEmptyCategories ? totalCount : count;
+  const canAddChild = depth < maxChildDepth;
+  if (count === 0 && !showEmptyCategories) return null;
 
   return (
-    <details className="reading-dropdown" open={depth === 0}>
+    <details className="reading-dropdown reading-category-dropdown" open={depth === 0}>
       <summary style={{ paddingLeft: depth * 18 }}>
         <div>
           <strong>{category.name}</strong>
           <span>
             {children.length > 0 ? `${children.length} danh mục con • ` : ''}
-            {count.toLocaleString('vi-VN')} bài đọc
+            {displayCount.toLocaleString('vi-VN')} bài đọc
           </span>
+          {category.description && <small>{category.description}</small>}
+        </div>
+        <div className="action-group" onClick={(event) => event.stopPropagation()}>
+          <button
+            className="ghost icon-action"
+            type="button"
+            onClick={() => onAddCategoryChild(category)}
+            disabled={!canAddChild}
+            title={canAddChild ? 'Thêm danh mục con' : 'Đã đạt tối đa 5 cấp danh mục con'}
+            aria-label={`Thêm danh mục con cho ${category.name}`}
+          >
+            <Plus size={16} />
+          </button>
+          <button className="ghost" type="button" onClick={() => onEditCategory(category)}>
+            <Pencil size={15} />
+            Sửa
+          </button>
+          <button
+            className="danger"
+            type="button"
+            onClick={() => {
+              if (window.confirm('Xóa danh mục này? Thao tác này không thể hoàn tác.')) onDeleteCategory(category);
+            }}
+          >
+            <Trash2 size={15} />
+            Xóa
+          </button>
         </div>
       </summary>
       <div className="reading-dropdown-body">
@@ -1672,6 +1724,12 @@ function ScriptureReadingCategoryDropdown({
             depth={depth + 1}
             childrenByParent={childrenByParent}
             readingsByCategory={readingsByCategory}
+            showEmptyCategories={showEmptyCategories}
+            countForCategory={countForCategory}
+            maxChildDepth={maxChildDepth}
+            onAddCategoryChild={onAddCategoryChild}
+            onEditCategory={onEditCategory}
+            onDeleteCategory={onDeleteCategory}
             onEdit={onEdit}
             onDelete={onDelete}
           />
@@ -1692,30 +1750,33 @@ function ScriptureReadingRows({ readings, onEdit, onDelete }: { readings: Script
         <span>Lượt xem</span>
         <span>Thao tác</span>
       </div>
-      {sorted.map((row) => (
-        <div className="reading-item-grid" key={row.id}>
-          <strong>{row.title}</strong>
-          <span>{readingPreview(row)}</span>
-          <span>{formatScriptureReadingDate(row.createdAt)}</span>
-          <span>{row.viewCount.toLocaleString('vi-VN')}</span>
-          <div className="action-group">
-            <button className="ghost" type="button" onClick={() => onEdit(row)}>
-              <Pencil size={15} />
-              Sửa
-            </button>
-            <button
-              className="danger"
-              type="button"
-              onClick={() => {
-                if (window.confirm('Xóa bài Kinh đọc này? Thao tác này không thể hoàn tác.')) onDelete(row);
-              }}
-            >
-              <Trash2 size={15} />
-              Xóa
-            </button>
+      {sorted.map((row) => {
+        const preview = readingPreview(row);
+        return (
+          <div className="reading-item-grid" key={row.id}>
+            <strong>{row.title}</strong>
+            <span className="reading-preview-text" title={preview === '-' ? undefined : preview}>{preview}</span>
+            <span>{formatScriptureReadingDate(row.createdAt)}</span>
+            <span>{row.viewCount.toLocaleString('vi-VN')}</span>
+            <div className="action-group">
+              <button className="ghost" type="button" onClick={() => onEdit(row)}>
+                <Pencil size={15} />
+                Sửa
+              </button>
+              <button
+                className="danger"
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Xóa bài Kinh đọc này? Thao tác này không thể hoàn tác.')) onDelete(row);
+                }}
+              >
+                <Trash2 size={15} />
+                Xóa
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -4739,7 +4800,13 @@ function readingCountForCategory(id: string, childrenByParent: Record<string, Au
 
 function readingPreview(row: Scripture) {
   const text = (row.description?.trim() || newsContentToPlainText(row.content ?? '')).replace(/\s+/g, ' ').trim();
-  return text ? text.slice(0, 140) : '-';
+  return truncateText(text, 96) || '-';
+}
+
+function truncateText(text: string, maxLength: number) {
+  const chars = Array.from(text);
+  if (chars.length <= maxLength) return text;
+  return `${chars.slice(0, maxLength).join('').trimEnd()}...`;
 }
 
 function readingDateKey(value?: string) {

@@ -874,6 +874,7 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
   int _currentPage = 0;
   _SavedReadingProgress? _savedProgress;
   _ReadingBookmark? _bookmark;
+  _PendingReadingBookmark? _pendingBookmark;
   Timer? _saveTimer;
 
   @override
@@ -935,7 +936,7 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
             ),
           IconButton(
             tooltip: _bookmark == null ? 'Đánh dấu' : 'Xem đánh dấu',
-            onPressed: () => _showBookmarkSheet(pages),
+            onPressed: () => _showBookmarkGuide(pages),
             icon: Icon(
               _bookmark == null ? Icons.bookmark_add_outlined : Icons.bookmark,
             ),
@@ -954,7 +955,10 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
               controller: _pageController,
               itemCount: pages.length,
               onPageChanged: (index) {
-                _currentPage = index;
+                setState(() {
+                  _currentPage = index;
+                  _pendingBookmark = null;
+                });
                 _queueProgressSave();
               },
               itemBuilder: (context, index) {
@@ -964,11 +968,19 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
                     : null;
                 return _BookPage(
                   title: index == 0 ? widget.reading.title : null,
-                  content: _contentWithBookmark(pages[index], pageBookmark),
+                  content: pages[index],
+                  displayContent: _contentWithBookmark(
+                    pages[index],
+                    pageBookmark,
+                  ),
                   pageLabel: '${index + 1}/${pages.length}',
                   baseStyle: baseStyle,
                   blueLightFilter: _blueLightFilter,
                   bookmark: pageBookmark,
+                  pageIndex: index,
+                  pendingBookmark: _pendingBookmark,
+                  onBookmarkCandidate: _setPendingBookmark,
+                  onConfirmBookmark: _confirmPendingBookmark,
                 );
               },
             )
@@ -987,14 +999,19 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
                 ),
                 const SizedBox(height: 18),
                 for (var index = 0; index < pages.length; index++) ...[
-                  RichContent(
-                    content: _contentWithBookmark(
+                  _BookmarkableRichContent(
+                    content: pages[index],
+                    displayContent: _contentWithBookmark(
                       pages[index],
                       _bookmark != null && _bookmark!.pageIndex == index
                           ? _bookmark
                           : null,
                     ),
                     baseStyle: baseStyle,
+                    pageIndex: index,
+                    pendingBookmark: _pendingBookmark,
+                    onBookmarkCandidate: _setPendingBookmark,
+                    onConfirmBookmark: _confirmPendingBookmark,
                   ),
                   if (_bookmark != null && _bookmark!.pageIndex == index)
                     _BookmarkNotice(
@@ -1019,13 +1036,14 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
                   setState(() => _fontSize = (_fontSize + 1).clamp(15, 30)),
               onToggleBlueLight: () =>
                   setState(() => _blueLightFilter = !_blueLightFilter),
-              onBookmark: () => _showBookmarkSheet(pages),
+              onBookmark: () => _showBookmarkGuide(pages),
               onToggleFlow: () {
-                setState(
-                  () => _flow = _flow == _ReadingFlow.horizontal
+                setState(() {
+                  _flow = _flow == _ReadingFlow.horizontal
                       ? _ReadingFlow.vertical
-                      : _ReadingFlow.horizontal,
-                );
+                      : _ReadingFlow.horizontal;
+                  _pendingBookmark = null;
+                });
                 _queueProgressSave();
               },
             ),
@@ -1088,6 +1106,7 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     setState(() {
       _flow = progress.flow;
       _currentPage = pageIndex;
+      _pendingBookmark = null;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -1103,7 +1122,10 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
   }
 
   void _restartReading() {
-    setState(() => _currentPage = 0);
+    setState(() {
+      _currentPage = 0;
+      _pendingBookmark = null;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_pageController.hasClients) _pageController.jumpToPage(0);
       if (_verticalScrollController.hasClients) {
@@ -1145,41 +1167,42 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     return (ratio * (pages.length - 1)).round();
   }
 
-  Future<void> _showBookmarkSheet(List<String> pages) async {
-    final pageIndex = _currentReadablePage(pages).clamp(0, pages.length - 1);
-    final words = _readingWords(pages[pageIndex]);
-    if (words.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Trang này chưa có chữ để đánh dấu.')),
-      );
-      return;
-    }
-
+  Future<void> _showBookmarkGuide(List<String> pages) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: .62,
-        minChildSize: .38,
-        maxChildSize: .9,
-        builder: (context, controller) => SafeArea(
-          child: ListView(
-            controller: controller,
-            padding: const EdgeInsets.fromLTRB(18, 4, 18, 22),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Đánh dấu vị trí đọc',
+                'Cách đánh dấu',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Chọn đúng chữ cuối cùng bạn vừa đọc ở trang ${pageIndex + 1}. Mỗi bài Kinh đọc chỉ giữ 1 đánh dấu.',
-                style: Theme.of(context).textTheme.bodyMedium,
+              const SizedBox(height: 10),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.touch_app_outlined),
+                title: Text('Nhấn giữ khoảng 2 giây tại vị trí muốn đánh dấu.'),
+              ),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(child: Text('đ')),
+                title: Text(
+                  'Khi nút “đ” hiện lên, bấm vào nút đó để xác nhận.',
+                ),
+              ),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.bookmark_outline),
+                title: Text('Mỗi bài Kinh đọc chỉ giữ một vị trí đánh dấu.'),
               ),
               if (_bookmark != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.bookmark),
@@ -1213,28 +1236,21 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
                   ),
                 ),
               ],
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (var i = 0; i < words.length; i++)
-                    ChoiceChip(
-                      label: Text(words[i].text),
-                      selected:
-                          _bookmark?.pageIndex == pageIndex &&
-                          _bookmark?.wordIndex == i,
-                      onSelected: (_) {
-                        Navigator.pop(context);
-                        unawaited(_saveBookmark(pageIndex, i, words));
-                      },
-                    ),
-                ],
-              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  void _setPendingBookmark(_PendingReadingBookmark pending) {
+    setState(() => _pendingBookmark = pending);
+  }
+
+  void _confirmPendingBookmark(_PendingReadingBookmark pending) {
+    setState(() => _pendingBookmark = null);
+    unawaited(
+      _saveBookmark(pending.pageIndex, pending.wordIndex, pending.words),
     );
   }
 
@@ -1253,6 +1269,7 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     setState(() {
       _bookmark = bookmark;
       _currentPage = pageIndex;
+      _pendingBookmark = null;
     });
     await _readingStore.saveBookmark(widget.reading.id, bookmark);
     await _saveProgressNow();
@@ -1263,7 +1280,10 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
   }
 
   Future<void> _clearBookmark() async {
-    setState(() => _bookmark = null);
+    setState(() {
+      _bookmark = null;
+      _pendingBookmark = null;
+    });
     await _readingStore.clearBookmark(widget.reading.id);
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -1277,6 +1297,7 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     setState(() {
       _flow = _ReadingFlow.horizontal;
       _currentPage = bookmark.pageIndex.clamp(0, pages.length - 1);
+      _pendingBookmark = null;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_pageController.hasClients) {
@@ -1369,19 +1390,29 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
 class _BookPage extends StatelessWidget {
   const _BookPage({
     required this.content,
+    required this.displayContent,
     required this.pageLabel,
     required this.baseStyle,
     required this.blueLightFilter,
+    required this.pageIndex,
+    required this.onBookmarkCandidate,
+    required this.onConfirmBookmark,
+    this.pendingBookmark,
     this.bookmark,
     this.title,
   });
 
   final String content;
+  final String displayContent;
   final String pageLabel;
   final TextStyle baseStyle;
   final bool blueLightFilter;
+  final int pageIndex;
+  final _PendingReadingBookmark? pendingBookmark;
   final _ReadingBookmark? bookmark;
   final String? title;
+  final ValueChanged<_PendingReadingBookmark> onBookmarkCandidate;
+  final ValueChanged<_PendingReadingBookmark> onConfirmBookmark;
 
   @override
   Widget build(BuildContext context) {
@@ -1414,7 +1445,15 @@ class _BookPage extends StatelessWidget {
               ),
               const SizedBox(height: 18),
             ],
-            RichContent(content: content, baseStyle: baseStyle),
+            _BookmarkableRichContent(
+              content: content,
+              displayContent: displayContent,
+              baseStyle: baseStyle,
+              pageIndex: pageIndex,
+              pendingBookmark: pendingBookmark,
+              onBookmarkCandidate: onBookmarkCandidate,
+              onConfirmBookmark: onConfirmBookmark,
+            ),
             if (bookmark != null) ...[
               const SizedBox(height: 8),
               _BookmarkNotice(bookmark: bookmark!, textColor: textColor),
@@ -1430,6 +1469,167 @@ class _BookPage extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BookmarkableRichContent extends StatefulWidget {
+  const _BookmarkableRichContent({
+    required this.content,
+    required this.displayContent,
+    required this.baseStyle,
+    required this.pageIndex,
+    required this.pendingBookmark,
+    required this.onBookmarkCandidate,
+    required this.onConfirmBookmark,
+  });
+
+  final String content;
+  final String displayContent;
+  final TextStyle baseStyle;
+  final int pageIndex;
+  final _PendingReadingBookmark? pendingBookmark;
+  final ValueChanged<_PendingReadingBookmark> onBookmarkCandidate;
+  final ValueChanged<_PendingReadingBookmark> onConfirmBookmark;
+
+  @override
+  State<_BookmarkableRichContent> createState() =>
+      _BookmarkableRichContentState();
+}
+
+class _BookmarkableRichContentState extends State<_BookmarkableRichContent> {
+  Timer? _holdTimer;
+  Offset? _downPosition;
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = widget.pendingBookmark?.pageIndex == widget.pageIndex
+        ? widget.pendingBookmark
+        : null;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxLeft = constraints.maxWidth > 42
+            ? constraints.maxWidth - 42
+            : 0.0;
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (event) =>
+              _startHoldTimer(event.localPosition, constraints.maxWidth),
+          onPointerMove: (event) {
+            final downPosition = _downPosition;
+            if (downPosition == null) return;
+            if ((event.localPosition - downPosition).distance > 12) {
+              _cancelHoldTimer();
+            }
+          },
+          onPointerUp: (_) => _cancelHoldTimer(),
+          onPointerCancel: (_) => _cancelHoldTimer(),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              RichContent(
+                content: widget.displayContent,
+                baseStyle: widget.baseStyle,
+              ),
+              if (pending != null)
+                Positioned(
+                  left: pending.position.dx.clamp(0.0, maxLeft).toDouble(),
+                  top: (pending.position.dy - 46)
+                      .clamp(0.0, double.infinity)
+                      .toDouble(),
+                  child: _BookmarkConfirmButton(
+                    word: pending.words[pending.wordIndex].text,
+                    onPressed: () => widget.onConfirmBookmark(pending),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _startHoldTimer(Offset position, double width) {
+    _cancelHoldTimer();
+    _downPosition = position;
+    _holdTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      final words = _readingWords(widget.content);
+      final wordIndex = _wordIndexAtOffset(
+        content: widget.content,
+        style: widget.baseStyle,
+        width: width,
+        offset: position,
+      );
+      if (wordIndex == null || words.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vị trí này chưa có chữ để đánh dấu.')),
+        );
+        return;
+      }
+      widget.onBookmarkCandidate(
+        _PendingReadingBookmark(
+          pageIndex: widget.pageIndex,
+          wordIndex: wordIndex.clamp(0, words.length - 1).toInt(),
+          words: words,
+          position: position,
+        ),
+      );
+    });
+  }
+
+  void _cancelHoldTimer() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+  }
+}
+
+class _BookmarkConfirmButton extends StatelessWidget {
+  const _BookmarkConfirmButton({required this.word, required this.onPressed});
+
+  final String word;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 6,
+      color: Theme.of(context).colorScheme.primary,
+      shape: const StadiumBorder(),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'đ',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                word,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1660,6 +1860,20 @@ class _ReadingBookmark {
   };
 }
 
+class _PendingReadingBookmark {
+  const _PendingReadingBookmark({
+    required this.pageIndex,
+    required this.wordIndex,
+    required this.words,
+    required this.position,
+  });
+
+  final int pageIndex;
+  final int wordIndex;
+  final List<_ReadingWord> words;
+  final Offset position;
+}
+
 class _ReadingWord {
   const _ReadingWord(this.text);
 
@@ -1765,6 +1979,36 @@ List<_ReadingWord> _readingWords(String content) {
       .map((match) => _ReadingWord(match.group(0) ?? ''))
       .where((word) => word.text.trim().isNotEmpty)
       .toList();
+}
+
+int? _wordIndexAtOffset({
+  required String content,
+  required TextStyle style,
+  required double width,
+  required Offset offset,
+}) {
+  final plain = _plainReadingPreview(content);
+  final matches = _readingWordPattern.allMatches(plain).toList();
+  if (plain.isEmpty || matches.isEmpty || width <= 0) return null;
+
+  final painter = TextPainter(
+    text: TextSpan(text: plain, style: style),
+    textDirection: TextDirection.ltr,
+  )..layout(maxWidth: width);
+  final textOffset = painter
+      .getPositionForOffset(
+        Offset(
+          offset.dx.clamp(0.0, width),
+          offset.dy.clamp(0.0, painter.height),
+        ),
+      )
+      .offset;
+
+  for (var index = 0; index < matches.length; index++) {
+    final match = matches[index];
+    if (textOffset <= match.end) return index;
+  }
+  return matches.length - 1;
 }
 
 String _bookmarkSnippet(List<_ReadingWord> words, int index) {

@@ -1458,15 +1458,19 @@ th {
   font-weight: 700;
 }
 
-.category-dropdown summary {
+.category-dropdown summary,
+.reading-category-dropdown summary {
+  flex-wrap: wrap;
   justify-content: space-between;
 }
 
-.category-dropdown summary > div:first-of-type {
+.category-dropdown summary > div:first-of-type,
+.reading-category-dropdown summary > div:first-of-type {
   min-width: 0;
 }
 
-.category-dropdown summary > .action-group {
+.category-dropdown summary > .action-group,
+.reading-category-dropdown summary > .action-group {
   display: flex;
   flex-shrink: 0;
 }
@@ -1511,6 +1515,16 @@ th {
 
 .reading-item-grid > span {
   overflow-wrap: anywhere;
+}
+
+.reading-preview-text {
+  display: -webkit-box;
+  max-height: 2.9em;
+  overflow: hidden;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .reading-item-head {
