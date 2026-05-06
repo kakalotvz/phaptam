@@ -1452,6 +1452,29 @@ th {
   font-weight: 800;
 }
 
+.reading-dropdown summary small {
+  color: #7a655b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.category-dropdown summary {
+  justify-content: space-between;
+}
+
+.category-dropdown summary > div:first-of-type {
+  min-width: 0;
+}
+
+.category-dropdown summary > .action-group {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.category-dropdown-body {
+  padding-left: 14px;
+}
+
 .reading-dropdown-body {
   display: grid;
   gap: 10px;

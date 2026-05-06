@@ -1368,11 +1368,12 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
         </form>
       </Panel>
 
-      <Panel title="Danh sách Kinh đọc">
+      <Panel title="Danh mục Kinh">
         <CategoryTree
           rows={readingCategories}
           countLabel="bài đọc"
           countFor={countReadingsInCategory}
+          dropdown
           maxChildDepth={5}
           onAddChild={setAddingParent}
           onEdit={setEditingCategory}
@@ -4480,6 +4481,7 @@ function CategoryTree({
   rows,
   countLabel,
   countFor,
+  dropdown = false,
   maxChildDepth,
   onAddChild,
   onEdit,
@@ -4488,6 +4490,7 @@ function CategoryTree({
   rows: AudioCategory[];
   countLabel: string;
   countFor: (row: AudioCategory) => number;
+  dropdown?: boolean;
   maxChildDepth?: number;
   onAddChild?: (row: AudioCategory) => void;
   onEdit: (row: AudioCategory) => void;
@@ -4510,6 +4513,7 @@ function CategoryTree({
           childrenByParent={childrenByParent}
           countLabel={countLabel}
           countFor={countFor}
+          dropdown={dropdown}
           maxChildDepth={maxChildDepth}
           onAddChild={onAddChild}
           onEdit={onEdit}
@@ -4526,6 +4530,7 @@ function CategoryTreeNode({
   childrenByParent,
   countLabel,
   countFor,
+  dropdown,
   maxChildDepth,
   onAddChild,
   onEdit,
@@ -4536,6 +4541,7 @@ function CategoryTreeNode({
   childrenByParent: Record<string, AudioCategory[]>;
   countLabel: string;
   countFor: (row: AudioCategory) => number;
+  dropdown: boolean;
   maxChildDepth?: number;
   onAddChild?: (row: AudioCategory) => void;
   onEdit: (row: AudioCategory) => void;
@@ -4544,6 +4550,70 @@ function CategoryTreeNode({
   const children = [...(childrenByParent[row.id] ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   const count = countFor(row);
   const canAddChild = onAddChild && (maxChildDepth === undefined || depth < maxChildDepth);
+  const actions = (
+    <div className="action-group" onClick={(event) => event.stopPropagation()}>
+      {onAddChild && (
+        <button
+          className="ghost icon-action"
+          type="button"
+          onClick={() => onAddChild(row)}
+          disabled={!canAddChild}
+          title={canAddChild ? 'Thêm danh mục con' : 'Đã đạt tối đa 5 cấp danh mục con'}
+          aria-label={`Thêm danh mục con cho ${row.name}`}
+        >
+          <Plus size={16} />
+        </button>
+      )}
+      <button className="ghost" type="button" onClick={() => onEdit(row)}>
+        <Pencil size={15} />
+        Sửa
+      </button>
+      <button
+        className="danger"
+        type="button"
+        onClick={() => {
+          if (window.confirm('Xóa danh mục này? Thao tác này không thể hoàn tác.')) onDelete(row);
+        }}
+      >
+        <Trash2 size={15} />
+        Xóa
+      </button>
+    </div>
+  );
+  if (dropdown) {
+    return (
+      <details className="reading-dropdown category-dropdown" open={depth === 0}>
+        <summary style={{ paddingLeft: 14 + depth * 18 }}>
+          <div>
+            <strong>{row.name}</strong>
+            <span>{children.length > 0 ? `${children.length} danh mục con • ` : ''}{count.toLocaleString('vi-VN')} {countLabel}</span>
+            {row.description && <small>{row.description}</small>}
+          </div>
+          {actions}
+        </summary>
+        {children.length > 0 && (
+          <div className="reading-dropdown-body category-dropdown-body">
+            {children.map((child) => (
+              <CategoryTreeNode
+                key={child.id}
+                row={child}
+                depth={depth + 1}
+                childrenByParent={childrenByParent}
+                countLabel={countLabel}
+                countFor={countFor}
+                dropdown={dropdown}
+                maxChildDepth={maxChildDepth}
+                onAddChild={onAddChild}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+        )}
+      </details>
+    );
+  }
+
   return (
     <div className="category-tree-node" style={{ marginLeft: depth * 22 }}>
       <div className="category-tree-row">
@@ -4552,34 +4622,7 @@ function CategoryTreeNode({
           <span>{children.length > 0 ? `${children.length} danh mục con • ` : ''}{count.toLocaleString('vi-VN')} {countLabel}</span>
           {row.description && <small>{row.description}</small>}
         </div>
-        <div className="action-group">
-          {onAddChild && (
-            <button
-              className="ghost icon-action"
-              type="button"
-              onClick={() => onAddChild(row)}
-              disabled={!canAddChild}
-              title={canAddChild ? 'Thêm danh mục con' : 'Đã đạt tối đa 5 cấp danh mục con'}
-              aria-label={`Thêm danh mục con cho ${row.name}`}
-            >
-              <Plus size={16} />
-            </button>
-          )}
-          <button className="ghost" type="button" onClick={() => onEdit(row)}>
-            <Pencil size={15} />
-            Sửa
-          </button>
-          <button
-            className="danger"
-            type="button"
-            onClick={() => {
-              if (window.confirm('Xóa danh mục này? Thao tác này không thể hoàn tác.')) onDelete(row);
-            }}
-          >
-            <Trash2 size={15} />
-            Xóa
-          </button>
-        </div>
+        {actions}
       </div>
       {children.map((child) => (
         <CategoryTreeNode
@@ -4589,6 +4632,7 @@ function CategoryTreeNode({
           childrenByParent={childrenByParent}
           countLabel={countLabel}
           countFor={countFor}
+          dropdown={dropdown}
           maxChildDepth={maxChildDepth}
           onAddChild={onAddChild}
           onEdit={onEdit}
