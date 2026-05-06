@@ -1380,10 +1380,24 @@ th {
   font-weight: 800;
 }
 
+.reading-archive-summary > div {
+  display: grid;
+  gap: 3px;
+}
+
 .reading-archive-summary strong {
   color: #2e2420;
   font-family: "Noto Serif", "Noto Sans", serif;
   font-size: 18px;
+}
+
+.reading-archive-summary span {
+  color: #7a655b;
+}
+
+.reading-summary-hint {
+  max-width: 520px;
+  text-align: right;
 }
 
 .reading-dropdown-list {
@@ -1399,17 +1413,31 @@ th {
 }
 
 .reading-dropdown .reading-dropdown {
-  margin-top: 10px;
+  margin-top: 8px;
   background: rgba(255, 252, 240, .76);
+}
+
+.reading-category-dropdown.depth-1,
+.reading-category-dropdown.depth-2,
+.reading-category-dropdown.depth-3,
+.reading-category-dropdown.depth-4 {
+  border-color: rgba(109, 76, 65, .1);
+  background: rgba(255, 252, 240, .82);
 }
 
 .reading-dropdown summary {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 13px 14px;
+  min-height: 72px;
+  padding: 12px 14px;
   cursor: pointer;
   list-style: none;
+  transition: background .18s ease;
+}
+
+.reading-dropdown summary:hover {
+  background: rgba(246, 234, 208, .32);
 }
 
 .reading-dropdown summary::-webkit-details-marker {
@@ -1418,10 +1446,11 @@ th {
 
 .reading-dropdown summary::before {
   content: "›";
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   color: #fff8e8;
   background: #8b5e3c;
   border-radius: 50%;
@@ -1435,27 +1464,64 @@ th {
   transform: rotate(90deg);
 }
 
-.reading-dropdown summary > div {
+.reading-category-main {
   display: grid;
-  gap: 3px;
+  min-width: 0;
+  gap: 5px;
 }
 
-.reading-dropdown summary strong {
+.reading-category-titleline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.reading-category-titleline strong {
   color: #2e2420;
   font-family: "Noto Serif", "Noto Sans", serif;
   font-size: 17px;
 }
 
-.reading-dropdown summary span {
+.reading-level-badge {
+  width: fit-content;
+  padding: 3px 8px;
+  color: #6f5143;
+  background: rgba(246, 234, 208, .78);
+  border: 1px solid rgba(109, 76, 65, .1);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.reading-category-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reading-category-meta span {
+  width: fit-content;
+  padding: 2px 7px;
   color: #7a655b;
+  background: rgba(255, 255, 255, .56);
+  border: 1px solid rgba(109, 76, 65, .08);
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 800;
 }
 
-.reading-dropdown summary small {
+.reading-category-description {
+  display: -webkit-box;
+  max-width: 92ch;
+  overflow: hidden;
   color: #7a655b;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .category-dropdown summary,
@@ -1475,31 +1541,35 @@ th {
   flex-shrink: 0;
 }
 
+.reading-category-actions {
+  margin-left: auto;
+}
+
 .category-dropdown-body {
   padding-left: 14px;
 }
 
 .reading-dropdown-body {
   display: grid;
-  gap: 10px;
-  padding: 0 14px 14px;
+  gap: 8px;
+  padding: 0 14px 14px 50px;
 }
 
 .reading-items {
   display: grid;
-  gap: 8px;
-  padding: 10px;
-  background: rgba(255, 255, 255, .48);
+  gap: 4px;
+  padding: 8px;
+  background: rgba(255, 255, 255, .58);
   border: 1px solid rgba(109, 76, 65, .08);
   border-radius: 12px;
 }
 
 .reading-item-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 1.1fr) minmax(240px, 1.8fr) 116px 82px minmax(150px, auto);
+  grid-template-columns: minmax(260px, 1fr) 116px 86px minmax(150px, auto);
   gap: 12px;
-  align-items: center;
-  padding: 10px;
+  align-items: start;
+  padding: 10px 12px;
   color: #5d4b43;
   font-size: 13px;
   border-bottom: 1px solid rgba(109, 76, 65, .08);
@@ -1517,9 +1587,28 @@ th {
   overflow-wrap: anywhere;
 }
 
+.reading-item-title {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.reading-item-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reading-item-date,
+.reading-item-views {
+  color: #6f5c52;
+  font-weight: 700;
+}
+
 .reading-preview-text {
   display: -webkit-box;
-  max-height: 2.9em;
+  max-width: 88ch;
+  max-height: 2.8em;
   overflow: hidden;
   line-height: 1.45;
   -webkit-box-orient: vertical;
@@ -1536,6 +1625,10 @@ th {
   background: rgba(246, 234, 208, .64);
   border: 0;
   border-radius: 10px;
+}
+
+.reading-item-head span {
+  color: inherit;
 }
 
 .pagination {

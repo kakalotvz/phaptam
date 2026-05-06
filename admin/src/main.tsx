@@ -1599,8 +1599,14 @@ function ScriptureReadingArchive({
       </div>
 
       <div className="reading-archive-summary">
-        <strong>{visibleCount.toLocaleString('vi-VN')} bài Kinh đọc</strong>
-        <span>Gấp/mở từng danh mục để xem danh mục con và nội dung rút gọn.</span>
+        <div>
+          <strong>{visibleCount.toLocaleString('vi-VN')} bài Kinh đọc</strong>
+          <span>
+            {rootCategories.length.toLocaleString('vi-VN')} danh mục cha
+            {hasActiveFilter ? ' đang khớp bộ lọc' : ' trong thư viện'}
+          </span>
+        </div>
+        <span className="reading-summary-hint">Mở danh mục để xem bài đọc, mô tả dài được rút gọn tự động.</span>
       </div>
 
       {visibleCount === 0 && (!hasCategories || hasActiveFilter) ? (
@@ -1627,9 +1633,14 @@ function ScriptureReadingArchive({
           {readingsByCategory.uncategorized?.length > 0 && (
             <details className="reading-dropdown" open>
               <summary>
-                <div>
-                  <strong>Chưa phân loại</strong>
-                  <span>{readingsByCategory.uncategorized.length.toLocaleString('vi-VN')} bài đọc</span>
+                <div className="reading-category-main">
+                  <div className="reading-category-titleline">
+                    <strong>Chưa phân loại</strong>
+                    <span className="reading-level-badge">Ngoài danh mục</span>
+                  </div>
+                  <div className="reading-category-meta">
+                    <span>{readingsByCategory.uncategorized.length.toLocaleString('vi-VN')} bài đọc</span>
+                  </div>
                 </div>
               </summary>
               <ScriptureReadingRows readings={readingsByCategory.uncategorized} onEdit={onEdit} onDelete={onDelete} />
@@ -1674,19 +1685,27 @@ function ScriptureReadingCategoryDropdown({
   const displayCount = showEmptyCategories ? totalCount : count;
   const canAddChild = depth < maxChildDepth;
   if (count === 0 && !showEmptyCategories) return null;
+  const childCount = children.length;
 
   return (
-    <details className="reading-dropdown reading-category-dropdown" open={depth === 0}>
+    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} open={depth === 0}>
       <summary style={{ paddingLeft: depth * 18 }}>
-        <div>
-          <strong>{category.name}</strong>
-          <span>
-            {children.length > 0 ? `${children.length} danh mục con • ` : ''}
-            {displayCount.toLocaleString('vi-VN')} bài đọc
-          </span>
-          {category.description && <small>{category.description}</small>}
+        <div className="reading-category-main">
+          <div className="reading-category-titleline">
+            <strong>{category.name}</strong>
+            <span className="reading-level-badge">{depth === 0 ? 'Danh mục cha' : `Cấp ${depth + 1}`}</span>
+          </div>
+          <div className="reading-category-meta">
+            {childCount > 0 && <span>{childCount.toLocaleString('vi-VN')} danh mục con</span>}
+            <span>{displayCount.toLocaleString('vi-VN')} bài đọc</span>
+          </div>
+          {category.description && (
+            <small className="reading-category-description" title={category.description}>
+              {category.description}
+            </small>
+          )}
         </div>
-        <div className="action-group" onClick={(event) => event.stopPropagation()}>
+        <div className="action-group reading-category-actions" onClick={(event) => event.stopPropagation()}>
           <button
             className="ghost icon-action"
             type="button"
@@ -1744,8 +1763,7 @@ function ScriptureReadingRows({ readings, onEdit, onDelete }: { readings: Script
   return (
     <div className="reading-items">
       <div className="reading-item-grid reading-item-head">
-        <span>Tiêu đề</span>
-        <span>Nội dung rút gọn</span>
+        <span>Bài đọc</span>
         <span>Ngày đăng</span>
         <span>Lượt xem</span>
         <span>Thao tác</span>
@@ -1754,10 +1772,14 @@ function ScriptureReadingRows({ readings, onEdit, onDelete }: { readings: Script
         const preview = readingPreview(row);
         return (
           <div className="reading-item-grid" key={row.id}>
-            <strong>{row.title}</strong>
-            <span className="reading-preview-text" title={preview === '-' ? undefined : preview}>{preview}</span>
-            <span>{formatScriptureReadingDate(row.createdAt)}</span>
-            <span>{row.viewCount.toLocaleString('vi-VN')}</span>
+            <div className="reading-item-title">
+              <strong>{row.title}</strong>
+              <span className="reading-preview-text" title={preview === '-' ? undefined : preview}>
+                {preview}
+              </span>
+            </div>
+            <span className="reading-item-date">{formatScriptureReadingDate(row.createdAt)}</span>
+            <span className="reading-item-views">{row.viewCount.toLocaleString('vi-VN')}</span>
             <div className="action-group">
               <button className="ghost" type="button" onClick={() => onEdit(row)}>
                 <Pencil size={15} />

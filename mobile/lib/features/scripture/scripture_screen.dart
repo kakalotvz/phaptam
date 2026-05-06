@@ -680,8 +680,6 @@ class _EmptyReminderCard extends StatelessWidget {
   }
 }
 
-enum _ReadingFlow { horizontal, vertical }
-
 class ScriptureReadingScreen extends ConsumerWidget {
   const ScriptureReadingScreen({super.key});
 
@@ -865,23 +863,21 @@ class ScriptureBookReader extends StatefulWidget {
 class _ScriptureBookReaderState extends State<ScriptureBookReader>
     with WidgetsBindingObserver {
   final PageController _pageController = PageController();
-  final ScrollController _verticalScrollController = ScrollController();
   final _ReadingLocalStore _readingStore = _ReadingLocalStore();
   double _fontSize = 18;
   String _fontFamily = 'Serif';
-  _ReadingFlow _flow = _ReadingFlow.horizontal;
   bool _blueLightFilter = false;
   int _currentPage = 0;
   _SavedReadingProgress? _savedProgress;
   _ReadingBookmark? _bookmark;
   _PendingReadingBookmark? _pendingBookmark;
+  bool _showSwipeGuide = false;
   Timer? _saveTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _verticalScrollController.addListener(_queueProgressSave);
     unawaited(_loadLocalReadingState());
     unawaited(
       apiClient.post('/scripture-readings/${widget.reading.id}/view', {}),
@@ -894,7 +890,6 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     _saveTimer?.cancel();
     unawaited(_saveProgressNow());
     _pageController.dispose();
-    _verticalScrollController.dispose();
     super.dispose();
   }
 
@@ -928,19 +923,6 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
       appBar: AppBar(
         title: Text(widget.reading.title),
         actions: [
-          if (_bookmark != null)
-            IconButton(
-              tooltip: 'Chuyển đến đánh dấu',
-              onPressed: () => _jumpToBookmark(pages),
-              icon: const Icon(Icons.near_me_outlined),
-            ),
-          IconButton(
-            tooltip: _bookmark == null ? 'Đánh dấu' : 'Xem đánh dấu',
-            onPressed: () => _showBookmarkGuide(pages),
-            icon: Icon(
-              _bookmark == null ? Icons.bookmark_add_outlined : Icons.bookmark,
-            ),
-          ),
           IconButton(
             tooltip: 'Tùy chỉnh đọc',
             onPressed: () => _showReadingSettings(context),
@@ -950,78 +932,43 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
       ),
       body: Stack(
         children: [
-          if (_flow == _ReadingFlow.horizontal)
-            PageView.builder(
-              controller: _pageController,
-              itemCount: pages.length,
-              onPageChanged: (index) {
-                setState(() {
-                  _currentPage = index;
-                  _pendingBookmark = null;
-                });
-                _queueProgressSave();
-              },
-              itemBuilder: (context, index) {
-                final pageBookmark =
-                    _bookmark != null && _bookmark!.pageIndex == index
-                    ? _bookmark
-                    : null;
-                return _BookPage(
-                  title: index == 0 ? widget.reading.title : null,
-                  content: pages[index],
-                  displayContent: _contentWithBookmark(
-                    pages[index],
-                    pageBookmark,
-                  ),
-                  pageLabel: '${index + 1}/${pages.length}',
-                  baseStyle: baseStyle,
-                  blueLightFilter: _blueLightFilter,
-                  bookmark: pageBookmark,
-                  pageIndex: index,
-                  pendingBookmark: _pendingBookmark,
-                  onBookmarkCandidate: _setPendingBookmark,
-                  onConfirmBookmark: _confirmPendingBookmark,
-                );
-              },
-            )
-          else
-            ListView(
-              controller: _verticalScrollController,
-              padding: const EdgeInsets.fromLTRB(22, 18, 22, 96),
-              children: [
-                Text(
-                  widget.reading.title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: textColor,
-                    fontWeight: FontWeight.w800,
-                    fontFamily: _fontFamily == 'Default' ? null : _fontFamily,
-                  ),
+          PageView.builder(
+            controller: _pageController,
+            physics: const _EasyPageScrollPhysics(),
+            itemCount: pages.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentPage = index;
+                _pendingBookmark = null;
+              });
+              _queueProgressSave();
+            },
+            itemBuilder: (context, index) {
+              final pageBookmark =
+                  _bookmark != null && _bookmark!.pageIndex == index
+                  ? _bookmark
+                  : null;
+              return _BookPage(
+                title: index == 0 ? widget.reading.title : null,
+                content: pages[index],
+                displayContent: _contentWithBookmark(
+                  pages[index],
+                  pageBookmark,
                 ),
-                const SizedBox(height: 18),
-                for (var index = 0; index < pages.length; index++) ...[
-                  _BookmarkableRichContent(
-                    content: pages[index],
-                    displayContent: _contentWithBookmark(
-                      pages[index],
-                      _bookmark != null && _bookmark!.pageIndex == index
-                          ? _bookmark
-                          : null,
-                    ),
-                    baseStyle: baseStyle,
-                    pageIndex: index,
-                    pendingBookmark: _pendingBookmark,
-                    onBookmarkCandidate: _setPendingBookmark,
-                    onConfirmBookmark: _confirmPendingBookmark,
-                  ),
-                  if (_bookmark != null && _bookmark!.pageIndex == index)
-                    _BookmarkNotice(
-                      bookmark: _bookmark!,
-                      textColor: textColor,
-                      onOpen: () => _jumpToBookmark(pages),
-                    ),
-                ],
-              ],
-            ),
+                pageLabel: '${index + 1}/${pages.length}',
+                baseStyle: baseStyle,
+                blueLightFilter: _blueLightFilter,
+                bookmark: pageBookmark,
+                pageIndex: index,
+                pendingBookmark: _pendingBookmark,
+                onDismissPendingBookmark: _dismissPendingBookmark,
+                onBookmarkCandidate: _setPendingBookmark,
+                onConfirmBookmark: _confirmPendingBookmark,
+              );
+            },
+          ),
+          if (_showSwipeGuide)
+            _SwipePageGuideOverlay(onDismiss: _dismissSwipeGuide),
           Positioned(
             left: 16,
             right: 16,
@@ -1029,7 +976,6 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
             child: _ReadingQuickBar(
               fontSize: _fontSize,
               blueLightFilter: _blueLightFilter,
-              flow: _flow,
               onSmaller: () =>
                   setState(() => _fontSize = (_fontSize - 1).clamp(15, 30)),
               onLarger: () =>
@@ -1037,15 +983,6 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
               onToggleBlueLight: () =>
                   setState(() => _blueLightFilter = !_blueLightFilter),
               onBookmark: () => _showBookmarkGuide(pages),
-              onToggleFlow: () {
-                setState(() {
-                  _flow = _flow == _ReadingFlow.horizontal
-                      ? _ReadingFlow.vertical
-                      : _ReadingFlow.horizontal;
-                  _pendingBookmark = null;
-                });
-                _queueProgressSave();
-              },
             ),
           ),
         ],
@@ -1056,16 +993,24 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
   Future<void> _loadLocalReadingState() async {
     final progress = await _readingStore.progressFor(widget.reading.id);
     final bookmark = await _readingStore.bookmarkFor(widget.reading.id);
+    final guideSeen = await _readingStore.swipeGuideSeen();
     if (!mounted) return;
     setState(() {
       _savedProgress = progress;
       _bookmark = bookmark;
+      _showSwipeGuide = !guideSeen;
     });
     if (progress != null && progress.hasUsefulPosition) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showContinueDialog(progress);
       });
     }
+  }
+
+  void _dismissSwipeGuide() {
+    if (!_showSwipeGuide) return;
+    setState(() => _showSwipeGuide = false);
+    unawaited(_readingStore.markSwipeGuideSeen());
   }
 
   Future<void> _showContinueDialog(_SavedReadingProgress progress) async {
@@ -1104,19 +1049,13 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
   void _applyProgress(_SavedReadingProgress progress, List<String> pages) {
     final pageIndex = progress.pageIndex.clamp(0, pages.length - 1);
     setState(() {
-      _flow = progress.flow;
       _currentPage = pageIndex;
       _pendingBookmark = null;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_flow == _ReadingFlow.horizontal && _pageController.hasClients) {
+      if (_pageController.hasClients) {
         _pageController.jumpToPage(pageIndex);
-      }
-      if (_flow == _ReadingFlow.vertical &&
-          _verticalScrollController.hasClients) {
-        final max = _verticalScrollController.position.maxScrollExtent;
-        _verticalScrollController.jumpTo(progress.scrollOffset.clamp(0, max));
       }
     });
   }
@@ -1128,9 +1067,6 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_pageController.hasClients) _pageController.jumpToPage(0);
-      if (_verticalScrollController.hasClients) {
-        _verticalScrollController.jumpTo(0);
-      }
       _queueProgressSave();
     });
   }
@@ -1146,25 +1082,11 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     if (!mounted && _savedProgress == null) return;
     final pages = _readingPages(widget.reading.content ?? '');
     final progress = _SavedReadingProgress(
-      pageIndex: _currentReadablePage(pages).clamp(0, pages.length - 1),
-      scrollOffset: _verticalScrollController.hasClients
-          ? _verticalScrollController.offset
-          : _savedProgress?.scrollOffset ?? 0,
-      flow: _flow,
+      pageIndex: _currentPage.clamp(0, pages.length - 1),
       updatedAt: DateTime.now(),
     );
     _savedProgress = progress;
     await _readingStore.saveProgress(widget.reading.id, progress);
-  }
-
-  int _currentReadablePage(List<String> pages) {
-    if (_flow == _ReadingFlow.horizontal) return _currentPage;
-    if (!_verticalScrollController.hasClients || pages.length <= 1) return 0;
-    final position = _verticalScrollController.position;
-    if (position.maxScrollExtent <= 0) return 0;
-    final ratio = (_verticalScrollController.offset / position.maxScrollExtent)
-        .clamp(0.0, 1.0);
-    return (ratio * (pages.length - 1)).round();
   }
 
   Future<void> _showBookmarkGuide(List<String> pages) async {
@@ -1191,10 +1113,8 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
               ),
               const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(child: Text('đ')),
-                title: Text(
-                  'Khi nút “đ” hiện lên, bấm vào nút đó để xác nhận.',
-                ),
+                leading: Icon(Icons.bookmark_add_outlined),
+                title: Text('Khi nút xác nhận hiện lên, bấm vào để lưu.'),
               ),
               const ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -1247,8 +1167,17 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     setState(() => _pendingBookmark = pending);
   }
 
+  void _dismissPendingBookmark() {
+    if (_pendingBookmark == null) return;
+    setState(() => _pendingBookmark = null);
+  }
+
   void _confirmPendingBookmark(_PendingReadingBookmark pending) {
     setState(() => _pendingBookmark = null);
+    if (pending.deleteExisting) {
+      unawaited(_clearBookmark());
+      return;
+    }
     unawaited(
       _saveBookmark(pending.pageIndex, pending.wordIndex, pending.words),
     );
@@ -1295,7 +1224,6 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
     final bookmark = _bookmark;
     if (bookmark == null) return;
     setState(() {
-      _flow = _ReadingFlow.horizontal;
       _currentPage = bookmark.pageIndex.clamp(0, pages.length - 1);
       _pendingBookmark = null;
     });
@@ -1359,25 +1287,6 @@ class _ScriptureBookReaderState extends State<ScriptureBookReader>
                     setState(() {});
                   },
                 ),
-                SegmentedButton<_ReadingFlow>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _ReadingFlow.horizontal,
-                      icon: Icon(Icons.swipe),
-                      label: Text('Lật ngang'),
-                    ),
-                    ButtonSegment(
-                      value: _ReadingFlow.vertical,
-                      icon: Icon(Icons.swap_vert),
-                      label: Text('Vuốt lên'),
-                    ),
-                  ],
-                  selected: {_flow},
-                  onSelectionChanged: (value) {
-                    setSheetState(() => _flow = value.first);
-                    setState(() {});
-                  },
-                ),
               ],
             ),
           ),
@@ -1395,6 +1304,7 @@ class _BookPage extends StatelessWidget {
     required this.baseStyle,
     required this.blueLightFilter,
     required this.pageIndex,
+    required this.onDismissPendingBookmark,
     required this.onBookmarkCandidate,
     required this.onConfirmBookmark,
     this.pendingBookmark,
@@ -1411,6 +1321,7 @@ class _BookPage extends StatelessWidget {
   final _PendingReadingBookmark? pendingBookmark;
   final _ReadingBookmark? bookmark;
   final String? title;
+  final VoidCallback onDismissPendingBookmark;
   final ValueChanged<_PendingReadingBookmark> onBookmarkCandidate;
   final ValueChanged<_PendingReadingBookmark> onConfirmBookmark;
 
@@ -1450,7 +1361,9 @@ class _BookPage extends StatelessWidget {
               displayContent: displayContent,
               baseStyle: baseStyle,
               pageIndex: pageIndex,
+              bookmark: bookmark,
               pendingBookmark: pendingBookmark,
+              onDismissPendingBookmark: onDismissPendingBookmark,
               onBookmarkCandidate: onBookmarkCandidate,
               onConfirmBookmark: onConfirmBookmark,
             ),
@@ -1482,15 +1395,19 @@ class _BookmarkableRichContent extends StatefulWidget {
     required this.baseStyle,
     required this.pageIndex,
     required this.pendingBookmark,
+    required this.onDismissPendingBookmark,
     required this.onBookmarkCandidate,
     required this.onConfirmBookmark,
+    this.bookmark,
   });
 
   final String content;
   final String displayContent;
   final TextStyle baseStyle;
   final int pageIndex;
+  final _ReadingBookmark? bookmark;
   final _PendingReadingBookmark? pendingBookmark;
+  final VoidCallback onDismissPendingBookmark;
   final ValueChanged<_PendingReadingBookmark> onBookmarkCandidate;
   final ValueChanged<_PendingReadingBookmark> onConfirmBookmark;
 
@@ -1500,15 +1417,6 @@ class _BookmarkableRichContent extends StatefulWidget {
 }
 
 class _BookmarkableRichContentState extends State<_BookmarkableRichContent> {
-  Timer? _holdTimer;
-  Offset? _downPosition;
-
-  @override
-  void dispose() {
-    _holdTimer?.cancel();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final pending = widget.pendingBookmark?.pageIndex == widget.pageIndex
@@ -1520,116 +1428,127 @@ class _BookmarkableRichContentState extends State<_BookmarkableRichContent> {
         final maxLeft = constraints.maxWidth > 42
             ? constraints.maxWidth - 42
             : 0.0;
-        return Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (event) =>
-              _startHoldTimer(event.localPosition, constraints.maxWidth),
-          onPointerMove: (event) {
-            final downPosition = _downPosition;
-            if (downPosition == null) return;
-            if ((event.localPosition - downPosition).distance > 12) {
-              _cancelHoldTimer();
-            }
-          },
-          onPointerUp: (_) => _cancelHoldTimer(),
-          onPointerCancel: (_) => _cancelHoldTimer(),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              RichContent(
-                content: widget.displayContent,
-                baseStyle: widget.baseStyle,
-              ),
-              if (pending != null)
-                Positioned(
-                  left: pending.position.dx.clamp(0.0, maxLeft).toDouble(),
-                  top: (pending.position.dy - 46)
-                      .clamp(0.0, double.infinity)
-                      .toDouble(),
-                  child: _BookmarkConfirmButton(
-                    word: pending.words[pending.wordIndex].text,
-                    onPressed: () => widget.onConfirmBookmark(pending),
-                  ),
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            RichContent(
+              content: widget.displayContent,
+              baseStyle: widget.baseStyle,
+              tapWordIndexes: widget.bookmark == null
+                  ? const {}
+                  : {widget.bookmark!.wordIndex},
+              onWordTap: _handleWordTap,
+              onWordLongPressStart: _handleWordLongPressStart,
+            ),
+            if (pending != null)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: widget.onDismissPendingBookmark,
+                  child: const SizedBox.expand(),
                 ),
-            ],
-          ),
+              ),
+            if (pending != null)
+              Positioned(
+                left: pending.position.dx.clamp(0.0, maxLeft).toDouble(),
+                top: (pending.position.dy - 46)
+                    .clamp(0.0, double.infinity)
+                    .toDouble(),
+                child: _BookmarkConfirmButton(
+                  word: pending.words[pending.wordIndex].text,
+                  deleteExisting: pending.deleteExisting,
+                  onPressed: () => widget.onConfirmBookmark(pending),
+                ),
+              ),
+          ],
         );
       },
     );
   }
 
-  void _startHoldTimer(Offset position, double width) {
-    _cancelHoldTimer();
-    _downPosition = position;
-    _holdTimer = Timer(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      final words = _readingWords(widget.content);
-      final wordIndex = _wordIndexAtOffset(
-        content: widget.content,
-        style: widget.baseStyle,
-        width: width,
-        offset: position,
+  void _handleWordLongPressStart(
+    int wordIndex,
+    String word,
+    Offset globalPosition,
+  ) {
+    final words = _readingWords(widget.content);
+    if (words.isEmpty || wordIndex < 0 || wordIndex >= words.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vị trí này chưa có chữ để đánh dấu.')),
       );
-      if (wordIndex == null || words.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vị trí này chưa có chữ để đánh dấu.')),
-        );
-        return;
-      }
-      widget.onBookmarkCandidate(
-        _PendingReadingBookmark(
-          pageIndex: widget.pageIndex,
-          wordIndex: wordIndex.clamp(0, words.length - 1).toInt(),
-          words: words,
-          position: position,
-        ),
-      );
-    });
+      return;
+    }
+    final box = context.findRenderObject() as RenderBox?;
+    final position = box?.globalToLocal(globalPosition) ?? Offset.zero;
+    widget.onBookmarkCandidate(
+      _PendingReadingBookmark(
+        pageIndex: widget.pageIndex,
+        wordIndex: wordIndex,
+        words: words,
+        position: position,
+      ),
+    );
   }
 
-  void _cancelHoldTimer() {
-    _holdTimer?.cancel();
-    _holdTimer = null;
+  void _handleWordTap(int wordIndex, String word, Offset globalPosition) {
+    final bookmark = widget.bookmark;
+    if (bookmark == null || bookmark.wordIndex != wordIndex) return;
+    final words = _readingWords(widget.content);
+    if (words.isEmpty || wordIndex < 0 || wordIndex >= words.length) return;
+    final box = context.findRenderObject() as RenderBox?;
+    final position = box?.globalToLocal(globalPosition) ?? Offset.zero;
+    widget.onBookmarkCandidate(
+      _PendingReadingBookmark(
+        pageIndex: widget.pageIndex,
+        wordIndex: wordIndex,
+        words: words,
+        position: position,
+        deleteExisting: true,
+      ),
+    );
   }
 }
 
 class _BookmarkConfirmButton extends StatelessWidget {
-  const _BookmarkConfirmButton({required this.word, required this.onPressed});
+  const _BookmarkConfirmButton({
+    required this.word,
+    required this.deleteExisting,
+    required this.onPressed,
+  });
 
   final String word;
+  final bool deleteExisting;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       elevation: 6,
-      color: Theme.of(context).colorScheme.primary,
+      color: deleteExisting
+          ? Theme.of(context).colorScheme.error
+          : Theme.of(context).colorScheme.primary,
       shape: const StadiumBorder(),
       child: InkWell(
         customBorder: const StadiumBorder(),
         onTap: onPressed,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'đ',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimary,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                word,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+          padding: EdgeInsets.symmetric(
+            horizontal: deleteExisting ? 10 : 12,
+            vertical: deleteExisting ? 10 : 8,
           ),
+          child: deleteExisting
+              ? Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.onError,
+                  size: 20,
+                )
+              : Text(
+                  word,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
         ),
       ),
     );
@@ -1637,15 +1556,10 @@ class _BookmarkConfirmButton extends StatelessWidget {
 }
 
 class _BookmarkNotice extends StatelessWidget {
-  const _BookmarkNotice({
-    required this.bookmark,
-    required this.textColor,
-    this.onOpen,
-  });
+  const _BookmarkNotice({required this.bookmark, required this.textColor});
 
   final _ReadingBookmark bookmark;
   final Color textColor;
-  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -1662,8 +1576,207 @@ class _BookmarkNotice extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(color: textColor.withValues(alpha: .76)),
         ),
-        onTap: onOpen,
       ),
+    );
+  }
+}
+
+class _SwipePageGuideOverlay extends StatefulWidget {
+  const _SwipePageGuideOverlay({required this.onDismiss});
+
+  final VoidCallback onDismiss;
+
+  @override
+  State<_SwipePageGuideOverlay> createState() => _SwipePageGuideOverlayState();
+}
+
+class _SwipePageGuideOverlayState extends State<_SwipePageGuideOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _handSlide;
+  late final Animation<double> _arrowPulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    final curved = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+    _handSlide = Tween<double>(begin: -42, end: 42).animate(curved);
+    _arrowPulse = Tween<double>(begin: .38, end: 1).animate(curved);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: widget.onDismiss,
+        onHorizontalDragStart: (_) => widget.onDismiss(),
+        child: IgnorePointer(
+          ignoring: false,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    left: 22,
+                    child: Opacity(
+                      opacity: _arrowPulse.value,
+                      child: Icon(
+                        Icons.keyboard_double_arrow_left_rounded,
+                        color: color,
+                        size: 48,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 22,
+                    child: Opacity(
+                      opacity: 1.38 - _arrowPulse.value,
+                      child: Icon(
+                        Icons.keyboard_double_arrow_right_rounded,
+                        color: color,
+                        size: 48,
+                      ),
+                    ),
+                  ),
+                  Transform.translate(
+                    offset: Offset(_handSlide.value, 0),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surface.withValues(alpha: .78),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: .18),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Icon(
+                          Icons.touch_app_rounded,
+                          color: color,
+                          size: 42,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 124 + MediaQuery.paddingOf(context).bottom,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surface.withValues(alpha: .82),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          'Vuốt sang để lật trang',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EasyPageScrollPhysics extends PageScrollPhysics {
+  const _EasyPageScrollPhysics({super.parent});
+
+  static const double _pageThreshold = .18;
+
+  @override
+  double get minFlingDistance => 8;
+
+  @override
+  double get minFlingVelocity => 80;
+
+  @override
+  double? get dragStartDistanceMotionThreshold => 2;
+
+  @override
+  _EasyPageScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _EasyPageScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    if ((velocity <= 0.0 && position.pixels <= position.minScrollExtent) ||
+        (velocity >= 0.0 && position.pixels >= position.maxScrollExtent)) {
+      return super.createBallisticSimulation(position, velocity);
+    }
+
+    final tolerance = toleranceFor(position);
+    final target = _targetPixels(position, tolerance, velocity);
+    if ((target - position.pixels).abs() < tolerance.distance) return null;
+    return ScrollSpringSimulation(
+      spring,
+      position.pixels,
+      target,
+      velocity,
+      tolerance: tolerance,
+    );
+  }
+
+  double _targetPixels(
+    ScrollMetrics position,
+    Tolerance tolerance,
+    double velocity,
+  ) {
+    final pageExtent = position.viewportDimension;
+    if (pageExtent <= 0) return position.pixels;
+    final currentPage = position.pixels / pageExtent;
+    final pageFloor = currentPage.floorToDouble();
+    final pageProgress = currentPage - pageFloor;
+    var targetPage = pageFloor;
+
+    if (velocity < -tolerance.velocity) {
+      targetPage = currentPage.floorToDouble();
+    } else if (velocity > tolerance.velocity) {
+      targetPage = currentPage.ceilToDouble();
+    } else if (pageProgress >= _pageThreshold) {
+      targetPage = pageFloor + 1;
+    }
+
+    return (targetPage * pageExtent).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
     );
   }
 }
@@ -1672,22 +1785,18 @@ class _ReadingQuickBar extends StatelessWidget {
   const _ReadingQuickBar({
     required this.fontSize,
     required this.blueLightFilter,
-    required this.flow,
     required this.onSmaller,
     required this.onLarger,
     required this.onToggleBlueLight,
     required this.onBookmark,
-    required this.onToggleFlow,
   });
 
   final double fontSize;
   final bool blueLightFilter;
-  final _ReadingFlow flow;
   final VoidCallback onSmaller;
   final VoidCallback onLarger;
   final VoidCallback onToggleBlueLight;
   final VoidCallback onBookmark;
-  final VoidCallback onToggleFlow;
 
   @override
   Widget build(BuildContext context) {
@@ -1724,15 +1833,6 @@ class _ReadingQuickBar extends StatelessWidget {
               tooltip: 'Đánh dấu vị trí đọc',
               onPressed: onBookmark,
               icon: const Icon(Icons.bookmark_add_outlined),
-            ),
-            IconButton(
-              tooltip: flow == _ReadingFlow.horizontal
-                  ? 'Đổi sang vuốt lên'
-                  : 'Đổi sang lật ngang',
-              onPressed: onToggleFlow,
-              icon: Icon(
-                flow == _ReadingFlow.horizontal ? Icons.swipe : Icons.swap_vert,
-              ),
             ),
           ],
         ),
@@ -1791,18 +1891,12 @@ enum _ResumeChoice { continueRead, restart }
 class _SavedReadingProgress {
   const _SavedReadingProgress({
     required this.pageIndex,
-    required this.scrollOffset,
-    required this.flow,
     required this.updatedAt,
   });
 
   factory _SavedReadingProgress.fromJson(Map<String, dynamic> json) {
     return _SavedReadingProgress(
       pageIndex: json['pageIndex'] as int? ?? 0,
-      scrollOffset: (json['scrollOffset'] as num?)?.toDouble() ?? 0,
-      flow: json['flow'] == 'vertical'
-          ? _ReadingFlow.vertical
-          : _ReadingFlow.horizontal,
       updatedAt:
           DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
           DateTime.now(),
@@ -1810,16 +1904,12 @@ class _SavedReadingProgress {
   }
 
   final int pageIndex;
-  final double scrollOffset;
-  final _ReadingFlow flow;
   final DateTime updatedAt;
 
-  bool get hasUsefulPosition => pageIndex > 0 || scrollOffset > 80;
+  bool get hasUsefulPosition => pageIndex > 0;
 
   Map<String, dynamic> toJson() => {
     'pageIndex': pageIndex,
-    'scrollOffset': scrollOffset,
-    'flow': flow == _ReadingFlow.vertical ? 'vertical' : 'horizontal',
     'updatedAt': updatedAt.toIso8601String(),
   };
 }
@@ -1866,12 +1956,14 @@ class _PendingReadingBookmark {
     required this.wordIndex,
     required this.words,
     required this.position,
+    this.deleteExisting = false,
   });
 
   final int pageIndex;
   final int wordIndex;
   final List<_ReadingWord> words;
   final Offset position;
+  final bool deleteExisting;
 }
 
 class _ReadingWord {
@@ -1943,6 +2035,17 @@ class _ReadingLocalStore {
     await _write(data);
   }
 
+  Future<bool> swipeGuideSeen() async {
+    final data = await _read();
+    return data['swipeGuideSeen'] == true;
+  }
+
+  Future<void> markSwipeGuideSeen() async {
+    final data = await _read();
+    data['swipeGuideSeen'] = true;
+    await _write(data);
+  }
+
   Future<Map<String, dynamic>> _read() async {
     try {
       final file = await _file();
@@ -1973,42 +2076,12 @@ final RegExp _readingWordPattern = RegExp(
 );
 
 List<_ReadingWord> _readingWords(String content) {
-  final plain = _plainReadingPreview(content);
+  final plain = richContentPlainText(content);
   return _readingWordPattern
       .allMatches(plain)
       .map((match) => _ReadingWord(match.group(0) ?? ''))
       .where((word) => word.text.trim().isNotEmpty)
       .toList();
-}
-
-int? _wordIndexAtOffset({
-  required String content,
-  required TextStyle style,
-  required double width,
-  required Offset offset,
-}) {
-  final plain = _plainReadingPreview(content);
-  final matches = _readingWordPattern.allMatches(plain).toList();
-  if (plain.isEmpty || matches.isEmpty || width <= 0) return null;
-
-  final painter = TextPainter(
-    text: TextSpan(text: plain, style: style),
-    textDirection: TextDirection.ltr,
-  )..layout(maxWidth: width);
-  final textOffset = painter
-      .getPositionForOffset(
-        Offset(
-          offset.dx.clamp(0.0, width),
-          offset.dy.clamp(0.0, painter.height),
-        ),
-      )
-      .offset;
-
-  for (var index = 0; index < matches.length; index++) {
-    final match = matches[index];
-    if (textOffset <= match.end) return index;
-  }
-  return matches.length - 1;
 }
 
 String _bookmarkSnippet(List<_ReadingWord> words, int index) {
