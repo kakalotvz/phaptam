@@ -58,6 +58,7 @@ import {
   Quote,
   RefreshCcw,
   Save,
+  Search,
   Settings,
   Share2,
   Strikethrough,
@@ -1903,6 +1904,7 @@ function ScriptureReadingArchive({
   onEdit: (row: Scripture) => void;
   onDelete: (row: Scripture) => void;
 }) {
+  const [draftQuery, setDraftQuery] = useState('');
   const [query, setQuery] = useState('');
   const [parentFilter, setParentFilter] = useState('');
   const [childFilter, setChildFilter] = useState('');
@@ -1948,11 +1950,21 @@ function ScriptureReadingArchive({
 
   return (
     <div className="reading-archive">
-      <div className="reading-filter-bar">
+      <form
+        className="reading-filter-bar"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setQuery(draftQuery.trim());
+        }}
+      >
         <label>
           Tìm kiếm
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tiêu đề, nội dung, danh mục..." />
+          <input value={draftQuery} onChange={(event) => setDraftQuery(event.target.value)} placeholder="Tìm tiêu đề, nội dung, danh mục..." />
         </label>
+        <button className="primary" type="submit">
+          <Search size={16} />
+          Tìm kiếm
+        </button>
         <label>
           Danh mục cha
           <select
@@ -1989,6 +2001,7 @@ function ScriptureReadingArchive({
           className="ghost"
           type="button"
           onClick={() => {
+            setDraftQuery('');
             setQuery('');
             setParentFilter('');
             setChildFilter('');
@@ -1998,7 +2011,7 @@ function ScriptureReadingArchive({
           <RefreshCcw size={16} />
           Xóa lọc
         </button>
-      </div>
+      </form>
 
       <div className="reading-archive-summary">
         <div>

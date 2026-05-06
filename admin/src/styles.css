@@ -1466,7 +1466,7 @@ th {
 
 .reading-filter-bar {
   display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(180px, 1fr) minmax(180px, 1fr) 150px auto;
+  grid-template-columns: minmax(220px, 1.5fr) auto minmax(180px, 1fr) minmax(180px, 1fr) 150px auto;
   gap: 12px;
   align-items: end;
   padding: 14px;
