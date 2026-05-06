@@ -136,16 +136,27 @@ class _MeditationScreenState extends ConsumerState<MeditationScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Thiền',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w800,
+                          Row(
+                            children: [
+                              if (Navigator.of(context).canPop()) ...[
+                                IconButton.filledTonal(
+                                  tooltip: 'Quay lại',
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  icon: const Icon(Icons.arrow_back),
+                                ),
+                                const SizedBox(width: 10),
+                              ],
+                              const Expanded(
+                                child: Text(
+                                  'Thiền',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                           const SizedBox(height: 18),
                           AnimatedContainer(

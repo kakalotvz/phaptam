@@ -1450,24 +1450,11 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
       </Panel>
 
       <Panel title="Danh sách bài Kinh đọc">
-        <Table
-          rows={data.scriptureReadings}
-          columns={[
-            ['title', 'Tiêu đề'],
-            [readingCategoryLabel, 'Danh mục'],
-            [(row: Scripture) => row.description || '-', 'Mô tả'],
-            [(row: Scripture) => newsContentToPlainText(row.content ?? '').slice(0, 120), 'Nội dung'],
-            [(row: Scripture) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
-            [
-              (row: Scripture) => (
-                <button className="ghost" type="button" onClick={() => editReading(row)}>
-                  <Pencil size={15} />
-                  Sửa
-                </button>
-              ),
-              'Thao tác',
-            ],
-          ]}
+        <ScriptureReadingArchive
+          readings={data.scriptureReadings}
+          categories={readingCategories}
+          childrenByParent={readingChildrenByParent}
+          onEdit={editReading}
           onDelete={(row) => run(() => api.remove(`/admin/scripture-reading/${row.id}`), 'Đã xóa Kinh đọc')}
         />
       </Panel>
@@ -1506,6 +1493,228 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
           }}
         />
       )}
+    </div>
+  );
+}
+
+function ScriptureReadingArchive({
+  readings,
+  categories,
+  childrenByParent,
+  onEdit,
+  onDelete,
+}: {
+  readings: Scripture[];
+  categories: AudioCategory[];
+  childrenByParent: Record<string, AudioCategory[]>;
+  onEdit: (row: Scripture) => void;
+  onDelete: (row: Scripture) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [parentFilter, setParentFilter] = useState('');
+  const [childFilter, setChildFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const rootCategories = useMemo(() => categories.filter((item) => !item.parentId).sort((a, b) => a.name.localeCompare(b.name, 'vi')), [categories]);
+  const childFilterOptions = useMemo(() => {
+    const candidateIds = parentFilter ? descendantCategoryIds(parentFilter, childrenByParent) : null;
+    return categoryTreeOptions(categories.filter((item) => item.parentId && (!candidateIds || candidateIds.has(item.id))));
+  }, [categories, childrenByParent, parentFilter]);
+
+  const readingsByCategory = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const childIds = childFilter ? descendantCategoryIds(childFilter, childrenByParent) : new Set<string>();
+    if (childFilter) childIds.add(childFilter);
+
+    return filterScriptureReadings(readings, categories, {
+      query: normalizedQuery,
+      parentId: parentFilter,
+      childIds,
+      date: dateFilter,
+    }).reduce<Record<string, Scripture[]>>((acc, row) => {
+      const key = row.categoryId || 'uncategorized';
+      acc[key] = [...(acc[key] ?? []), row];
+      return acc;
+    }, {});
+  }, [categories, childrenByParent, childFilter, dateFilter, parentFilter, query, readings]);
+
+  const visibleCount = Object.values(readingsByCategory).reduce((sum, items) => sum + items.length, 0);
+
+  return (
+    <div className="reading-archive">
+      <div className="reading-filter-bar">
+        <label>
+          Tìm kiếm
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tiêu đề, nội dung, danh mục..." />
+        </label>
+        <label>
+          Danh mục cha
+          <select
+            value={parentFilter}
+            onChange={(event) => {
+              setParentFilter(event.target.value);
+              setChildFilter('');
+            }}
+          >
+            <option value="">Tất cả danh mục cha</option>
+            {rootCategories.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Danh mục con
+          <select value={childFilter} onChange={(event) => setChildFilter(event.target.value)}>
+            <option value="">Tất cả danh mục con</option>
+            {childFilterOptions.map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Ngày đăng
+          <input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
+        </label>
+        <button
+          className="ghost"
+          type="button"
+          onClick={() => {
+            setQuery('');
+            setParentFilter('');
+            setChildFilter('');
+            setDateFilter('');
+          }}
+        >
+          <RefreshCcw size={16} />
+          Xóa lọc
+        </button>
+      </div>
+
+      <div className="reading-archive-summary">
+        <strong>{visibleCount.toLocaleString('vi-VN')} bài Kinh đọc</strong>
+        <span>Gấp/mở từng danh mục để xem danh mục con và nội dung rút gọn.</span>
+      </div>
+
+      {visibleCount === 0 ? (
+        <div className="empty">Không tìm thấy bài Kinh đọc phù hợp.</div>
+      ) : (
+        <div className="reading-dropdown-list">
+          {rootCategories.map((category) => (
+            <ScriptureReadingCategoryDropdown
+              key={category.id}
+              category={category}
+              depth={0}
+              childrenByParent={childrenByParent}
+              readingsByCategory={readingsByCategory}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+          {readingsByCategory.uncategorized?.length > 0 && (
+            <details className="reading-dropdown" open>
+              <summary>
+                <div>
+                  <strong>Chưa phân loại</strong>
+                  <span>{readingsByCategory.uncategorized.length.toLocaleString('vi-VN')} bài đọc</span>
+                </div>
+              </summary>
+              <ScriptureReadingRows readings={readingsByCategory.uncategorized} onEdit={onEdit} onDelete={onDelete} />
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScriptureReadingCategoryDropdown({
+  category,
+  depth,
+  childrenByParent,
+  readingsByCategory,
+  onEdit,
+  onDelete,
+}: {
+  category: AudioCategory;
+  depth: number;
+  childrenByParent: Record<string, AudioCategory[]>;
+  readingsByCategory: Record<string, Scripture[]>;
+  onEdit: (row: Scripture) => void;
+  onDelete: (row: Scripture) => void;
+}) {
+  const children = [...(childrenByParent[category.id] ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  const count = readingCountForCategory(category.id, childrenByParent, readingsByCategory);
+  if (count === 0) return null;
+
+  return (
+    <details className="reading-dropdown" open={depth === 0}>
+      <summary style={{ paddingLeft: depth * 18 }}>
+        <div>
+          <strong>{category.name}</strong>
+          <span>
+            {children.length > 0 ? `${children.length} danh mục con • ` : ''}
+            {count.toLocaleString('vi-VN')} bài đọc
+          </span>
+        </div>
+      </summary>
+      <div className="reading-dropdown-body">
+        {readingsByCategory[category.id]?.length > 0 && (
+          <ScriptureReadingRows readings={readingsByCategory[category.id]} onEdit={onEdit} onDelete={onDelete} />
+        )}
+        {children.map((child) => (
+          <ScriptureReadingCategoryDropdown
+            key={child.id}
+            category={child}
+            depth={depth + 1}
+            childrenByParent={childrenByParent}
+            readingsByCategory={readingsByCategory}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function ScriptureReadingRows({ readings, onEdit, onDelete }: { readings: Scripture[]; onEdit: (row: Scripture) => void; onDelete: (row: Scripture) => void }) {
+  const sorted = [...readings].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+  return (
+    <div className="reading-items">
+      <div className="reading-item-grid reading-item-head">
+        <span>Tiêu đề</span>
+        <span>Nội dung rút gọn</span>
+        <span>Ngày đăng</span>
+        <span>Lượt xem</span>
+        <span>Thao tác</span>
+      </div>
+      {sorted.map((row) => (
+        <div className="reading-item-grid" key={row.id}>
+          <strong>{row.title}</strong>
+          <span>{readingPreview(row)}</span>
+          <span>{formatScriptureReadingDate(row.createdAt)}</span>
+          <span>{row.viewCount.toLocaleString('vi-VN')}</span>
+          <div className="action-group">
+            <button className="ghost" type="button" onClick={() => onEdit(row)}>
+              <Pencil size={15} />
+              Sửa
+            </button>
+            <button
+              className="danger"
+              type="button"
+              onClick={() => {
+                if (window.confirm('Xóa bài Kinh đọc này? Thao tác này không thể hoàn tác.')) onDelete(row);
+              }}
+            >
+              <Trash2 size={15} />
+              Xóa
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -4443,6 +4652,67 @@ function categoryPathLabel(id: string, rows: AudioCategory[]) {
   }
 
   return names.length > 0 ? names.join(' / ') : '-';
+}
+
+function categoryRootId(id: string, rows: AudioCategory[]) {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const seen = new Set<string>();
+  let current = byId.get(id);
+  let root = current;
+
+  while (current && current.parentId && !seen.has(current.id)) {
+    seen.add(current.id);
+    const parent = byId.get(current.parentId);
+    if (!parent) break;
+    root = parent;
+    current = parent;
+  }
+
+  return root?.id ?? '';
+}
+
+function filterScriptureReadings(
+  readings: Scripture[],
+  categories: AudioCategory[],
+  filters: { query: string; parentId: string; childIds: Set<string>; date: string },
+) {
+  return readings.filter((row) => {
+    const categoryPath = row.categoryId ? categoryPathLabel(row.categoryId, categories) : 'Chưa phân loại';
+    const haystack = [row.title, row.description ?? '', newsContentToPlainText(row.content ?? ''), categoryPath].join(' ').toLowerCase();
+    const matchesQuery = !filters.query || haystack.includes(filters.query);
+    const matchesParent = !filters.parentId || (row.categoryId ? categoryRootId(row.categoryId, categories) === filters.parentId : false);
+    const matchesChild = filters.childIds.size === 0 || filters.childIds.has(row.categoryId ?? '');
+    const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
+    return matchesQuery && matchesParent && matchesChild && matchesDate;
+  });
+}
+
+function readingCountForCategory(id: string, childrenByParent: Record<string, AudioCategory[]>, readingsByCategory: Record<string, Scripture[]>) {
+  const ids = descendantCategoryIds(id, childrenByParent);
+  ids.add(id);
+  return Array.from(ids).reduce((sum, categoryId) => sum + (readingsByCategory[categoryId]?.length ?? 0), 0);
+}
+
+function readingPreview(row: Scripture) {
+  const text = (row.description?.trim() || newsContentToPlainText(row.content ?? '')).replace(/\s+/g, ' ').trim();
+  return text ? text.slice(0, 140) : '-';
+}
+
+function readingDateKey(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatScriptureReadingDate(value?: string) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('vi-VN');
 }
 
 function categoryTreeOptions(rows: AudioCategory[]) {

@@ -46,6 +46,7 @@ export type Scripture = {
   backgroundImageUrl?: string;
   categoryId?: string;
   viewCount: number;
+  createdAt?: string;
   category?: AudioCategory;
   lines: ScriptureLine[];
   _count?: { lines: number };
