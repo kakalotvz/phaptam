@@ -325,6 +325,9 @@ type QuoteBackground = {
   id: string;
   imageUrl: string;
   name: string;
+  sizeBytes?: number;
+  width?: number;
+  height?: number;
   active: boolean;
   createdAt: string;
 };
@@ -347,9 +350,17 @@ function normalizeQuoteBackground(value: unknown): QuoteBackground | null {
     id: item.id,
     imageUrl: item.imageUrl.trim(),
     name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Ảnh nền trích dẫn',
+    sizeBytes: normalizePositiveNumber(item.sizeBytes),
+    width: normalizePositiveNumber(item.width),
+    height: normalizePositiveNumber(item.height),
     active: item.active !== false,
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
   };
+}
+
+function normalizePositiveNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
 }
 
 function vietnamDateKey(date: Date) {

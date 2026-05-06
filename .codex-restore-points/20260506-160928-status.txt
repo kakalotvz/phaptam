@@ -1,0 +1,3 @@
+ M mobile/lib/features/home/home_screen.dart
+?? .codex-restore-points/20260506-160928-head.txt
+?? .codex-restore-points/20260506-160928-working-tree.patch

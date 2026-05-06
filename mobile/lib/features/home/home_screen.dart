@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -39,7 +40,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     _quoteRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) ref.invalidate(dailyQuotesProvider);
+      if (!mounted) return;
+      ref.invalidate(dailyQuotesProvider);
+      ref.invalidate(quoteBackgroundsProvider);
     });
   }
 
@@ -848,9 +851,9 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(14),
-                            child: Image.network(
-                              item.imageUrl,
-                              fit: BoxFit.cover,
+                            child: _CachedQuoteBackgroundThumb(
+                              imageUrl: item.imageUrl,
+                              loadBytes: _loadBackgroundBytes,
                             ),
                           ),
                         );
@@ -923,6 +926,10 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
       final backgroundImage = selectedBackgroundUrl == null
           ? null
           : await _loadNetworkImage(selectedBackgroundUrl);
+      final tone = backgroundImage == null
+          ? _QuoteImageTone.fallback()
+          : await _analyzeQuoteArea(backgroundImage, size);
+      final style = _styleForQuoteTone(tone);
 
       if (backgroundImage == null) {
         final paint = Paint()
@@ -937,19 +944,7 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         backgroundImage.dispose();
       }
 
-      canvas.drawRect(rect, Paint()..color = Colors.black.withValues(alpha: .34));
-      canvas.drawRect(
-        rect,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.black.withValues(alpha: .10),
-              Colors.black.withValues(alpha: .44),
-            ],
-          ).createShader(rect),
-      );
+      _drawAdaptiveScrim(canvas, rect, style);
 
       _drawCenteredParagraph(
         canvas,
@@ -958,7 +953,7 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         top: 310,
         fontSize: 34,
         height: 1.25,
-        color: Colors.white.withValues(alpha: .86),
+        color: style.metaColor,
         fontWeight: FontWeight.w700,
         letterSpacing: 5,
       );
@@ -969,10 +964,14 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         width: 840,
         maxHeight: 820,
         startFontSize: _quoteFontSize(quoteText),
+        style: style,
       );
-      canvas.drawParagraph(
-        quoteParagraph,
-        Offset((size.width - 840) / 2, 650 - quoteParagraph.height / 2),
+      _drawQuoteBlock(
+        canvas,
+        quoteText,
+        paragraph: quoteParagraph,
+        style: style,
+        centerY: 920,
       );
 
       _drawCenteredParagraph(
@@ -982,7 +981,7 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         top: 1570,
         fontSize: 42,
         height: 1.2,
-        color: Colors.white,
+        color: style.watermarkColor,
         fontWeight: FontWeight.w800,
       );
       _drawCenteredParagraph(
@@ -992,7 +991,7 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         top: 1630,
         fontSize: 28,
         height: 1.25,
-        color: Colors.white.withValues(alpha: .82),
+        color: style.watermarkColor.withValues(alpha: .82),
         fontWeight: FontWeight.w500,
       );
 
@@ -1025,10 +1024,31 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
   }
 
   Future<ui.Image?> _loadNetworkImage(String url) async {
-    final data = await NetworkAssetBundle(Uri.parse(url)).load(url);
-    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    final data = await _loadBackgroundBytes(url);
+    final codec = await ui.instantiateImageCodec(data);
     final frame = await codec.getNextFrame();
     return frame.image;
+  }
+
+  Future<Uint8List> _loadBackgroundBytes(String url) async {
+    final file = await _backgroundCacheFile(url);
+    if (await file.exists()) return file.readAsBytes();
+
+    final data = await NetworkAssetBundle(Uri.parse(url)).load(url);
+    final bytes = data.buffer.asUint8List();
+    if (!await file.parent.exists()) await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes, flush: true);
+    return bytes;
+  }
+
+  Future<File> _backgroundCacheFile(String url) async {
+    final root = await getApplicationSupportDirectory();
+    final directory = Directory('${root.path}/quote_background_cache');
+    var name = base64Url.encode(utf8.encode(url)).replaceAll('=', '');
+    if (name.length > 124) {
+      name = '${name.substring(0, 84)}_${name.substring(name.length - 36)}';
+    }
+    return File('${directory.path}/$name.img');
   }
 
   void _drawCoverImage(Canvas canvas, ui.Image image, Size size) {
@@ -1040,6 +1060,128 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
       Offset.zero & size,
     );
     canvas.drawImageRect(image, source, destination, Paint());
+  }
+
+  Future<_QuoteImageTone> _analyzeQuoteArea(ui.Image image, Size canvasSize) async {
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (bytes == null) return _QuoteImageTone.fallback();
+
+    final source = _coverSourceRect(image, canvasSize);
+    const quoteArea = Rect.fromLTWH(100, 440, 880, 920);
+    var luminanceSum = 0.0;
+    var luminanceSquareSum = 0.0;
+    var saturationSum = 0.0;
+    var samples = 0;
+
+    for (var yStep = 0; yStep < 14; yStep += 1) {
+      for (var xStep = 0; xStep < 10; xStep += 1) {
+        final canvasX = quoteArea.left + quoteArea.width * (xStep + .5) / 10;
+        final canvasY = quoteArea.top + quoteArea.height * (yStep + .5) / 14;
+        final imageX = (source.left + canvasX / canvasSize.width * source.width)
+            .clamp(0, image.width - 1)
+            .round();
+        final imageY = (source.top + canvasY / canvasSize.height * source.height)
+            .clamp(0, image.height - 1)
+            .round();
+        final offset = (imageY * image.width + imageX) * 4;
+        final red = bytes.getUint8(offset) / 255;
+        final green = bytes.getUint8(offset + 1) / 255;
+        final blue = bytes.getUint8(offset + 2) / 255;
+        final luminance = .2126 * red + .7152 * green + .0722 * blue;
+        final maxChannel = math.max(red, math.max(green, blue));
+        final minChannel = math.min(red, math.min(green, blue));
+        final saturation = maxChannel == 0 ? 0.0 : (maxChannel - minChannel) / maxChannel;
+        luminanceSum += luminance;
+        luminanceSquareSum += luminance * luminance;
+        saturationSum += saturation;
+        samples += 1;
+      }
+    }
+
+    final average = luminanceSum / samples;
+    final variance = math.max(0, luminanceSquareSum / samples - average * average);
+    return _QuoteImageTone(
+      luminance: average,
+      contrast: math.sqrt(variance),
+      saturation: saturationSum / samples,
+    );
+  }
+
+  Rect _coverSourceRect(ui.Image image, Size size) {
+    final input = Size(image.width.toDouble(), image.height.toDouble());
+    final fitted = applyBoxFit(BoxFit.cover, input, size);
+    return Alignment.center.inscribe(fitted.source, Offset.zero & input);
+  }
+
+  _QuoteRenderStyle _styleForQuoteTone(_QuoteImageTone tone) {
+    final isBright = tone.luminance >= .62;
+    final isDark = tone.luminance <= .34;
+    final busy = tone.contrast >= .18 || tone.saturation >= .42;
+
+    if (isBright) {
+      return _QuoteRenderStyle(
+        quoteColor: const Color(0xFF2F241C),
+        outlineColor: Colors.white.withValues(alpha: .70),
+        shadowColor: Colors.white.withValues(alpha: .40),
+        panelColor: busy
+            ? const Color(0xFFF9F1DF).withValues(alpha: .78)
+            : const Color(0xFFFFF8EA).withValues(alpha: .46),
+        panelBorderColor: Colors.white.withValues(alpha: .50),
+        scrimColor: const Color(0xFF3B2A1E).withValues(alpha: .08),
+        bottomShade: const Color(0xFF2E241A).withValues(alpha: .28),
+        metaColor: const Color(0xFF35291F).withValues(alpha: .78),
+        watermarkColor: const Color(0xFF2F241C),
+        usePanel: busy || tone.luminance > .72,
+      );
+    }
+
+    if (isDark) {
+      return _QuoteRenderStyle(
+        quoteColor: Colors.white,
+        outlineColor: Colors.black.withValues(alpha: .46),
+        shadowColor: Colors.black.withValues(alpha: .70),
+        panelColor: busy
+            ? Colors.black.withValues(alpha: .22)
+            : Colors.transparent,
+        panelBorderColor: Colors.white.withValues(alpha: .14),
+        scrimColor: Colors.black.withValues(alpha: .16),
+        bottomShade: Colors.black.withValues(alpha: .38),
+        metaColor: Colors.white.withValues(alpha: .82),
+        watermarkColor: Colors.white,
+        usePanel: busy,
+      );
+    }
+
+    return _QuoteRenderStyle(
+      quoteColor: Colors.white,
+      outlineColor: Colors.black.withValues(alpha: .42),
+      shadowColor: Colors.black.withValues(alpha: .62),
+      panelColor: busy
+          ? Colors.black.withValues(alpha: .24)
+          : Colors.black.withValues(alpha: .12),
+      panelBorderColor: Colors.white.withValues(alpha: .16),
+      scrimColor: Colors.black.withValues(alpha: busy ? .24 : .18),
+      bottomShade: Colors.black.withValues(alpha: .42),
+      metaColor: Colors.white.withValues(alpha: .84),
+      watermarkColor: Colors.white,
+      usePanel: busy,
+    );
+  }
+
+  void _drawAdaptiveScrim(Canvas canvas, Rect rect, _QuoteRenderStyle style) {
+    canvas.drawRect(rect, Paint()..color = style.scrimColor);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            style.bottomShade,
+          ],
+        ).createShader(rect),
+    );
   }
 
   void _drawCenteredParagraph(
@@ -1075,33 +1217,117 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
     required double width,
     required double maxHeight,
     required double startFontSize,
+    required _QuoteRenderStyle style,
   }) {
     var fontSize = startFontSize;
     while (fontSize >= 38) {
-      final paragraph = _quoteParagraph(text, width: width, fontSize: fontSize);
+      final paragraph = _quoteParagraph(
+        text,
+        width: width,
+        fontSize: fontSize,
+        color: style.quoteColor,
+      );
       if (paragraph.height <= maxHeight) return paragraph;
       fontSize -= 2;
     }
-    return _quoteParagraph(text, width: width, fontSize: fontSize);
+    return _quoteParagraph(
+      text,
+      width: width,
+      fontSize: fontSize,
+      color: style.quoteColor,
+    );
   }
 
   ui.Paragraph _quoteParagraph(
     String text, {
     required double width,
     required double fontSize,
+    required Color color,
+    Paint? foreground,
   }) {
     final builder = ui.ParagraphBuilder(
       ui.ParagraphStyle(textAlign: TextAlign.center, height: 1.32),
     )
       ..pushStyle(
         ui.TextStyle(
-          color: Colors.white,
+          color: foreground == null ? color : null,
+          foreground: foreground,
           fontSize: fontSize,
           fontWeight: FontWeight.w800,
         ),
       )
       ..addText(text);
     return builder.build()..layout(ui.ParagraphConstraints(width: width));
+  }
+
+  void _drawQuoteBlock(
+    Canvas canvas,
+    String text, {
+    required ui.Paragraph paragraph,
+    required _QuoteRenderStyle style,
+    required double centerY,
+  }) {
+    const width = 840.0;
+    final left = (1080 - width) / 2;
+    final top = centerY - paragraph.height / 2;
+
+    if (style.usePanel) {
+      final panelRect = Rect.fromLTWH(
+        left - 54,
+        top - 74,
+        width + 108,
+        paragraph.height + 148,
+      );
+      final radius = Radius.circular(math.min(42, panelRect.height / 4));
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(panelRect, radius),
+        Paint()..color = style.panelColor,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(panelRect.deflate(1.5), radius),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = style.panelBorderColor,
+      );
+    }
+
+    final fontSize = paragraphStyleFontSize(paragraph, text);
+    final softShadowParagraph = _quoteParagraph(
+      text,
+      width: width,
+      fontSize: fontSize,
+      color: style.shadowColor,
+    );
+    final shadowParagraph = _quoteParagraph(
+      text,
+      width: width,
+      fontSize: fontSize,
+      color: style.quoteColor,
+      foreground: Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7
+        ..strokeJoin = StrokeJoin.round
+        ..color = style.outlineColor,
+    );
+    canvas.drawParagraph(softShadowParagraph, Offset(left, top + 8));
+    canvas.drawParagraph(shadowParagraph, Offset(left, top + 2));
+    canvas.drawParagraph(paragraph, Offset(left, top));
+  }
+
+  double paragraphStyleFontSize(ui.Paragraph paragraph, String text) {
+    var fontSize = _quoteFontSize(text);
+    while (fontSize >= 38) {
+      final probe = _quoteParagraph(
+        text,
+        width: 840,
+        fontSize: fontSize,
+        color: Colors.white,
+      );
+      if ((probe.height - paragraph.height).abs() < 1) return fontSize;
+      fontSize -= 2;
+    }
+    return fontSize;
   }
 
   double _quoteFontSize(String text) {
@@ -1133,6 +1359,43 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
 
 enum _QuoteShareMode { text, image }
 
+class _CachedQuoteBackgroundThumb extends StatelessWidget {
+  const _CachedQuoteBackgroundThumb({
+    required this.imageUrl,
+    required this.loadBytes,
+  });
+
+  final String imageUrl;
+  final Future<Uint8List> Function(String url) loadBytes;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: loadBytes(imageUrl),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return Image.memory(
+            snapshot.data!,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+          );
+        }
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+          child: const Center(
+            child: SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _QuoteBackgroundSelection {
   const _QuoteBackgroundSelection({required this.imageUrl});
 
@@ -1141,6 +1404,52 @@ class _QuoteBackgroundSelection {
   }
 
   final String? imageUrl;
+}
+
+class _QuoteImageTone {
+  const _QuoteImageTone({
+    required this.luminance,
+    required this.contrast,
+    required this.saturation,
+  });
+
+  factory _QuoteImageTone.fallback() {
+    return const _QuoteImageTone(
+      luminance: .58,
+      contrast: .12,
+      saturation: .18,
+    );
+  }
+
+  final double luminance;
+  final double contrast;
+  final double saturation;
+}
+
+class _QuoteRenderStyle {
+  const _QuoteRenderStyle({
+    required this.quoteColor,
+    required this.outlineColor,
+    required this.shadowColor,
+    required this.panelColor,
+    required this.panelBorderColor,
+    required this.scrimColor,
+    required this.bottomShade,
+    required this.metaColor,
+    required this.watermarkColor,
+    required this.usePanel,
+  });
+
+  final Color quoteColor;
+  final Color outlineColor;
+  final Color shadowColor;
+  final Color panelColor;
+  final Color panelBorderColor;
+  final Color scrimColor;
+  final Color bottomShade;
+  final Color metaColor;
+  final Color watermarkColor;
+  final bool usePanel;
 }
 
 class _BannerStrip extends StatelessWidget {

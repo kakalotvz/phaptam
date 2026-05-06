@@ -199,6 +199,9 @@ class QuoteBackground {
     required this.id,
     required this.imageUrl,
     required this.name,
+    this.sizeBytes,
+    this.width,
+    this.height,
   });
 
   factory QuoteBackground.fromJson(Map<String, dynamic> json) {
@@ -206,12 +209,18 @@ class QuoteBackground {
       id: json['id'] as String,
       imageUrl: json['imageUrl'] as String? ?? '',
       name: json['name'] as String? ?? 'Ảnh nền trích dẫn',
+      sizeBytes: json['sizeBytes'] as int?,
+      width: json['width'] as int?,
+      height: json['height'] as int?,
     );
   }
 
   final String id;
   final String imageUrl;
   final String name;
+  final int? sizeBytes;
+  final int? width;
+  final int? height;
 }
 
 class HomeBanner {

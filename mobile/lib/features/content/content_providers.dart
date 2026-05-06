@@ -80,7 +80,7 @@ final dailyQuotesProvider = FutureProvider<List<DailyQuote>>((ref) async {
 
 final quoteBackgroundsProvider = FutureProvider<List<QuoteBackground>>((ref) async {
   _refreshPeriodically(ref);
-  final items = await PublicListCache.getList(ref, '/quote-backgrounds');
+  final items = await apiClient.getList('/quote-backgrounds');
   return items
       .cast<Map<String, dynamic>>()
       .map(QuoteBackground.fromJson)
@@ -132,6 +132,7 @@ const publicCachePaths = [
   '/news',
   '/meditation',
   '/quotes',
+  '/quote-backgrounds',
   '/banners',
   '/scriptures',
   '/scripture-readings',
@@ -145,6 +146,7 @@ Future<void> refreshPublicContent(WidgetRef ref) async {
   ref.invalidate(newsListProvider);
   ref.invalidate(meditationProgramsProvider);
   ref.invalidate(dailyQuotesProvider);
+  ref.invalidate(quoteBackgroundsProvider);
   ref.invalidate(homeBannersProvider);
   ref.invalidate(scriptureListProvider);
   ref.invalidate(scriptureReadingListProvider);

@@ -93,6 +93,7 @@ import {
   ScriptureLine,
   ScriptureReminder,
   uploadToR2,
+  uploadToR2WithMetadata,
   Video,
   VideoCategory,
 } from './lib/api';
@@ -4212,7 +4213,6 @@ function RssManager({ data, run }: { data: DataState; run: RunAction }) {
 
 function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   const [content, setContent] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
   const [editingQuoteId, setEditingQuoteId] = useState('');
   const [selectedQuoteIds, setSelectedQuoteIds] = useState<string[]>(data.quoteRotation.quoteIds);
   const [uploadingBackgrounds, setUploadingBackgrounds] = useState(false);
@@ -4228,14 +4228,12 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   function editQuote(row: QuoteRecord) {
     setEditingQuoteId(row.id);
     setContent(row.content);
-    setImageUrl(row.imageUrl ?? '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function resetQuoteForm() {
     setEditingQuoteId('');
     setContent('');
-    setImageUrl('');
   }
 
   function toggleSelected(id: string, checked: boolean) {
@@ -4263,10 +4261,13 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
     try {
       await run(async () => {
         for (const file of selectedFiles) {
-          const imageUrl = await uploadToR2(file, 'images/quote-background');
+          const uploaded = await uploadToR2WithMetadata(file, 'images/quote-background');
           await api.create('/admin/quote-background', {
-            imageUrl,
+            imageUrl: uploaded.publicUrl,
             name: file.name.replace(/\.[^.]+$/, '') || 'Ảnh nền trích dẫn',
+            sizeBytes: uploaded.sizeBytes,
+            width: uploaded.width,
+            height: uploaded.height,
           });
         }
         return true;
@@ -4274,6 +4275,18 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
     } finally {
       setUploadingBackgrounds(false);
     }
+  }
+
+  function zoomQuoteBackground(item: QuoteBackground) {
+    void Swal.fire({
+      title: item.name,
+      imageUrl: item.imageUrl,
+      imageAlt: item.name,
+      imageHeight: 620,
+      html: `<div class="quote-background-zoom-meta">${quoteBackgroundMeta(item)}</div>`,
+      confirmButtonText: 'Đóng',
+      customClass: { popup: 'quote-background-zoom' },
+    });
   }
 
   return (
@@ -4301,10 +4314,6 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             />
             {!editingQuoteId && <span className="field-note">Khi lưu, hệ thống tự tách mỗi dòng thành một trích dẫn riêng.</span>}
           </label>
-          <label>
-            Ảnh minh họa
-            <UploadField kind="images/quote" value={imageUrl} onUploaded={setImageUrl} />
-          </label>
           <button
             className="primary quote-save-button"
             type="button"
@@ -4312,8 +4321,8 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               const ok = await run(
                 () =>
                   editingQuoteId
-                    ? api.update(`/admin/quote/${editingQuoteId}`, { content, imageUrl })
-                    : api.create('/admin/quote', { content, imageUrl }),
+                    ? api.update(`/admin/quote/${editingQuoteId}`, { content })
+                    : api.create('/admin/quote', { content }),
                 editingQuoteId ? 'Đã cập nhật trích dẫn' : 'Đã tạo trích dẫn',
               );
               if (ok) resetQuoteForm();
@@ -4323,65 +4332,6 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             {editingQuoteId ? 'Cập nhật trích dẫn' : 'Lưu trích dẫn'}
           </button>
         </div>
-      </Panel>
-      <Panel title="Ảnh nền chia sẻ">
-        <div className="quote-background-tools">
-          <div>
-            <strong>Nền story 9:16 cho trích dẫn</strong>
-            <span>Ảnh trong danh sách này sẽ hiện trên app để người dùng chọn hoặc để hệ thống chọn ngẫu nhiên.</span>
-          </div>
-          <label className="upload-button">
-            <ImagePlus size={16} />
-            {uploadingBackgrounds ? 'Đang upload...' : 'Upload nhiều ảnh'}
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(event) => {
-                void uploadQuoteBackgroundFiles(event.target.files);
-                event.currentTarget.value = '';
-              }}
-            />
-          </label>
-        </div>
-        {data.quoteBackgrounds.length === 0 ? (
-          <div className="empty">Chưa có ảnh nền chia sẻ.</div>
-        ) : (
-          <div className="quote-background-grid">
-            {data.quoteBackgrounds.map((item) => (
-              <div className="quote-background-card" key={item.id}>
-                <img src={item.imageUrl} alt={item.name} />
-                <div>
-                  <strong>{item.name}</strong>
-                  <span>{item.active ? 'Đang dùng trong app' : 'Đang tắt'}</span>
-                </div>
-                <div className="action-group">
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() =>
-                      run(
-                        () => api.update(`/admin/quote-background/${item.id}`, { active: !item.active }),
-                        item.active ? 'Đã tắt ảnh nền' : 'Đã bật ảnh nền',
-                      )
-                    }
-                  >
-                    {item.active ? <Pause size={15} /> : <Play size={15} />}
-                    {item.active ? 'Tắt' : 'Bật'}
-                  </button>
-                  <button
-                    className="danger"
-                    type="button"
-                    onClick={() => run(() => api.remove(`/admin/quote-background/${item.id}`), 'Đã xóa ảnh nền')}
-                  >
-                    <Trash2 size={15} />
-                    Xóa
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </Panel>
       <Panel title="Danh sách trích dẫn">
         <div className="quote-controlbar">
@@ -4441,7 +4391,6 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               ),
               'Chọn',
             ],
-            ['imageUrl', 'Ảnh'],
             [
               (row: QuoteRecord) => (
                 <span className={row.id === activeQuoteId ? 'quote-current-content' : ''}>
@@ -4485,8 +4434,76 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
           pageSize={10}
         />
       </Panel>
+      <Panel title="Ảnh nền chia sẻ">
+        <div className="quote-background-tools">
+          <div>
+            <strong>Nền story 9:16 cho trích dẫn</strong>
+            <span>Ảnh trong danh sách này sẽ hiện trên app để người dùng chọn hoặc để hệ thống chọn ngẫu nhiên.</span>
+          </div>
+          <label className="upload-button">
+            <ImagePlus size={16} />
+            {uploadingBackgrounds ? 'Đang upload...' : 'Upload nhiều ảnh'}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => {
+                void uploadQuoteBackgroundFiles(event.target.files);
+                event.currentTarget.value = '';
+              }}
+            />
+          </label>
+        </div>
+        {data.quoteBackgrounds.length === 0 ? (
+          <div className="empty">Chưa có ảnh nền chia sẻ.</div>
+        ) : (
+          <div className="quote-background-grid">
+            {data.quoteBackgrounds.map((item) => (
+              <div className="quote-background-card" key={item.id}>
+                <button className="quote-background-thumb" type="button" onClick={() => zoomQuoteBackground(item)}>
+                  <img src={item.imageUrl} alt={item.name} />
+                </button>
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{quoteBackgroundMeta(item)}</span>
+                  <span>{item.active ? 'Đang dùng trong app' : 'Đang tắt khỏi app và random'}</span>
+                </div>
+                <div className="action-group">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() =>
+                      run(
+                        () => api.update(`/admin/quote-background/${item.id}`, { active: !item.active }),
+                        item.active ? 'Đã tắt ảnh nền' : 'Đã bật ảnh nền',
+                      )
+                    }
+                  >
+                    {item.active ? <Pause size={15} /> : <Play size={15} />}
+                    {item.active ? 'Tắt' : 'Bật'}
+                  </button>
+                  <button
+                    className="danger"
+                    type="button"
+                    onClick={() => run(() => api.remove(`/admin/quote-background/${item.id}`), 'Đã xóa ảnh nền khỏi R2')}
+                  >
+                    <Trash2 size={15} />
+                    Xóa
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
     </div>
   );
+}
+
+function quoteBackgroundMeta(item: QuoteBackground) {
+  const dimensions = item.width && item.height ? `${item.width} x ${item.height}px` : 'Chưa có kích thước';
+  const size = item.sizeBytes ? formatBytes(item.sizeBytes) : 'Chưa có dung lượng';
+  return `${dimensions} · ${size}`;
 }
 
 function BannerManager({ data, run }: { data: DataState; run: RunAction }) {

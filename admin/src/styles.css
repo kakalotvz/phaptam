@@ -488,6 +488,16 @@ main {
   background: #fff;
 }
 
+.quote-background-thumb {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.quote-background-thumb img,
 .quote-background-card img {
   width: 100%;
   aspect-ratio: 9 / 16;
@@ -499,6 +509,23 @@ main {
 .quote-background-card > div:not(.action-group) {
   display: grid;
   gap: 3px;
+}
+
+.quote-background-zoom {
+  max-width: 520px;
+}
+
+.quote-background-zoom .swal2-image {
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+.quote-background-zoom-meta {
+  color: #6b5b4f;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .table-checkbox {

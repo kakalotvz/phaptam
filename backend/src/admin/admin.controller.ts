@@ -763,7 +763,17 @@ export class AdminController {
   }
 
   @Post('quote-background')
-  async createQuoteBackground(@Body() data: { imageUrl: string; name?: string; active?: boolean }) {
+  async createQuoteBackground(
+    @Body()
+    data: {
+      imageUrl: string;
+      name?: string;
+      active?: boolean;
+      sizeBytes?: number;
+      width?: number;
+      height?: number;
+    },
+  ) {
     const imageUrl = data.imageUrl?.trim();
     if (!imageUrl) throw new BadRequestException('Vui lòng chọn ảnh nền.');
     const items = await this.quoteBackgroundSettings();
@@ -772,6 +782,9 @@ export class AdminController {
         id: randomUUID(),
         imageUrl,
         name: data.name?.trim() || 'Ảnh nền trích dẫn',
+        sizeBytes: normalizePositiveNumber(data.sizeBytes),
+        width: normalizePositiveNumber(data.width),
+        height: normalizePositiveNumber(data.height),
         active: data.active ?? true,
         createdAt: new Date().toISOString(),
       },
@@ -784,7 +797,15 @@ export class AdminController {
   @Patch('quote-background/:id')
   async updateQuoteBackground(
     @Param('id') id: string,
-    @Body() data: { imageUrl?: string; name?: string; active?: boolean },
+    @Body()
+    data: {
+      imageUrl?: string;
+      name?: string;
+      active?: boolean;
+      sizeBytes?: number;
+      width?: number;
+      height?: number;
+    },
   ) {
     const items = await this.quoteBackgroundSettings();
     const index = items.findIndex((item) => item.id === id);
@@ -795,6 +816,9 @@ export class AdminController {
       ...previous,
       imageUrl: data.imageUrl === undefined ? previous.imageUrl : data.imageUrl.trim(),
       name: data.name === undefined ? previous.name : data.name.trim() || 'Ảnh nền trích dẫn',
+      sizeBytes: data.sizeBytes === undefined ? previous.sizeBytes : normalizePositiveNumber(data.sizeBytes),
+      width: data.width === undefined ? previous.width : normalizePositiveNumber(data.width),
+      height: data.height === undefined ? previous.height : normalizePositiveNumber(data.height),
       active: data.active ?? previous.active,
     };
     if (!next[index].imageUrl) throw new BadRequestException('Vui lòng chọn ảnh nền.');
@@ -1197,6 +1221,9 @@ type QuoteBackground = {
   id: string;
   imageUrl: string;
   name: string;
+  sizeBytes?: number;
+  width?: number;
+  height?: number;
   active: boolean;
   createdAt: string;
 };
@@ -1226,9 +1253,17 @@ function normalizeQuoteBackground(value: unknown): QuoteBackground | null {
     id: item.id,
     imageUrl: item.imageUrl.trim(),
     name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Ảnh nền trích dẫn',
+    sizeBytes: normalizePositiveNumber(item.sizeBytes),
+    width: normalizePositiveNumber(item.width),
+    height: normalizePositiveNumber(item.height),
     active: item.active !== false,
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
   };
+}
+
+function normalizePositiveNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
 }
 
 function vietnamDateKey(date: Date) {

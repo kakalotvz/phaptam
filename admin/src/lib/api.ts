@@ -121,6 +121,9 @@ export type QuoteBackground = {
   id: string;
   imageUrl: string;
   name: string;
+  sizeBytes?: number;
+  width?: number;
+  height?: number;
   active: boolean;
   createdAt: string;
 };
@@ -339,7 +342,17 @@ export const api = {
 };
 
 export async function uploadToR2(file: File, kind: UploadKind): Promise<string> {
+  return (await uploadToR2WithMetadata(file, kind)).publicUrl;
+}
+
+export async function uploadToR2WithMetadata(file: File, kind: UploadKind): Promise<{
+  publicUrl: string;
+  sizeBytes: number;
+  width?: number;
+  height?: number;
+}> {
   const normalized = kind.startsWith('images/') ? await convertImageToWebp(file, kind) : file;
+  const dimensions = kind.startsWith('images/') ? await imageDimensions(normalized) : {};
   const { uploadUrl, publicUrl } = await api.presignedUrl({
     kind,
     contentType: normalized.type,
@@ -355,7 +368,11 @@ export async function uploadToR2(file: File, kind: UploadKind): Promise<string> 
     throw new Error(`Upload thất bại: ${response.status}`);
   }
 
-  return publicUrl;
+  return {
+    publicUrl,
+    sizeBytes: normalized.size,
+    ...dimensions,
+  };
 }
 
 async function convertImageToWebp(file: File, kind: UploadKind): Promise<File> {
@@ -363,7 +380,11 @@ async function convertImageToWebp(file: File, kind: UploadKind): Promise<File> {
 
   const image = await createImageBitmap(file);
   const canvas = document.createElement('canvas');
-  const maxEdge = kind === 'images/scripture' ? 1600 : file.name.toLowerCase().includes('banner') ? 1200 : 600;
+  const maxEdge = kind === 'images/scripture' || kind === 'images/quote-background'
+    ? 1600
+    : file.name.toLowerCase().includes('banner')
+      ? 1200
+      : 600;
   const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
   canvas.width = Math.max(1, Math.round(image.width * scale));
   canvas.height = Math.max(1, Math.round(image.height * scale));
@@ -376,4 +397,11 @@ async function convertImageToWebp(file: File, kind: UploadKind): Promise<File> {
   if (!blob) throw new Error('Không thể chuyển ảnh sang WebP');
 
   return new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), { type: 'image/webp' });
+}
+
+async function imageDimensions(file: File) {
+  const image = await createImageBitmap(file);
+  const dimensions = { width: image.width, height: image.height };
+  image.close();
+  return dimensions;
 }
