@@ -779,7 +779,15 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
       <Panel title="Tạo danh mục audio">
         <SmartForm
           fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
-          onSubmit={(values) => run(() => api.create('/admin/audio-category', { ...values, kind: 'AUDIO' }), 'Đã tạo danh mục audio')}
+          onSubmit={async (values) => {
+            const name = await confirmDuplicateCategoryName({
+              name: values.name,
+              categories: audioCategories,
+              parentId: null,
+            });
+            if (!name) return false;
+            return run(() => api.create('/admin/audio-category', { ...values, name, kind: 'AUDIO' }), 'Đã tạo danh mục audio');
+          }}
         />
       </Panel>
       <Panel title="Thêm kinh audio">
@@ -1113,11 +1121,17 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           className="form compact-form"
           onSubmit={async (event) => {
             event.preventDefault();
+            const name = await confirmDuplicateCategoryName({
+              name: categoryName,
+              categories: scriptureCategories,
+              parentId: null,
+            });
+            if (!name) return;
             const saved = await run(
               () =>
                 api.create('/admin/audio-category', {
                   kind: 'CHANT',
-                  name: categoryName,
+                  name,
                   description: categoryDescription,
                 }),
               'Đã tạo danh mục Kinh tụng',
@@ -1287,11 +1301,17 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           depth={(scriptureDepthById.get(addingParent.id) ?? 0) + 1}
           onClose={() => setAddingParent(null)}
           onSave={async (values) => {
+            const name = await confirmDuplicateCategoryName({
+              name: values.name,
+              categories: scriptureCategories,
+              parentId: addingParent.id,
+            });
+            if (!name) return;
             const saved = await run(
               () =>
                 api.create('/admin/audio-category', {
                   kind: 'CHANT',
-                  name: values.name,
+                  name,
                   description: values.description,
                   parentId: addingParent.id,
                 }),
@@ -1362,11 +1382,17 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
           className="form compact-form"
           onSubmit={async (event) => {
             event.preventDefault();
+            const name = await confirmDuplicateCategoryName({
+              name: categoryName,
+              categories: readingCategories,
+              parentId: null,
+            });
+            if (!name) return;
             const saved = await run(
               () =>
                 api.create('/admin/audio-category', {
                   kind: 'READING',
-                  name: categoryName,
+                  name,
                   description: categoryDescription,
                 }),
               'Đã tạo danh mục Kinh đọc',
@@ -1496,11 +1522,17 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
           depth={(readingDepthById.get(addingParent.id) ?? 0) + 1}
           onClose={() => setAddingParent(null)}
           onSave={async (values) => {
+            const name = await confirmDuplicateCategoryName({
+              name: values.name,
+              categories: readingCategories,
+              parentId: addingParent.id,
+            });
+            if (!name) return;
             const saved = await run(
               () =>
                 api.create('/admin/audio-category', {
                   kind: 'READING',
-                  name: values.name,
+                  name,
                   description: values.description,
                   parentId: addingParent.id,
                 }),
@@ -1564,9 +1596,21 @@ function ScriptureArchive({
     }, {});
   }, [categories, childrenByParent, childFilter, dateFilter, parentFilter, query, scriptures]);
 
+  const visibleCategoryIds = useMemo(
+    () =>
+      buildArchiveVisibleCategoryIds({
+        categories,
+        childrenByParent,
+        rowsByCategory: scripturesByCategory,
+        filters: { query, parentId: parentFilter, childIds: archiveChildFilterIds(childFilter, childrenByParent), date: dateFilter },
+      }),
+    [categories, childrenByParent, childFilter, dateFilter, parentFilter, query, scripturesByCategory],
+  );
   const visibleCount = Object.values(scripturesByCategory).reduce((sum, items) => sum + items.length, 0);
   const hasActiveFilter = Boolean(query.trim() || parentFilter || childFilter || dateFilter);
   const hasCategories = rootCategories.length > 0;
+  const visibleRootCategories = visibleCategoryIds ? rootCategories.filter((category) => visibleCategoryIds.has(category.id)) : rootCategories;
+  const hasVisibleResults = visibleRootCategories.length > 0 || (scripturesByCategory.uncategorized?.length ?? 0) > 0;
 
   return (
     <div className="reading-archive">
@@ -1594,7 +1638,7 @@ function ScriptureArchive({
         </label>
         <label>
           Danh mục con
-          <select value={childFilter} onChange={(event) => setChildFilter(event.target.value)}>
+          <select value={childFilter} onChange={(event) => setChildFilter(event.target.value)} disabled={childFilterOptions.length === 0}>
             <option value="">Tất cả danh mục con</option>
             {childFilterOptions.map(([id, label]) => (
               <option key={id} value={id}>
@@ -1633,11 +1677,11 @@ function ScriptureArchive({
         <span className="reading-summary-hint">Mở danh mục để xem bản tụng, dòng kinh và lượt xem.</span>
       </div>
 
-      {visibleCount === 0 && (!hasCategories || hasActiveFilter) ? (
+      {visibleCount === 0 && (!hasCategories || (hasActiveFilter && !hasVisibleResults)) ? (
         <div className="empty">Không tìm thấy bản Kinh tụng phù hợp.</div>
       ) : (
         <div className="reading-dropdown-list">
-          {rootCategories.map((category) => (
+          {visibleRootCategories.map((category) => (
             <ScriptureCategoryDropdown
               key={category.id}
               category={category}
@@ -1645,6 +1689,7 @@ function ScriptureArchive({
               childrenByParent={childrenByParent}
               scripturesByCategory={scripturesByCategory}
               showEmptyCategories={!hasActiveFilter}
+              visibleCategoryIds={visibleCategoryIds}
               countForCategory={countForCategory}
               maxChildDepth={maxChildDepth}
               onAddCategoryChild={onAddCategoryChild}
@@ -1682,6 +1727,7 @@ function ScriptureCategoryDropdown({
   childrenByParent,
   scripturesByCategory,
   showEmptyCategories,
+  visibleCategoryIds,
   countForCategory,
   maxChildDepth,
   onAddCategoryChild,
@@ -1695,6 +1741,7 @@ function ScriptureCategoryDropdown({
   childrenByParent: Record<string, AudioCategory[]>;
   scripturesByCategory: Record<string, Scripture[]>;
   showEmptyCategories: boolean;
+  visibleCategoryIds?: Set<string> | null;
   countForCategory: (row: AudioCategory) => number;
   maxChildDepth: number;
   onAddCategoryChild: (row: AudioCategory) => void;
@@ -1703,16 +1750,20 @@ function ScriptureCategoryDropdown({
   onEdit: (row: Scripture) => void;
   onDelete: (row: Scripture) => void;
 }) {
-  const children = [...(childrenByParent[category.id] ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  if (visibleCategoryIds && !visibleCategoryIds.has(category.id)) return null;
+  const children = [...(childrenByParent[category.id] ?? [])]
+    .filter((child) => !visibleCategoryIds || visibleCategoryIds.has(child.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   const count = scriptureCountForCategory(category.id, childrenByParent, scripturesByCategory);
   const totalCount = countForCategory(category);
+  const shouldShowEmptyCategory = showEmptyCategories || Boolean(visibleCategoryIds?.has(category.id));
   const displayCount = showEmptyCategories ? totalCount : count;
   const canAddChild = depth < maxChildDepth;
-  if (count === 0 && !showEmptyCategories) return null;
+  if (count === 0 && !shouldShowEmptyCategory) return null;
   const childCount = children.length;
 
   return (
-    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} open={depth === 0}>
+    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} open={depth === 0 || Boolean(visibleCategoryIds)}>
       <summary style={{ paddingLeft: depth * 18 }}>
         <div className="reading-category-main">
           <div className="reading-category-titleline">
@@ -1768,6 +1819,7 @@ function ScriptureCategoryDropdown({
             childrenByParent={childrenByParent}
             scripturesByCategory={scripturesByCategory}
             showEmptyCategories={showEmptyCategories}
+            visibleCategoryIds={visibleCategoryIds}
             countForCategory={countForCategory}
             maxChildDepth={maxChildDepth}
             onAddCategoryChild={onAddCategoryChild}
@@ -1878,9 +1930,21 @@ function ScriptureReadingArchive({
     }, {});
   }, [categories, childrenByParent, childFilter, dateFilter, parentFilter, query, readings]);
 
+  const visibleCategoryIds = useMemo(
+    () =>
+      buildArchiveVisibleCategoryIds({
+        categories,
+        childrenByParent,
+        rowsByCategory: readingsByCategory,
+        filters: { query, parentId: parentFilter, childIds: archiveChildFilterIds(childFilter, childrenByParent), date: dateFilter },
+      }),
+    [categories, childrenByParent, childFilter, dateFilter, parentFilter, query, readingsByCategory],
+  );
   const visibleCount = Object.values(readingsByCategory).reduce((sum, items) => sum + items.length, 0);
   const hasActiveFilter = Boolean(query.trim() || parentFilter || childFilter || dateFilter);
   const hasCategories = rootCategories.length > 0;
+  const visibleRootCategories = visibleCategoryIds ? rootCategories.filter((category) => visibleCategoryIds.has(category.id)) : rootCategories;
+  const hasVisibleResults = visibleRootCategories.length > 0 || (readingsByCategory.uncategorized?.length ?? 0) > 0;
 
   return (
     <div className="reading-archive">
@@ -1908,7 +1972,7 @@ function ScriptureReadingArchive({
         </label>
         <label>
           Danh mục con
-          <select value={childFilter} onChange={(event) => setChildFilter(event.target.value)}>
+          <select value={childFilter} onChange={(event) => setChildFilter(event.target.value)} disabled={childFilterOptions.length === 0}>
             <option value="">Tất cả danh mục con</option>
             {childFilterOptions.map(([id, label]) => (
               <option key={id} value={id}>
@@ -1947,11 +2011,11 @@ function ScriptureReadingArchive({
         <span className="reading-summary-hint">Mở danh mục để xem bài đọc, mô tả dài được rút gọn tự động.</span>
       </div>
 
-      {visibleCount === 0 && (!hasCategories || hasActiveFilter) ? (
+      {visibleCount === 0 && (!hasCategories || (hasActiveFilter && !hasVisibleResults)) ? (
         <div className="empty">Không tìm thấy bài Kinh đọc phù hợp.</div>
       ) : (
         <div className="reading-dropdown-list">
-          {rootCategories.map((category) => (
+          {visibleRootCategories.map((category) => (
             <ScriptureReadingCategoryDropdown
               key={category.id}
               category={category}
@@ -1959,6 +2023,7 @@ function ScriptureReadingArchive({
               childrenByParent={childrenByParent}
               readingsByCategory={readingsByCategory}
               showEmptyCategories={!hasActiveFilter}
+              visibleCategoryIds={visibleCategoryIds}
               countForCategory={countForCategory}
               maxChildDepth={maxChildDepth}
               onAddCategoryChild={onAddCategoryChild}
@@ -1996,6 +2061,7 @@ function ScriptureReadingCategoryDropdown({
   childrenByParent,
   readingsByCategory,
   showEmptyCategories,
+  visibleCategoryIds,
   countForCategory,
   maxChildDepth,
   onAddCategoryChild,
@@ -2009,6 +2075,7 @@ function ScriptureReadingCategoryDropdown({
   childrenByParent: Record<string, AudioCategory[]>;
   readingsByCategory: Record<string, Scripture[]>;
   showEmptyCategories: boolean;
+  visibleCategoryIds?: Set<string> | null;
   countForCategory: (row: AudioCategory) => number;
   maxChildDepth: number;
   onAddCategoryChild: (row: AudioCategory) => void;
@@ -2017,16 +2084,20 @@ function ScriptureReadingCategoryDropdown({
   onEdit: (row: Scripture) => void;
   onDelete: (row: Scripture) => void;
 }) {
-  const children = [...(childrenByParent[category.id] ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  if (visibleCategoryIds && !visibleCategoryIds.has(category.id)) return null;
+  const children = [...(childrenByParent[category.id] ?? [])]
+    .filter((child) => !visibleCategoryIds || visibleCategoryIds.has(child.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   const count = readingCountForCategory(category.id, childrenByParent, readingsByCategory);
   const totalCount = countForCategory(category);
+  const shouldShowEmptyCategory = showEmptyCategories || Boolean(visibleCategoryIds?.has(category.id));
   const displayCount = showEmptyCategories ? totalCount : count;
   const canAddChild = depth < maxChildDepth;
-  if (count === 0 && !showEmptyCategories) return null;
+  if (count === 0 && !shouldShowEmptyCategory) return null;
   const childCount = children.length;
 
   return (
-    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} open={depth === 0}>
+    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} open={depth === 0 || Boolean(visibleCategoryIds)}>
       <summary style={{ paddingLeft: depth * 18 }}>
         <div className="reading-category-main">
           <div className="reading-category-titleline">
@@ -2082,6 +2153,7 @@ function ScriptureReadingCategoryDropdown({
             childrenByParent={childrenByParent}
             readingsByCategory={readingsByCategory}
             showEmptyCategories={showEmptyCategories}
+            visibleCategoryIds={visibleCategoryIds}
             countForCategory={countForCategory}
             maxChildDepth={maxChildDepth}
             onAddCategoryChild={onAddCategoryChild}
@@ -2263,7 +2335,14 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
       <Panel title="Tạo danh mục video">
         <SmartForm
           fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
-          onSubmit={(values) => run(() => api.create('/admin/video-category', values), 'Đã tạo danh mục video')}
+          onSubmit={async (values) => {
+            const name = await confirmDuplicateCategoryName({
+              name: values.name,
+              categories: data.videoCategories,
+            });
+            if (!name) return false;
+            return run(() => api.create('/admin/video-category', { ...values, name }), 'Đã tạo danh mục video');
+          }}
         />
       </Panel>
       <Panel title="Thêm video giảng">
@@ -3428,7 +3507,7 @@ function RichTextEditor({
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         <button style={btnStyle(false)} type="button" onClick={() => { if(editor) editor.chain().focus().clearNodes().unsetAllMarks().setTextAlign('left').run(); }} title="Xóa định dạng"><Eraser size={16} /></button>
         
-        <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(event) => void uploadImage(event.target.files?.[0])} />
+        <input ref={imageInputRef} type="file" accept="image/*,.webp,image/webp" hidden onChange={(event) => void uploadImage(event.target.files?.[0])} />
         <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime,video/webm" hidden onChange={(event) => void uploadVideo(event.target.files?.[0])} />
       </div>
       <EditorContent editor={editor} />
@@ -3696,7 +3775,7 @@ function BbCodeTextarea({
         <input
           ref={imageInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,.webp,image/webp"
           hidden
           onChange={(event) => void uploadImage(event.target.files?.[0])}
         />
@@ -3869,7 +3948,14 @@ function editNews(row: NewsItem) {
         <Panel title="Tạo danh mục tin tức">
           <SmartForm
             fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
-            onSubmit={(values) => run(() => api.create('/admin/news-category', values), 'Đã tạo danh mục tin tức')}
+            onSubmit={async (values) => {
+              const name = await confirmDuplicateCategoryName({
+                name: values.name,
+                categories: data.newsCategories,
+              });
+              if (!name) return false;
+              return run(() => api.create('/admin/news-category', { ...values, name }), 'Đã tạo danh mục tin tức');
+            }}
           />
         </Panel>
         <Panel title="Danh mục tin tức">
@@ -4445,7 +4531,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             {uploadingBackgrounds ? 'Đang upload...' : 'Upload nhiều ảnh'}
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.webp,image/webp"
               multiple
               onChange={(event) => {
                 void uploadQuoteBackgroundFiles(event.target.files);
@@ -4848,14 +4934,20 @@ function formatBytes(bytes?: number | null) {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[index]}`;
 }
 
-function SmartForm({ fields, onSubmit }: { fields: Field[]; onSubmit: (values: Record<string, string>) => void }) {
+function SmartForm({
+  fields,
+  onSubmit,
+}: {
+  fields: Field[];
+  onSubmit: (values: Record<string, string>) => void | boolean | Promise<void | boolean>;
+}) {
   const initial = useMemo(() => Object.fromEntries(fields.map(([name]) => [name, ''])), [fields]);
   const [values, setValues] = useState<Record<string, string>>(initial);
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    onSubmit(values);
-    setValues(initial);
+    const result = await onSubmit(values);
+    if (result !== false) setValues(initial);
   }
 
   return (
@@ -4905,7 +4997,7 @@ function UploadField({
   onUploaded: (url: string) => void;
 }) {
   const [uploading, setUploading] = useState(false);
-  const accept = kind.startsWith('audio') ? 'audio/mpeg,.mp3' : kind.startsWith('video') ? 'video/mp4,.mp4' : 'image/*';
+  const accept = kind.startsWith('audio') ? 'audio/mpeg,.mp3' : kind.startsWith('video') ? 'video/mp4,.mp4' : 'image/*,.webp,image/webp';
 
   async function onFileSelected(file?: File) {
     if (!file) return;
@@ -5225,6 +5317,59 @@ function groupCategoriesByParent(rows: AudioCategory[]) {
   }, {});
 }
 
+async function confirmDuplicateCategoryName({
+  name,
+  categories,
+  parentId,
+}: {
+  name: string;
+  categories: Array<{ name: string; parentId?: string | null }>;
+  parentId?: string | null;
+}) {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const scopedCategories =
+    parentId === undefined
+      ? categories
+      : categories.filter((item) => (item.parentId ?? null) === parentId);
+  const existingNames = scopedCategories.map((item) => item.name);
+  const duplicated = existingNames.some((item) => normalizedCategoryName(item) === normalizedCategoryName(trimmed));
+  if (!duplicated) return trimmed;
+
+  const nextName = nextNumberedCategoryName(trimmed, existingNames);
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: 'Tên danh mục đã tồn tại',
+    html: `Đã có danh mục tên <strong>${escapeHtmlText(trimmed)}</strong> trong cùng cấp.<br/>Bạn muốn tạo với tên <strong>${escapeHtmlText(nextName)}</strong> không?`,
+    showCancelButton: true,
+    confirmButtonText: `Tạo "${nextName}"`,
+    cancelButtonText: 'Hủy',
+  });
+  return result.isConfirmed ? nextName : null;
+}
+
+function nextNumberedCategoryName(name: string, existingNames: string[]) {
+  const baseName = name.replace(/\s+\(\d+\)$/u, '').trim() || name.trim();
+  const normalizedExisting = new Set(existingNames.map(normalizedCategoryName));
+  for (let index = 1; index < 10_000; index += 1) {
+    const candidate = `${baseName} (${index})`;
+    if (!normalizedExisting.has(normalizedCategoryName(candidate))) return candidate;
+  }
+  return `${baseName} (${Date.now()})`;
+}
+
+function normalizedCategoryName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi-VN');
+}
+
+function escapeHtmlText(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function descendantCategoryIds(id: string, childrenByParent: Record<string, AudioCategory[]>) {
   const ids = new Set<string>();
   const stack = [...(childrenByParent[id] ?? [])];
@@ -5234,6 +5379,13 @@ function descendantCategoryIds(id: string, childrenByParent: Record<string, Audi
     ids.add(child.id);
     stack.push(...(childrenByParent[child.id] ?? []));
   }
+  return ids;
+}
+
+function archiveChildFilterIds(childFilter: string, childrenByParent: Record<string, AudioCategory[]>) {
+  if (!childFilter) return new Set<string>();
+  const ids = descendantCategoryIds(childFilter, childrenByParent);
+  ids.add(childFilter);
   return ids;
 }
 
@@ -5289,15 +5441,102 @@ function categoryRootId(id: string, rows: AudioCategory[]) {
   return root?.id ?? '';
 }
 
+function categoryAncestorIds(id: string, rows: AudioCategory[]) {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  let current = byId.get(id);
+
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    ids.unshift(current.id);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+
+  return ids;
+}
+
+function normalizeSearchText(value?: string | null) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLocaleLowerCase('vi-VN')
+    .replace(/[^a-z0-9\s/-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function searchTokens(value: string) {
+  return normalizeSearchText(value).split(' ').filter(Boolean);
+}
+
+function matchesSearchTokens(value: string, tokens: string[]) {
+  if (tokens.length === 0) return true;
+  const normalized = normalizeSearchText(value);
+  return tokens.every((token) => normalized.includes(token));
+}
+
+function categoryMatchesArchiveScope(id: string, categories: AudioCategory[], filters: { parentId: string; childIds: Set<string> }) {
+  const matchesParent = !filters.parentId || categoryRootId(id, categories) === filters.parentId;
+  const matchesChild = filters.childIds.size === 0 || filters.childIds.has(id);
+  return matchesParent && matchesChild;
+}
+
+function categorySearchText(category: AudioCategory, categories: AudioCategory[]) {
+  return [category.name, category.description ?? '', categoryPathLabel(category.id, categories)].join(' ');
+}
+
+function buildArchiveVisibleCategoryIds({
+  categories,
+  childrenByParent,
+  rowsByCategory,
+  filters,
+}: {
+  categories: AudioCategory[];
+  childrenByParent: Record<string, AudioCategory[]>;
+  rowsByCategory: Record<string, Scripture[]>;
+  filters: { query: string; parentId: string; childIds: Set<string>; date: string };
+}) {
+  const tokens = searchTokens(filters.query);
+  const hasActiveFilter = tokens.length > 0 || Boolean(filters.parentId || filters.childIds.size > 0 || filters.date);
+  if (!hasActiveFilter) return null;
+
+  const visibleIds = new Set<string>();
+  const addPath = (id: string) => {
+    categoryAncestorIds(id, categories).forEach((categoryId) => visibleIds.add(categoryId));
+  };
+  const addScopedSubtree = (id: string) => {
+    if (categoryMatchesArchiveScope(id, categories, filters)) addPath(id);
+    descendantCategoryIds(id, childrenByParent).forEach((categoryId) => {
+      if (categoryMatchesArchiveScope(categoryId, categories, filters)) addPath(categoryId);
+    });
+  };
+
+  Object.entries(rowsByCategory).forEach(([categoryId, rows]) => {
+    if (categoryId !== 'uncategorized' && rows.length > 0) addPath(categoryId);
+  });
+
+  if (tokens.length > 0) {
+    categories.forEach((category) => {
+      if (!categoryMatchesArchiveScope(category.id, categories, filters)) return;
+      if (matchesSearchTokens(categorySearchText(category, categories), tokens)) addScopedSubtree(category.id);
+    });
+  }
+
+  return visibleIds;
+}
+
 function filterScriptureReadings(
   readings: Scripture[],
   categories: AudioCategory[],
   filters: { query: string; parentId: string; childIds: Set<string>; date: string },
 ) {
+  const tokens = searchTokens(filters.query);
   return readings.filter((row) => {
     const categoryPath = row.categoryId ? categoryPathLabel(row.categoryId, categories) : 'Chưa phân loại';
     const haystack = [row.title, row.description ?? '', newsContentToPlainText(row.content ?? ''), categoryPath].join(' ').toLowerCase();
-    const matchesQuery = !filters.query || haystack.includes(filters.query);
+    const matchesQuery = matchesSearchTokens(haystack, tokens);
     const matchesParent = !filters.parentId || (row.categoryId ? categoryRootId(row.categoryId, categories) === filters.parentId : false);
     const matchesChild = filters.childIds.size === 0 || filters.childIds.has(row.categoryId ?? '');
     const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
@@ -5310,11 +5549,12 @@ function filterScriptures(
   categories: AudioCategory[],
   filters: { query: string; parentId: string; childIds: Set<string>; date: string },
 ) {
+  const tokens = searchTokens(filters.query);
   return scriptures.filter((row) => {
     const categoryPath = row.categoryId ? categoryPathLabel(row.categoryId, categories) : 'Chưa phân loại';
     const lineText = (row.lines ?? []).map((line) => line.content).join(' ');
     const haystack = [row.title, row.description ?? '', lineText, categoryPath].join(' ').toLowerCase();
-    const matchesQuery = !filters.query || haystack.includes(filters.query);
+    const matchesQuery = matchesSearchTokens(haystack, tokens);
     const matchesParent = !filters.parentId || (row.categoryId ? categoryRootId(row.categoryId, categories) === filters.parentId : false);
     const matchesChild = filters.childIds.size === 0 || filters.childIds.has(row.categoryId ?? '');
     const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
@@ -5370,7 +5610,8 @@ function formatScriptureReadingDate(value?: string) {
 
 function categoryTreeOptions(rows: AudioCategory[]) {
   const childrenByParent = groupCategoriesByParent(rows);
-  const roots = rows.filter((row) => !row.parentId).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  const ids = new Set(rows.map((row) => row.id));
+  const roots = rows.filter((row) => !row.parentId || !ids.has(row.parentId)).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   const options: Array<[string, string]> = [];
 
   function visit(row: AudioCategory, depth: number) {

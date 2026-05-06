@@ -946,19 +946,7 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
 
       _drawAdaptiveScrim(canvas, rect, style);
 
-      _drawCenteredParagraph(
-        canvas,
-        'TRÍCH DẪN HÔM NAY',
-        width: 840,
-        top: 310,
-        fontSize: 34,
-        height: 1.25,
-        color: style.metaColor,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 5,
-      );
-
-      final quoteText = '“${_plainQuoteText(widget.quote.content)}”';
+      final quoteText = _plainQuoteText(widget.quote.content);
       final quoteParagraph = _buildFittingParagraph(
         quoteText,
         width: 840,
@@ -971,14 +959,14 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         quoteText,
         paragraph: quoteParagraph,
         style: style,
-        centerY: 920,
+        centerY: 850,
       );
 
       _drawCenteredParagraph(
         canvas,
         'Pháp Tâm',
         width: 840,
-        top: 1570,
+        top: 1688,
         fontSize: 42,
         height: 1.2,
         color: style.watermarkColor,
@@ -988,7 +976,7 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         canvas,
         'Ứng dụng nuôi dưỡng chánh niệm mỗi ngày',
         width: 840,
-        top: 1630,
+        top: 1748,
         fontSize: 28,
         height: 1.25,
         color: style.watermarkColor.withValues(alpha: .82),

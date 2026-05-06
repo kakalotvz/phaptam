@@ -352,15 +352,16 @@ export async function uploadToR2WithMetadata(file: File, kind: UploadKind): Prom
   height?: number;
 }> {
   const normalized = kind.startsWith('images/') ? await convertImageToWebp(file, kind) : file;
+  const contentType = normalized.type || contentTypeFromFileName(normalized.name);
   const dimensions = kind.startsWith('images/') ? await imageDimensions(normalized) : {};
   const { uploadUrl, publicUrl } = await api.presignedUrl({
     kind,
-    contentType: normalized.type,
+    contentType,
   });
 
   const response = await fetch(uploadUrl, {
     method: 'PUT',
-    headers: { 'Content-Type': normalized.type },
+    headers: { 'Content-Type': contentType },
     body: normalized,
   });
 
@@ -376,7 +377,11 @@ export async function uploadToR2WithMetadata(file: File, kind: UploadKind): Prom
 }
 
 async function convertImageToWebp(file: File, kind: UploadKind): Promise<File> {
-  if (file.type === 'image/webp') return file;
+  if (isWebpFile(file)) {
+    return file.type === 'image/webp'
+      ? file
+      : new File([file], ensureWebpFileName(file.name), { type: 'image/webp' });
+  }
 
   const image = await createImageBitmap(file);
   const canvas = document.createElement('canvas');
@@ -397,6 +402,19 @@ async function convertImageToWebp(file: File, kind: UploadKind): Promise<File> {
   if (!blob) throw new Error('Không thể chuyển ảnh sang WebP');
 
   return new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), { type: 'image/webp' });
+}
+
+function isWebpFile(file: File) {
+  return file.type === 'image/webp' || file.name.toLowerCase().endsWith('.webp');
+}
+
+function ensureWebpFileName(name: string) {
+  return name.toLowerCase().endsWith('.webp') ? name : `${name}.webp`;
+}
+
+function contentTypeFromFileName(name: string) {
+  if (name.toLowerCase().endsWith('.webp')) return 'image/webp';
+  return 'application/octet-stream';
 }
 
 async function imageDimensions(file: File) {
