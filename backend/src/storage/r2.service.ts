@@ -14,6 +14,7 @@ type MediaKind =
   | 'images/video'
   | 'images/banner'
   | 'images/quote'
+  | 'images/quote-background'
   | 'images/news'
   | 'images/scripture'
   | 'images/meditation';

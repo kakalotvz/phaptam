@@ -194,6 +194,11 @@ export class PublicController {
     });
   }
 
+  @Get('quote-backgrounds')
+  async quoteBackgrounds() {
+    return (await this.quoteBackgroundSettings()).filter((item) => item.active);
+  }
+
   @Get('banners')
   banners() {
     return this.prisma.banner.findMany({
@@ -289,9 +294,24 @@ export class PublicController {
       return defaultQuoteRotationSettings();
     }
   }
+
+  private async quoteBackgroundSettings(): Promise<QuoteBackgroundSettings> {
+    const setting = await this.prisma.appSetting.findUnique({ where: { key: quoteBackgroundKey } });
+    if (!setting) return [];
+    try {
+      const parsed = JSON.parse(setting.value) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((item) => normalizeQuoteBackground(item))
+        .filter((item): item is QuoteBackground => item !== null);
+    } catch {
+      return [];
+    }
+  }
 }
 
 const quoteRotationKey = 'quoteRotation';
+const quoteBackgroundKey = 'quoteBackgrounds';
 
 type QuoteRotationSettings = {
   enabled: boolean;
@@ -301,12 +321,35 @@ type QuoteRotationSettings = {
   offset: number;
 };
 
+type QuoteBackground = {
+  id: string;
+  imageUrl: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+};
+
+type QuoteBackgroundSettings = QuoteBackground[];
+
 function defaultQuoteRotationSettings(): QuoteRotationSettings {
   return { enabled: false, paused: false, quoteIds: [], startDate: vietnamDateKey(new Date()), offset: 0 };
 }
 
 function uniqueStrings(values: unknown[]) {
   return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)));
+}
+
+function normalizeQuoteBackground(value: unknown): QuoteBackground | null {
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Partial<QuoteBackground>;
+  if (typeof item.id !== 'string' || typeof item.imageUrl !== 'string' || !item.imageUrl.trim()) return null;
+  return {
+    id: item.id,
+    imageUrl: item.imageUrl.trim(),
+    name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Ảnh nền trích dẫn',
+    active: item.active !== false,
+    createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+  };
 }
 
 function vietnamDateKey(date: Date) {

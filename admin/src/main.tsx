@@ -84,6 +84,7 @@ import {
   NewsCategory,
   NewsItem,
   Quote as QuoteRecord,
+  QuoteBackground,
   QuoteRotation,
   R2Usage,
   RssSource,
@@ -200,6 +201,7 @@ type DataState = {
   newsCategories: NewsCategory[];
   news: NewsItem[];
   quotes: QuoteRecord[];
+  quoteBackgrounds: QuoteBackground[];
   quoteRotation: QuoteRotation;
   banners: Banner[];
   feedback: Feedback[];
@@ -222,6 +224,7 @@ const emptyData: DataState = {
   newsCategories: [],
   news: [],
   quotes: [],
+  quoteBackgrounds: [],
   quoteRotation: { enabled: false, paused: false, quoteIds: [], startDate: '', offset: 0, currentQuoteId: null },
   banners: [],
   feedback: [],
@@ -441,6 +444,7 @@ function App() {
         newsCategories,
         news,
         quotes,
+        quoteBackgrounds,
         quoteRotation,
         banners,
         feedback,
@@ -461,6 +465,7 @@ function App() {
         safe(() => api.newsCategories(), []),
         safe(() => api.news(), []),
         safe(() => api.quotes(), []),
+        safe(() => api.quoteBackgrounds(), []),
         safe(() => api.quoteRotation(), { enabled: false, paused: false, quoteIds: [], startDate: '', offset: 0, currentQuoteId: null }),
         safe(() => api.banners(), []),
         safe(() => api.feedback(), []),
@@ -483,6 +488,7 @@ function App() {
         newsCategories,
         news,
         quotes,
+        quoteBackgrounds,
         quoteRotation,
         banners,
         feedback,
@@ -4209,6 +4215,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   const [imageUrl, setImageUrl] = useState('');
   const [editingQuoteId, setEditingQuoteId] = useState('');
   const [selectedQuoteIds, setSelectedQuoteIds] = useState<string[]>(data.quoteRotation.quoteIds);
+  const [uploadingBackgrounds, setUploadingBackgrounds] = useState(false);
   const activeQuote = data.quotes.find((quote) => quote.active);
   const activeQuoteId = data.quoteRotation.currentQuoteId ?? activeQuote?.id ?? null;
   const hasLockedActive = Boolean(activeQuoteId);
@@ -4247,6 +4254,26 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
           : 'Đã tắt auto chuyển trích dẫn',
     );
     if (ok) setSelectedQuoteIds(nextQuoteIds);
+  }
+
+  async function uploadQuoteBackgroundFiles(files?: FileList | null) {
+    const selectedFiles = Array.from(files ?? []);
+    if (selectedFiles.length === 0) return;
+    setUploadingBackgrounds(true);
+    try {
+      await run(async () => {
+        for (const file of selectedFiles) {
+          const imageUrl = await uploadToR2(file, 'images/quote-background');
+          await api.create('/admin/quote-background', {
+            imageUrl,
+            name: file.name.replace(/\.[^.]+$/, '') || 'Ảnh nền trích dẫn',
+          });
+        }
+        return true;
+      }, `Đã thêm ${selectedFiles.length.toLocaleString('vi-VN')} ảnh nền`);
+    } finally {
+      setUploadingBackgrounds(false);
+    }
   }
 
   return (
@@ -4296,6 +4323,65 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             {editingQuoteId ? 'Cập nhật trích dẫn' : 'Lưu trích dẫn'}
           </button>
         </div>
+      </Panel>
+      <Panel title="Ảnh nền chia sẻ">
+        <div className="quote-background-tools">
+          <div>
+            <strong>Nền story 9:16 cho trích dẫn</strong>
+            <span>Ảnh trong danh sách này sẽ hiện trên app để người dùng chọn hoặc để hệ thống chọn ngẫu nhiên.</span>
+          </div>
+          <label className="upload-button">
+            <ImagePlus size={16} />
+            {uploadingBackgrounds ? 'Đang upload...' : 'Upload nhiều ảnh'}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => {
+                void uploadQuoteBackgroundFiles(event.target.files);
+                event.currentTarget.value = '';
+              }}
+            />
+          </label>
+        </div>
+        {data.quoteBackgrounds.length === 0 ? (
+          <div className="empty">Chưa có ảnh nền chia sẻ.</div>
+        ) : (
+          <div className="quote-background-grid">
+            {data.quoteBackgrounds.map((item) => (
+              <div className="quote-background-card" key={item.id}>
+                <img src={item.imageUrl} alt={item.name} />
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{item.active ? 'Đang dùng trong app' : 'Đang tắt'}</span>
+                </div>
+                <div className="action-group">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() =>
+                      run(
+                        () => api.update(`/admin/quote-background/${item.id}`, { active: !item.active }),
+                        item.active ? 'Đã tắt ảnh nền' : 'Đã bật ảnh nền',
+                      )
+                    }
+                  >
+                    {item.active ? <Pause size={15} /> : <Play size={15} />}
+                    {item.active ? 'Tắt' : 'Bật'}
+                  </button>
+                  <button
+                    className="danger"
+                    type="button"
+                    onClick={() => run(() => api.remove(`/admin/quote-background/${item.id}`), 'Đã xóa ảnh nền')}
+                  >
+                    <Trash2 size={15} />
+                    Xóa
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Panel>
       <Panel title="Danh sách trích dẫn">
         <div className="quote-controlbar">

@@ -78,6 +78,16 @@ final dailyQuotesProvider = FutureProvider<List<DailyQuote>>((ref) async {
       .toList();
 });
 
+final quoteBackgroundsProvider = FutureProvider<List<QuoteBackground>>((ref) async {
+  _refreshPeriodically(ref);
+  final items = await PublicListCache.getList(ref, '/quote-backgrounds');
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(QuoteBackground.fromJson)
+      .where((item) => item.imageUrl.trim().isNotEmpty)
+      .toList();
+});
+
 final homeBannersProvider = FutureProvider<List<HomeBanner>>((ref) async {
   _refreshPeriodically(ref);
   final items = await PublicListCache.getList(ref, '/banners');

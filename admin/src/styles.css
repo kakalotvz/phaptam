@@ -448,6 +448,59 @@ main {
   font-weight: 500;
 }
 
+.quote-background-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 14px;
+  color: #4b352c;
+  background: #f8fbf4;
+  border: 1px solid rgba(72, 104, 72, .14);
+  border-radius: 14px;
+}
+
+.quote-background-tools > div {
+  display: grid;
+  gap: 4px;
+}
+
+.quote-background-tools span,
+.quote-background-card span {
+  color: #6d7b66;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.quote-background-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.quote-background-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(109, 76, 65, .12);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.quote-background-card img {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #f3eee8;
+}
+
+.quote-background-card > div:not(.action-group) {
+  display: grid;
+  gap: 3px;
+}
+
 .table-checkbox {
   width: 18px;
   min-height: 18px;

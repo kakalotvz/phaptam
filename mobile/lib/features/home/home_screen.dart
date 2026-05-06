@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -55,6 +55,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final videos = ref.watch(videoListProvider);
     final news = ref.watch(newsListProvider);
     final quotes = ref.watch(dailyQuotesProvider);
+    final quoteBackgrounds = ref.watch(quoteBackgroundsProvider);
     final banners = ref.watch(homeBannersProvider);
 
     return RefreshIndicator(
@@ -91,7 +92,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           icon: Icons.notifications_none_outlined,
                           label: 'Không có lời nhắc hôm nay',
                         )
-                      : _DailyQuoteCard(quote: items.first),
+                      : _DailyQuoteCard(
+                          quote: items.first,
+                          backgrounds: quoteBackgrounds.value ?? const [],
+                        ),
                   loading: () => const _EmptyCard(
                     icon: Icons.notifications_none_outlined,
                     label: 'Không có lời nhắc hôm nay',
@@ -356,6 +360,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ref.refresh(videoListProvider.future),
       ref.refresh(newsListProvider.future),
       ref.refresh(dailyQuotesProvider.future),
+      ref.refresh(quoteBackgroundsProvider.future),
       ref.refresh(homeBannersProvider.future),
     ]);
   }
@@ -639,9 +644,10 @@ class _NewsSearchControls extends StatelessWidget {
 }
 
 class _DailyQuoteCard extends StatefulWidget {
-  const _DailyQuoteCard({required this.quote});
+  const _DailyQuoteCard({required this.quote, required this.backgrounds});
 
   final DailyQuote quote;
+  final List<QuoteBackground> backgrounds;
 
   @override
   State<_DailyQuoteCard> createState() => _DailyQuoteCardState();
@@ -649,7 +655,6 @@ class _DailyQuoteCard extends StatefulWidget {
 
 class _DailyQuoteCardState extends State<_DailyQuoteCard> {
   static const _mediaChannel = MethodChannel('phaptam/media');
-  final _captureKey = GlobalKey();
   var _capturing = false;
 
   @override
@@ -660,80 +665,77 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
       tween: Tween(begin: .94, end: 1),
       builder: (context, value, child) =>
           Transform.scale(scale: value, child: child),
-      child: RepaintBoundary(
-        key: _captureKey,
-        child: Card(
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: _copyQuote,
-            child: Stack(
-              children: [
-                if (widget.quote.imageUrl != null &&
-                    widget.quote.imageUrl!.isNotEmpty)
-                  Positioned.fill(
-                    child: Image.network(
-                      widget.quote.imageUrl!,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                if (widget.quote.imageUrl != null &&
-                    widget.quote.imageUrl!.isNotEmpty)
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: .38),
-                      ),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 18, 54, 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.format_quote,
-                        color: widget.quote.imageUrl == null
-                            ? Theme.of(context).colorScheme.secondary
-                            : Colors.white,
-                        size: 26,
-                      ),
-                      const SizedBox(height: 8),
-                      RichContent(
-                        content: widget.quote.content,
-                        compact: true,
-                        baseStyle: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              height: 1.28,
-                              fontWeight: FontWeight.w700,
-                              color: widget.quote.imageUrl == null
-                                  ? null
-                                  : Colors.white,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Trích dẫn hôm nay',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: widget.quote.imageUrl == null
-                              ? null
-                              : Colors.white.withValues(alpha: .82),
-                        ),
-                      ),
-                    ],
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _copyQuote,
+          child: Stack(
+            children: [
+              if (widget.quote.imageUrl != null &&
+                  widget.quote.imageUrl!.isNotEmpty)
+                Positioned.fill(
+                  child: Image.network(
+                    widget.quote.imageUrl!,
+                    fit: BoxFit.cover,
                   ),
                 ),
-                if (!_capturing)
-                  Positioned(
-                    right: 10,
-                    bottom: 10,
-                    child: IconButton.filledTonal(
-                      tooltip: 'Chia sẻ trích dẫn',
-                      onPressed: _showShareOptions,
-                      icon: const Icon(Icons.ios_share_outlined),
+              if (widget.quote.imageUrl != null &&
+                  widget.quote.imageUrl!.isNotEmpty)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: .38),
                     ),
                   ),
-              ],
-            ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 54, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.format_quote,
+                      color: widget.quote.imageUrl == null
+                          ? Theme.of(context).colorScheme.secondary
+                          : Colors.white,
+                      size: 26,
+                    ),
+                    const SizedBox(height: 8),
+                    RichContent(
+                      content: widget.quote.content,
+                      compact: true,
+                      baseStyle: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(
+                            height: 1.28,
+                            fontWeight: FontWeight.w700,
+                            color: widget.quote.imageUrl == null
+                                ? null
+                                : Colors.white,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Trích dẫn hôm nay',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: widget.quote.imageUrl == null
+                            ? null
+                            : Colors.white.withValues(alpha: .82),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (!_capturing)
+                Positioned(
+                  right: 10,
+                  bottom: 10,
+                  child: IconButton.filledTonal(
+                    tooltip: 'Chia sẻ trích dẫn',
+                    onPressed: _showShareOptions,
+                    icon: const Icon(Icons.ios_share_outlined),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -779,12 +781,93 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         ),
       );
     } else if (choice == _QuoteShareMode.image) {
-      await _shareQuoteImage();
+      final background = await _pickQuoteBackground();
+      if (background == null) return;
+      await _shareQuoteImage(backgroundUrl: background.imageUrl);
     }
   }
 
-  Future<void> _shareQuoteImage() async {
-    final imagePath = await _renderQuoteImage();
+  Future<_QuoteBackgroundSelection?> _pickQuoteBackground() {
+    return showModalBottomSheet<_QuoteBackgroundSelection>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        final backgrounds = widget.backgrounds;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Chọn ảnh nền',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.auto_awesome_outlined),
+                  title: const Text('Ngẫu nhiên'),
+                  subtitle: Text(
+                    backgrounds.isEmpty
+                        ? 'Dùng nền mặc định của Pháp Tâm'
+                        : 'Hệ thống tự chọn một ảnh nền trong danh sách',
+                  ),
+                  onTap: () => Navigator.pop(
+                    context,
+                    _QuoteBackgroundSelection.random(),
+                  ),
+                ),
+                if (backgrounds.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: math.min(
+                      MediaQuery.sizeOf(context).height * .56,
+                      420,
+                    ),
+                    child: GridView.builder(
+                      itemCount: backgrounds.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 9 / 16,
+                          ),
+                      itemBuilder: (context, index) {
+                        final item = backgrounds[index];
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Navigator.pop(
+                            context,
+                            _QuoteBackgroundSelection(imageUrl: item.imageUrl),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Image.network(
+                              item.imageUrl,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _shareQuoteImage({required String? backgroundUrl}) async {
+    final imagePath = await _renderQuoteImage(backgroundUrl: backgroundUrl);
     if (imagePath == null) return;
 
     await SharePlus.instance.share(
@@ -829,48 +912,93 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
     }
   }
 
-  Future<String?> _renderQuoteImage() async {
+  Future<String?> _renderQuoteImage({required String? backgroundUrl}) async {
     try {
       setState(() => _capturing = true);
-      await WidgetsBinding.instance.endOfFrame;
-      final boundary =
-          _captureKey.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
-      if (boundary == null) return null;
-      final image = await boundary.toImage(pixelRatio: 3);
+      final selectedBackgroundUrl = backgroundUrl ?? _randomBackgroundUrl();
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      final size = Size(image.width.toDouble(), image.height.toDouble());
-      final paint = Paint();
-      canvas.drawImage(image, Offset.zero, paint);
-      final paragraphStyle = ui.ParagraphStyle(
-        textAlign: TextAlign.right,
+      const size = Size(1080, 1920);
+      final rect = Offset.zero & size;
+      final backgroundImage = selectedBackgroundUrl == null
+          ? null
+          : await _loadNetworkImage(selectedBackgroundUrl);
+
+      if (backgroundImage == null) {
+        final paint = Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFE8F2DF), Color(0xFFFFF4DC), Color(0xFFC9D8C0)],
+          ).createShader(rect);
+        canvas.drawRect(rect, paint);
+      } else {
+        _drawCoverImage(canvas, backgroundImage, size);
+        backgroundImage.dispose();
+      }
+
+      canvas.drawRect(rect, Paint()..color = Colors.black.withValues(alpha: .34));
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withValues(alpha: .10),
+              Colors.black.withValues(alpha: .44),
+            ],
+          ).createShader(rect),
+      );
+
+      _drawCenteredParagraph(
+        canvas,
+        'TRÍCH DẪN HÔM NAY',
+        width: 840,
+        top: 310,
         fontSize: 34,
-        maxLines: 1,
+        height: 1.25,
+        color: Colors.white.withValues(alpha: .86),
+        fontWeight: FontWeight.w700,
+        letterSpacing: 5,
       );
-      final builder = ui.ParagraphBuilder(paragraphStyle)
-        ..pushStyle(
-          ui.TextStyle(
-            color:
-                (widget.quote.imageUrl != null &&
-                            widget.quote.imageUrl!.isNotEmpty
-                        ? Colors.white
-                        : const Color(0xFF6D4C41))
-                    .withValues(alpha: .92),
-            fontWeight: FontWeight.w600,
-          ),
-        )
-        ..addText('(Chia sẻ từ ứng dụng Pháp Tâm)');
-      final paragraph = builder.build()
-        ..layout(ui.ParagraphConstraints(width: size.width - 72));
+
+      final quoteText = '“${_plainQuoteText(widget.quote.content)}”';
+      final quoteParagraph = _buildFittingParagraph(
+        quoteText,
+        width: 840,
+        maxHeight: 820,
+        startFontSize: _quoteFontSize(quoteText),
+      );
       canvas.drawParagraph(
-        paragraph,
-        Offset(36, size.height - paragraph.height - 32),
+        quoteParagraph,
+        Offset((size.width - 840) / 2, 650 - quoteParagraph.height / 2),
       );
+
+      _drawCenteredParagraph(
+        canvas,
+        'Pháp Tâm',
+        width: 840,
+        top: 1570,
+        fontSize: 42,
+        height: 1.2,
+        color: Colors.white,
+        fontWeight: FontWeight.w800,
+      );
+      _drawCenteredParagraph(
+        canvas,
+        'Ứng dụng nuôi dưỡng chánh niệm mỗi ngày',
+        width: 840,
+        top: 1630,
+        fontSize: 28,
+        height: 1.25,
+        color: Colors.white.withValues(alpha: .82),
+        fontWeight: FontWeight.w500,
+      );
+
       final picture = recorder.endRecording();
-      final finalImage = await picture.toImage(image.width, image.height);
+      final finalImage = await picture.toImage(size.width.toInt(), size.height.toInt());
       final bytes = await finalImage.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose();
       finalImage.dispose();
       if (bytes == null) return null;
       final directory = await getTemporaryDirectory();
@@ -890,6 +1018,107 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
     }
   }
 
+  String? _randomBackgroundUrl() {
+    if (widget.backgrounds.isEmpty) return widget.quote.imageUrl;
+    final index = math.Random().nextInt(widget.backgrounds.length);
+    return widget.backgrounds[index].imageUrl;
+  }
+
+  Future<ui.Image?> _loadNetworkImage(String url) async {
+    final data = await NetworkAssetBundle(Uri.parse(url)).load(url);
+    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    final frame = await codec.getNextFrame();
+    return frame.image;
+  }
+
+  void _drawCoverImage(Canvas canvas, ui.Image image, Size size) {
+    final input = Size(image.width.toDouble(), image.height.toDouble());
+    final fitted = applyBoxFit(BoxFit.cover, input, size);
+    final source = Alignment.center.inscribe(fitted.source, Offset.zero & input);
+    final destination = Alignment.center.inscribe(
+      fitted.destination,
+      Offset.zero & size,
+    );
+    canvas.drawImageRect(image, source, destination, Paint());
+  }
+
+  void _drawCenteredParagraph(
+    Canvas canvas,
+    String text, {
+    required double width,
+    required double top,
+    required double fontSize,
+    required double height,
+    required Color color,
+    required FontWeight fontWeight,
+    double letterSpacing = 0,
+  }) {
+    final builder = ui.ParagraphBuilder(
+      ui.ParagraphStyle(textAlign: TextAlign.center, height: height),
+    )
+      ..pushStyle(
+        ui.TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: fontWeight,
+          letterSpacing: letterSpacing,
+        ),
+      )
+      ..addText(text);
+    final paragraph = builder.build()
+      ..layout(ui.ParagraphConstraints(width: width));
+    canvas.drawParagraph(paragraph, Offset((1080 - width) / 2, top));
+  }
+
+  ui.Paragraph _buildFittingParagraph(
+    String text, {
+    required double width,
+    required double maxHeight,
+    required double startFontSize,
+  }) {
+    var fontSize = startFontSize;
+    while (fontSize >= 38) {
+      final paragraph = _quoteParagraph(text, width: width, fontSize: fontSize);
+      if (paragraph.height <= maxHeight) return paragraph;
+      fontSize -= 2;
+    }
+    return _quoteParagraph(text, width: width, fontSize: fontSize);
+  }
+
+  ui.Paragraph _quoteParagraph(
+    String text, {
+    required double width,
+    required double fontSize,
+  }) {
+    final builder = ui.ParagraphBuilder(
+      ui.ParagraphStyle(textAlign: TextAlign.center, height: 1.32),
+    )
+      ..pushStyle(
+        ui.TextStyle(
+          color: Colors.white,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w800,
+        ),
+      )
+      ..addText(text);
+    return builder.build()..layout(ui.ParagraphConstraints(width: width));
+  }
+
+  double _quoteFontSize(String text) {
+    if (text.length <= 70) return 70;
+    if (text.length <= 120) return 60;
+    if (text.length <= 190) return 52;
+    return 46;
+  }
+
+  String _plainQuoteText(String value) {
+    return value
+        .replaceAll(RegExp(r'<[^>]+>'), ' ')
+        .replaceAll(RegExp(r'\[[^\]]+\]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   Future<bool> _saveImageToGallery(String path) async {
     try {
       final result = await _mediaChannel.invokeMethod<bool>('saveImage', {
@@ -903,6 +1132,16 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
 }
 
 enum _QuoteShareMode { text, image }
+
+class _QuoteBackgroundSelection {
+  const _QuoteBackgroundSelection({required this.imageUrl});
+
+  factory _QuoteBackgroundSelection.random() {
+    return const _QuoteBackgroundSelection(imageUrl: null);
+  }
+
+  final String? imageUrl;
+}
 
 class _BannerStrip extends StatelessWidget {
   const _BannerStrip({required this.banners});

@@ -194,6 +194,26 @@ class DailyQuote {
   final String? imageUrl;
 }
 
+class QuoteBackground {
+  const QuoteBackground({
+    required this.id,
+    required this.imageUrl,
+    required this.name,
+  });
+
+  factory QuoteBackground.fromJson(Map<String, dynamic> json) {
+    return QuoteBackground(
+      id: json['id'] as String,
+      imageUrl: json['imageUrl'] as String? ?? '',
+      name: json['name'] as String? ?? 'Ảnh nền trích dẫn',
+    );
+  }
+
+  final String id;
+  final String imageUrl;
+  final String name;
+}
+
 class HomeBanner {
   const HomeBanner({required this.id, required this.imageUrl, this.link});
 

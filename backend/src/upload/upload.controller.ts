@@ -14,6 +14,7 @@ class PresignedUrlDto {
     'images/video',
     'images/banner',
     'images/quote',
+    'images/quote-background',
     'images/news',
     'images/scripture',
     'images/meditation',
@@ -28,6 +29,7 @@ class PresignedUrlDto {
     | 'images/video'
     | 'images/banner'
     | 'images/quote'
+    | 'images/quote-background'
     | 'images/news'
     | 'images/scripture'
     | 'images/meditation';

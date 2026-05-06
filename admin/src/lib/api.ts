@@ -117,6 +117,14 @@ export type Quote = {
   createdAt: string;
 };
 
+export type QuoteBackground = {
+  id: string;
+  imageUrl: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+};
+
 export type QuoteRotation = {
   enabled: boolean;
   paused: boolean;
@@ -177,6 +185,7 @@ export type UploadKind =
   | 'images/video'
   | 'images/banner'
   | 'images/quote'
+  | 'images/quote-background'
   | 'images/news'
   | 'images/scripture'
   | 'images/meditation';
@@ -300,6 +309,7 @@ export const api = {
     }
   },
   quotes: () => request<Quote[]>('/admin/quote'),
+  quoteBackgrounds: () => request<QuoteBackground[]>('/admin/quote-background'),
   quoteRotation: () => request<QuoteRotation>('/admin/quote/rotation'),
   updateQuoteRotation: (data: Partial<Pick<QuoteRotation, 'enabled' | 'paused' | 'quoteIds'>>) =>
     request<QuoteRotation>('/admin/quote/rotation', {
