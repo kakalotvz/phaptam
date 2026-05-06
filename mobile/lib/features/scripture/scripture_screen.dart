@@ -734,7 +734,9 @@ class _ReadingGroup {
 List<_ReadingGroup> _groupReadings(List<Scripture> readings) {
   final grouped = <String, List<Scripture>>{};
   for (final reading in readings) {
-    final title = (reading.categoryParent?.trim().isNotEmpty ?? false)
+    final title = reading.categoryPath.isNotEmpty
+        ? reading.categoryPath.first
+        : (reading.categoryParent?.trim().isNotEmpty ?? false)
         ? reading.categoryParent!.trim()
         : (reading.category?.trim().isNotEmpty ?? false)
         ? reading.category!.trim()
@@ -759,7 +761,9 @@ class _ReadingGroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final shouldOpenPhams =
         group.items.any(
-          (item) => item.categoryParent?.trim().isNotEmpty == true,
+          (item) =>
+              item.categoryPath.length > 1 ||
+              item.categoryParent?.trim().isNotEmpty == true,
         ) ||
         group.items.length > 1 ||
         ((group.items.first.category?.trim().isNotEmpty ?? false) &&
@@ -772,7 +776,7 @@ class _ReadingGroupCard extends StatelessWidget {
       child: ListTile(
         leading: const Icon(Icons.auto_stories_outlined),
         title: Text(group.title),
-        subtitle: Text('${group.items.length} phẩm / bài đọc'),
+        subtitle: Text('${group.items.length} danh mục / bài đọc'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
@@ -798,7 +802,9 @@ class _ReadingListCard extends StatelessWidget {
       child: ListTile(
         leading: const Icon(Icons.auto_stories_outlined),
         title: Text(
-          reading.categoryParent != null
+          reading.categoryPath.length > 1
+              ? reading.categoryPath.skip(1).join(' / ')
+              : reading.categoryParent != null
               ? reading.category ?? reading.title
               : reading.title,
         ),

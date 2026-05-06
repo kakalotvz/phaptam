@@ -240,12 +240,20 @@ class Scripture {
     this.category,
     this.categoryParentId,
     this.categoryParent,
+    this.categoryPath = const [],
+    this.categoryPathIds = const [],
     this.createdAt,
     this.viewCount = 0,
   });
 
   factory Scripture.fromJson(Map<String, dynamic> json) {
     final category = json['category'];
+    final categoryPath = category is Map<String, dynamic>
+        ? _categoryPath(category, 'name')
+        : <String>[];
+    final categoryPathIds = category is Map<String, dynamic>
+        ? _categoryPath(category, 'id')
+        : <String>[];
     final rawLines = json['lines'];
     final lines = rawLines is List
         ? rawLines
@@ -275,6 +283,8 @@ class Scripture {
               category['parent'] is Map<String, dynamic>
           ? (category['parent'] as Map<String, dynamic>)['name'] as String?
           : null,
+      categoryPath: categoryPath,
+      categoryPathIds: categoryPathIds,
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
@@ -293,9 +303,30 @@ class Scripture {
   final String? category;
   final String? categoryParentId;
   final String? categoryParent;
+  final List<String> categoryPath;
+  final List<String> categoryPathIds;
   final DateTime? createdAt;
   final int viewCount;
   final List<ScriptureLine> lines;
+}
+
+List<String> _categoryPath(Map<String, dynamic> category, String key) {
+  final values = <String>[];
+  final seen = <String>{};
+  Map<String, dynamic>? current = category;
+  while (current != null) {
+    final id = current['id'] as String? ?? '${identityHashCode(current)}';
+    if (!seen.add(id)) {
+      break;
+    }
+    final value = current[key] as String?;
+    if (value != null && value.trim().isNotEmpty) {
+      values.insert(0, value.trim());
+    }
+    final parent = current['parent'];
+    current = parent is Map<String, dynamic> ? parent : null;
+  }
+  return values;
 }
 
 class AppUser {

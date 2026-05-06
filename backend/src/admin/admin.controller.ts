@@ -9,6 +9,8 @@ import { R2Service } from '../storage/r2.service';
 @UseGuards(AdminAuthGuard)
 @Controller('admin')
 export class AdminController {
+  private readonly maxAudioCategoryChildDepth = 5;
+
   constructor(private readonly prisma: PrismaService, private readonly r2: R2Service) {}
 
   @Get('overview')
@@ -163,6 +165,7 @@ export class AdminController {
     const parent = data.parentId
       ? await this.prisma.audioCategory.findUniqueOrThrow({ where: { id: data.parentId } })
       : null;
+    if (parent) await this.ensureAudioCategoryCanAcceptChild(parent.id);
     const kind = parent?.kind ?? data.kind ?? AudioCategoryKind.AUDIO;
     return this.prisma.audioCategory.create({
       data: {
@@ -184,6 +187,7 @@ export class AdminController {
     const parent = data.parentId
       ? await this.prisma.audioCategory.findUniqueOrThrow({ where: { id: data.parentId } })
       : null;
+    if (data.parentId !== undefined) await this.ensureAudioCategoryTreePlacement(id, data.parentId || null);
     const kind = parent?.kind ?? data.kind;
     if (parent && parent.kind !== current.kind && data.kind === undefined) {
       throw new BadRequestException('Danh mục cha phải cùng loại với danh mục đang sửa.');
@@ -893,6 +897,85 @@ export class AdminController {
 
   private async deleteReplacedR2Media(pairs: Array<[string | null | undefined, string | null | undefined]>) {
     await this.r2.deletePublicUrls(pairs.filter(([previous, next]) => next !== undefined && previous !== next).map(([previous]) => previous));
+  }
+
+  private async ensureAudioCategoryCanAcceptChild(parentId: string) {
+    const parentDepth = await this.audioCategoryDepth(parentId);
+    if (parentDepth >= this.maxAudioCategoryChildDepth) {
+      throw new BadRequestException(`Danh mục chỉ được tạo tối đa ${this.maxAudioCategoryChildDepth} cấp con.`);
+    }
+  }
+
+  private async ensureAudioCategoryTreePlacement(id: string, parentId: string | null) {
+    if (!parentId) {
+      const height = await this.audioCategorySubtreeHeight(id);
+      if (height > this.maxAudioCategoryChildDepth) {
+        throw new BadRequestException(`Danh mục chỉ được tạo tối đa ${this.maxAudioCategoryChildDepth} cấp con.`);
+      }
+      return;
+    }
+
+    let currentParentId: string | null = parentId;
+    const seen = new Set<string>();
+    while (currentParentId) {
+      if (currentParentId === id) throw new BadRequestException('Không thể chọn danh mục con làm danh mục cha.');
+      if (seen.has(currentParentId)) throw new BadRequestException('Cây danh mục đang có vòng lặp.');
+      seen.add(currentParentId);
+      const parent: { parentId: string | null } | null = await this.prisma.audioCategory.findUnique({
+        where: { id: currentParentId },
+        select: { parentId: true },
+      });
+      currentParentId = parent?.parentId ?? null;
+    }
+
+    const parentDepth = await this.audioCategoryDepth(parentId);
+    const subtreeHeight = await this.audioCategorySubtreeHeight(id);
+    if (parentDepth + 1 + subtreeHeight > this.maxAudioCategoryChildDepth) {
+      throw new BadRequestException(`Danh mục chỉ được tạo tối đa ${this.maxAudioCategoryChildDepth} cấp con.`);
+    }
+  }
+
+  private async audioCategoryDepth(id: string) {
+    let depth = 0;
+    let current = await this.prisma.audioCategory.findUniqueOrThrow({
+      where: { id },
+      select: { parentId: true },
+    });
+    const seen = new Set<string>([id]);
+
+    while (current.parentId) {
+      if (seen.has(current.parentId)) throw new BadRequestException('Cây danh mục đang có vòng lặp.');
+      seen.add(current.parentId);
+      depth += 1;
+      current = await this.prisma.audioCategory.findUniqueOrThrow({
+        where: { id: current.parentId },
+        select: { parentId: true },
+      });
+    }
+
+    return depth;
+  }
+
+  private async audioCategorySubtreeHeight(id: string) {
+    let height = 0;
+    let level = 0;
+    let parentIds = [id];
+    const seen = new Set<string>([id]);
+
+    while (parentIds.length > 0) {
+      const children = await this.prisma.audioCategory.findMany({
+        where: { parentId: { in: parentIds } },
+        select: { id: true },
+      });
+      const childIds = children.map((child) => child.id).filter((childId) => !seen.has(childId));
+      if (childIds.length === 0) break;
+      childIds.forEach((childId) => seen.add(childId));
+      level += 1;
+      height = level;
+      parentIds = childIds;
+    }
+
+    return height;
   }
 
   private async ensureAudioCategoryKind(categoryId: string | null | undefined, kind: AudioCategoryKind) {

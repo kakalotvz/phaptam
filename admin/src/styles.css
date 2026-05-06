@@ -1203,6 +1203,11 @@ button:disabled {
   gap: 13px;
 }
 
+.compact-form {
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.4fr) auto;
+  align-items: end;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -1341,6 +1346,13 @@ th {
   font-weight: 700;
 }
 
+.icon-action {
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
 .pagination {
   display: flex;
   justify-content: space-between;
@@ -1422,6 +1434,28 @@ th {
   justify-content: flex-end;
 }
 
+.modal-context {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #fffaf0;
+  border: 1px solid rgba(109, 76, 65, .13);
+  border-radius: 12px;
+}
+
+.modal-context span,
+.modal-context small {
+  color: #7a655b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.modal-context strong {
+  color: #2e2420;
+  font-family: "Noto Serif", "Noto Sans", serif;
+  font-size: 17px;
+}
+
 .usage-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -1496,6 +1530,7 @@ th {
 
   .grid,
   .two-column,
+  .compact-form,
   .scripture-create,
   .scripture-editor,
   .news-editor {

@@ -1,6 +1,26 @@
 import { Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+const scriptureCategoryInclude = {
+  parent: {
+    include: {
+      parent: {
+        include: {
+          parent: {
+            include: {
+              parent: {
+                include: {
+                  parent: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
 @Controller()
 export class PublicController {
   constructor(private readonly prisma: PrismaService) {}
@@ -44,7 +64,7 @@ export class PublicController {
         kind: true,
         backgroundImageUrl: true,
         categoryId: true,
-        category: { include: { parent: true } },
+        category: { include: scriptureCategoryInclude },
         viewCount: true,
         createdAt: true,
         lines: {
@@ -68,7 +88,7 @@ export class PublicController {
         kind: true,
         backgroundImageUrl: true,
         categoryId: true,
-        category: { include: { parent: true } },
+        category: { include: scriptureCategoryInclude },
         lines: {
           orderBy: { orderIndex: 'asc' },
           select: { content: true, startTime: true },
@@ -106,7 +126,7 @@ export class PublicController {
         description: true,
         content: true,
         categoryId: true,
-        category: { include: { parent: true } },
+        category: { include: scriptureCategoryInclude },
         viewCount: true,
         createdAt: true,
       },
@@ -125,7 +145,7 @@ export class PublicController {
         description: true,
         content: true,
         categoryId: true,
-        category: { include: { parent: true } },
+        category: { include: scriptureCategoryInclude },
         viewCount: true,
         createdAt: true,
       },
