@@ -6,13 +6,18 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateScriptureTiming, validateScriptureLines } from '../scripture/timing';
 import { R2Service } from '../storage/r2.service';
+import { PresenceService } from '../presence/presence.service';
 
 @UseGuards(AdminAuthGuard)
 @Controller('admin')
 export class AdminController {
   private readonly maxAudioCategoryChildDepth = 5;
 
-  constructor(private readonly prisma: PrismaService, private readonly r2: R2Service) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly r2: R2Service,
+    private readonly presence: PresenceService,
+  ) {}
 
   @Get('overview')
   async overview() {
@@ -87,6 +92,11 @@ export class AdminController {
   @Get('r2/usage')
   r2Usage() {
     return this.r2.usage();
+  }
+
+  @Get('presence')
+  presenceStats() {
+    return this.presence.stats();
   }
 
   @Get('users')

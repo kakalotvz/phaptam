@@ -216,6 +216,13 @@ export type R2Usage = {
   };
 };
 
+export type OnlinePresenceStats = {
+  activeAppCount: number;
+  onlineAccountCount: number;
+  generatedAt: string;
+  ttlSeconds: number;
+};
+
 export type AppSettings = {
   contentPageSize: number;
 };
@@ -325,6 +332,7 @@ export const api = {
   feedback: () => request<Feedback[]>('/admin/feedback'),
   users: () => request<AdminUser[]>('/admin/users'),
   r2Usage: () => request<R2Usage>('/admin/r2/usage'),
+  presence: () => request<OnlinePresenceStats>('/admin/presence'),
   presignedUrl: (data: { kind: UploadKind; contentType: string }) =>
     request<PresignedUpload>('/upload/presigned-url', {
       method: 'POST',

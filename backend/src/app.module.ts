@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { JobsModule } from './jobs/jobs.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PublicModule } from './public/public.module';
+import { PresenceModule } from './presence/presence.module';
 import { StorageModule } from './storage/storage.module';
 import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
@@ -26,6 +27,7 @@ import { MailModule } from './mail/mail.module';
     PrismaModule,
     StorageModule,
     AuthModule,
+    PresenceModule,
     PublicModule,
     UserModule,
     AdminModule,

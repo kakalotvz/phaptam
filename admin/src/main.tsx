@@ -84,6 +84,7 @@ import {
   MeditationProgram,
   NewsCategory,
   NewsItem,
+  OnlinePresenceStats,
   Quote as QuoteRecord,
   QuoteBackground,
   QuoteRotation,
@@ -101,6 +102,33 @@ import {
 import './styles.css';
 
 type EditableScriptureLine = { content: string; start_time: number };
+type LocalContentDraft<T> = { savedAt: string; value: T };
+type ScriptureContentDraft = {
+  title: string;
+  description: string;
+  backgroundImageUrl: string;
+  categoryId: string;
+  rawText: string;
+  lines: EditableScriptureLine[];
+};
+type RichContentDraft = {
+  title: string;
+  description?: string;
+  summary?: string;
+  content: string;
+  categoryId: string;
+  imageUrl?: string;
+  link?: string;
+  shareEnabled?: boolean;
+};
+
+type DraftController<T> = {
+  draft: LocalContentDraft<T> | null;
+  status: string;
+  saveDraft: () => void;
+  restoreDraft: (onRestore: (value: T) => void) => void;
+  clearDraft: () => void;
+};
 
 const scriptureRawPlaceholder = 'Nam mô A Di Đà Phật\nNguyện đem công đức này\nHướng về khắp tất cả\nĐệ tử và chúng sanh';
 
@@ -119,6 +147,132 @@ const scriptureSampleJson = {
     { content: 'Có thế giới tên là Cực Lạc, trong cõi ấy có Đức Phật hiệu A Di Đà.', start_time: 44.6 },
   ],
 };
+
+function useAdminContentDraft<T>({
+  key,
+  value,
+  active,
+}: {
+  key: string;
+  value: T;
+  active: boolean;
+}): DraftController<T> {
+  const [draft, setDraft] = useState<LocalContentDraft<T> | null>(() => readLocalContentDraft<T>(key));
+  const [status, setStatus] = useState('');
+  const serializedValue = useMemo(() => JSON.stringify(value), [value]);
+
+  useEffect(() => {
+    setDraft(readLocalContentDraft<T>(key));
+    setStatus('');
+  }, [key]);
+
+  const saveDraft = React.useCallback(() => {
+    const nextDraft = writeLocalContentDraft(key, value);
+    setDraft(nextDraft);
+    setStatus(`Đã lưu nháp lúc ${formatDraftTime(nextDraft.savedAt)}.`);
+  }, [key, serializedValue]);
+
+  const clearDraft = React.useCallback(() => {
+    localStorage.removeItem(contentDraftStorageKey(key));
+    setDraft(null);
+    setStatus('');
+  }, [key]);
+
+  const restoreDraft = React.useCallback(
+    (onRestore: (value: T) => void) => {
+      const currentDraft = readLocalContentDraft<T>(key);
+      if (!currentDraft) return;
+      onRestore(currentDraft.value);
+      setDraft(currentDraft);
+      setStatus(`Đã khôi phục nháp lưu lúc ${formatDraftTime(currentDraft.savedAt)}.`);
+    },
+    [key],
+  );
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setTimeout(() => {
+      const nextDraft = writeLocalContentDraft(key, value);
+      setDraft(nextDraft);
+      setStatus(`Tự lưu lúc ${formatDraftTime(nextDraft.savedAt)}.`);
+    }, 1_500);
+    return () => window.clearTimeout(timer);
+  }, [active, key, serializedValue]);
+
+  return { draft, status, saveDraft, restoreDraft, clearDraft };
+}
+
+function contentDraftStorageKey(key: string) {
+  return `phaptam_admin_content_draft:${key}`;
+}
+
+function readLocalContentDraft<T>(key: string): LocalContentDraft<T> | null {
+  try {
+    const raw = localStorage.getItem(contentDraftStorageKey(key));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LocalContentDraft<T>;
+    if (!parsed?.savedAt || parsed.value === undefined) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalContentDraft<T>(key: string, value: T): LocalContentDraft<T> {
+  const draft = { savedAt: new Date().toISOString(), value };
+  localStorage.setItem(contentDraftStorageKey(key), JSON.stringify(draft));
+  return draft;
+}
+
+function formatDraftTime(value: string) {
+  return new Date(value).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function DraftControls<T>({
+  label,
+  controller,
+  canSave,
+  onRestore,
+  className = '',
+}: {
+  label: string;
+  controller: DraftController<T>;
+  canSave: boolean;
+  onRestore: (value: T) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`draft-controls ${className}`}>
+      <div>
+        <strong>Nháp {label}</strong>
+        <span>
+          {controller.status ||
+            (controller.draft
+              ? `Có nháp lưu lúc ${formatDraftTime(controller.draft.savedAt)}.`
+              : 'Nội dung sẽ tự lưu nháp khi bạn soạn thảo.')}
+        </span>
+      </div>
+      <div className="action-group">
+        {controller.draft && (
+          <button className="ghost" type="button" onClick={() => controller.restoreDraft(onRestore)}>
+            <RefreshCcw size={15} />
+            Khôi phục nháp
+          </button>
+        )}
+        <button className="ghost" type="button" disabled={!canSave} onClick={controller.saveDraft}>
+          <Save size={15} />
+          Lưu nháp
+        </button>
+        {controller.draft && (
+          <button className="ghost" type="button" onClick={controller.clearDraft}>
+            <Trash2 size={15} />
+            Xóa nháp
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function linesFromText(text: string): EditableScriptureLine[] {
   return text
@@ -265,6 +419,23 @@ function notifySuccess(message: string) {
     icon: 'success',
     title: message,
   });
+}
+
+function richDraftSnapshot(draft: RichContentDraft) {
+  return JSON.stringify({
+    title: draft.title.trim(),
+    description: (draft.description ?? '').trim(),
+    summary: (draft.summary ?? '').trim(),
+    content: draft.content.trim(),
+    categoryId: draft.categoryId,
+    imageUrl: (draft.imageUrl ?? '').trim(),
+    link: (draft.link ?? '').trim(),
+    shareEnabled: draft.shareEnabled ?? true,
+  });
+}
+
+function quoteDraftSnapshot(content: string) {
+  return JSON.stringify({ content: content.trim() });
 }
 
 function notifyError(message: string) {
@@ -647,6 +818,7 @@ function Overview({ data }: { data: DataState }) {
   return (
     <div className="overview-stack">
       <R2UsageOverview usage={data.r2Usage} />
+      <PresenceOverview />
       <section className="grid metrics">
         {cards.map(([label, value, Icon]) => (
           <article className="metric-card" key={label as string}>
@@ -664,6 +836,66 @@ function Overview({ data }: { data: DataState }) {
         </article>
       </section>
     </div>
+  );
+}
+
+function PresenceOverview() {
+  const [stats, setStats] = useState<OnlinePresenceStats | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPresence() {
+      try {
+        const nextStats = await api.presence();
+        if (!cancelled) {
+          setStats(nextStats);
+          setError('');
+        }
+      } catch (caught) {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Không tải được dữ liệu online.');
+      }
+    }
+
+    void loadPresence();
+    const timer = window.setInterval(() => void loadPresence(), 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const lastUpdated = stats?.generatedAt ? new Date(stats.generatedAt).toLocaleTimeString('vi-VN') : 'Đang kết nối';
+
+  return (
+    <section className="r2-dashboard presence-dashboard">
+      <div className="r2-dashboard-heading">
+        <div>
+          <span>Realtime</span>
+          <h2>Người đang online</h2>
+        </div>
+        <strong>
+          <i className="presence-live-dot" />
+          {error || `Cập nhật ${lastUpdated}`}
+        </strong>
+      </div>
+      <div className="presence-dashboard-grid">
+        <article className="presence-stat-card">
+          <Eye size={22} />
+          <span>Đang mở ứng dụng</span>
+          <strong>{(stats?.activeAppCount ?? 0).toLocaleString('vi-VN')}</strong>
+        </article>
+        <article className="presence-stat-card">
+          <ShieldCheck size={22} />
+          <span>Tài khoản online</span>
+          <strong>{(stats?.onlineAccountCount ?? 0).toLocaleString('vi-VN')}</strong>
+        </article>
+      </div>
+      <div className="r2-dashboard-meta">
+        <span>Dữ liệu live từ heartbeat app, tự hết hạn sau {stats?.ttlSeconds ?? 45} giây nếu thiết bị mất kết nối.</span>
+      </div>
+    </section>
   );
 }
 
@@ -906,6 +1138,16 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     [title, description, backgroundImageUrl, categoryId, rawText, lines],
   );
   const hasUnsavedChanges = currentDraft !== savedDraftRef.current;
+  const scriptureDraftValue = useMemo<ScriptureContentDraft>(
+    () => ({ title, description, backgroundImageUrl, categoryId, rawText, lines }),
+    [title, description, backgroundImageUrl, categoryId, rawText, lines],
+  );
+  const hasScriptureDraftContent = Boolean(title.trim() || description.trim() || backgroundImageUrl.trim() || categoryId || rawText.trim() || lines.length > 0);
+  const scriptureDraft = useAdminContentDraft({
+    key: `scripture:${selectedScriptureId || 'new'}`,
+    value: scriptureDraftValue,
+    active: hasUnsavedChanges && hasScriptureDraftContent,
+  });
   const scriptureCategories = data.audioCategories.filter((item) => item.kind === 'CHANT');
   const scriptureCategoryOptions = categoryTreeOptions(scriptureCategories);
   const scriptureChildrenByParent = useMemo(() => groupCategoriesByParent(scriptureCategories), [scriptureCategories]);
@@ -1043,6 +1285,17 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     setScriptureStatus('');
   }
 
+  function restoreScriptureDraft(draft: ScriptureContentDraft) {
+    const nextLines = normalizeImportedLines(draft.lines ?? []);
+    setTitle(draft.title ?? '');
+    setDescription(draft.description ?? '');
+    setBackgroundImageUrl(draft.backgroundImageUrl ?? '');
+    setCategoryId(draft.categoryId ?? '');
+    setRawText(draft.rawText ?? nextLines.map((line) => line.content).join('\n'));
+    setLines(nextLines);
+    setScriptureStatus('Đã khôi phục bản nháp. Kiểm tra lại nội dung trước khi lưu chính thức.');
+  }
+
   function newScripture() {
     if (!confirmLoseChanges()) return;
     resetScriptureForm();
@@ -1076,6 +1329,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
       );
       if (saved) {
         savedDraftRef.current = currentDraft;
+        scriptureDraft.clearDraft();
         setScriptureStatus(selectedScriptureId ? 'Đã cập nhật bản tụng thành công.' : 'Đã lưu bản tụng thành công.');
       } else {
         setScriptureStatus('Không lưu được bản tụng. Chi tiết lỗi đã hiển thị ở popup.');
@@ -1176,6 +1430,13 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
               </div>
             </div>
           )}
+          <DraftControls
+            className="span"
+            label="Kinh tụng"
+            controller={scriptureDraft}
+            canSave={hasScriptureDraftContent}
+            onRestore={restoreScriptureDraft}
+          />
           <label>
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh A Di Đà - bản tụng chậm" />
@@ -1336,6 +1597,18 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const savedReadingDraftRef = useRef(richDraftSnapshot({ title: '', description: '', content: '', categoryId: '' }));
+  const readingDraftValue = useMemo<RichContentDraft>(
+    () => ({ title, description, content, categoryId }),
+    [title, description, content, categoryId],
+  );
+  const readingDraftSnapshot = useMemo(() => richDraftSnapshot(readingDraftValue), [readingDraftValue]);
+  const hasReadingDraftContent = Boolean(title.trim() || description.trim() || content.trim() || categoryId);
+  const readingDraft = useAdminContentDraft({
+    key: `scripture-reading:${editingId || 'new'}`,
+    value: readingDraftValue,
+    active: hasReadingDraftContent && readingDraftSnapshot !== savedReadingDraftRef.current,
+  });
   const readingCategories = data.audioCategories.filter((item) => item.kind === 'READING');
   const readingCategoryOptions = categoryTreeOptions(readingCategories);
   const readingChildrenByParent = useMemo(() => groupCategoriesByParent(readingCategories), [readingCategories]);
@@ -1365,6 +1638,12 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
     setDescription(row.description ?? '');
     setContent(row.content ?? '');
     setCategoryId(row.categoryId ?? '');
+    savedReadingDraftRef.current = richDraftSnapshot({
+      title: row.title,
+      description: row.description ?? '',
+      content: row.content ?? '',
+      categoryId: row.categoryId ?? '',
+    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1374,6 +1653,14 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
     setDescription('');
     setContent('');
     setCategoryId('');
+    savedReadingDraftRef.current = richDraftSnapshot({ title: '', description: '', content: '', categoryId: '' });
+  }
+
+  function restoreReadingDraft(draft: RichContentDraft) {
+    setTitle(draft.title ?? '');
+    setDescription(draft.description ?? '');
+    setContent(draft.content ?? '');
+    setCategoryId(draft.categoryId ?? '');
   }
 
   return (
@@ -1433,6 +1720,13 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
               </button>
             </div>
           )}
+          <DraftControls
+            className="span"
+            label="Kinh đọc"
+            controller={readingDraft}
+            canSave={hasReadingDraftContent}
+            onRestore={restoreReadingDraft}
+          />
           <label>
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ví dụ: Kinh Người Áo Trắng" />
@@ -1479,7 +1773,10 @@ function ScriptureReadingManager({ data, run }: { data: DataState; run: RunActio
                     : api.create('/admin/scripture-reading', payload),
                 editingId ? 'Đã cập nhật Kinh đọc' : 'Đã tạo Kinh đọc',
               );
-              if (ok) resetForm();
+              if (ok) {
+                readingDraft.clearDraft();
+                resetForm();
+              }
             }}
           >
             <Save size={16} />
@@ -1701,7 +1998,7 @@ function ScriptureArchive({
             />
           ))}
           {scripturesByCategory.uncategorized?.length > 0 && (
-            <details className="reading-dropdown" open>
+            <details className="reading-dropdown" {...(visibleCategoryIds ? { open: true } : {})}>
               <summary>
                 <div className="reading-category-main">
                   <div className="reading-category-titleline">
@@ -1764,7 +2061,7 @@ function ScriptureCategoryDropdown({
   const childCount = children.length;
 
   return (
-    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} open={depth === 0 || Boolean(visibleCategoryIds)}>
+    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} {...(visibleCategoryIds ? { open: true } : {})}>
       <summary style={{ paddingLeft: depth * 18 }}>
         <div className="reading-category-main">
           <div className="reading-category-titleline">
@@ -2047,7 +2344,7 @@ function ScriptureReadingArchive({
             />
           ))}
           {readingsByCategory.uncategorized?.length > 0 && (
-            <details className="reading-dropdown" open>
+            <details className="reading-dropdown" {...(visibleCategoryIds ? { open: true } : {})}>
               <summary>
                 <div className="reading-category-main">
                   <div className="reading-category-titleline">
@@ -2110,7 +2407,7 @@ function ScriptureReadingCategoryDropdown({
   const childCount = children.length;
 
   return (
-    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} open={depth === 0 || Boolean(visibleCategoryIds)}>
+    <details className={`reading-dropdown reading-category-dropdown depth-${Math.min(depth, 4)}`} {...(visibleCategoryIds ? { open: true } : {})}>
       <summary style={{ paddingLeft: depth * 18 }}>
         <div className="reading-category-main">
           <div className="reading-category-titleline">
@@ -3927,6 +4224,18 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [link, setLink] = useState('');
   const [shareEnabled, setShareEnabled] = useState(true);
   const [editingNewsId, setEditingNewsId] = useState('');
+  const savedNewsDraftRef = useRef(richDraftSnapshot({ title: '', summary: '', content: '', categoryId: '', imageUrl: '', link: '', shareEnabled: true }));
+  const newsDraftValue = useMemo<RichContentDraft>(
+    () => ({ title, summary, content, categoryId, imageUrl, link, shareEnabled }),
+    [title, summary, content, categoryId, imageUrl, link, shareEnabled],
+  );
+  const newsDraftSnapshot = useMemo(() => richDraftSnapshot(newsDraftValue), [newsDraftValue]);
+  const hasNewsDraftContent = Boolean(title.trim() || summary.trim() || content.trim() || categoryId || imageUrl.trim() || link.trim());
+  const newsDraft = useAdminContentDraft({
+    key: `news:${editingNewsId || 'new'}`,
+    value: newsDraftValue,
+    active: hasNewsDraftContent && newsDraftSnapshot !== savedNewsDraftRef.current,
+  });
 
   function editCategory(row: NewsCategory) {
     setEditingCategory(row);
@@ -3941,6 +4250,15 @@ function editNews(row: NewsItem) {
     setContent(row.content ?? '');
     setCategoryId(row.categoryId ?? '');
     setShareEnabled(row.shareEnabled);
+    savedNewsDraftRef.current = richDraftSnapshot({
+      title: row.title,
+      summary: row.summary ?? '',
+      content: row.content ?? '',
+      categoryId: row.categoryId ?? '',
+      imageUrl: row.imageUrl ?? '',
+      link: row.link ?? '',
+      shareEnabled: row.shareEnabled,
+    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -3953,6 +4271,17 @@ function editNews(row: NewsItem) {
     setImageUrl('');
     setLink('');
     setShareEnabled(true);
+    savedNewsDraftRef.current = richDraftSnapshot({ title: '', summary: '', content: '', categoryId: '', imageUrl: '', link: '', shareEnabled: true });
+  }
+
+  function restoreNewsDraft(draft: RichContentDraft) {
+    setTitle(draft.title ?? '');
+    setSummary(draft.summary ?? '');
+    setContent(draft.content ?? '');
+    setCategoryId(draft.categoryId ?? '');
+    setImageUrl(draft.imageUrl ?? '');
+    setLink(draft.link ?? '');
+    setShareEnabled(draft.shareEnabled ?? true);
   }
 
   return (
@@ -4006,6 +4335,13 @@ function editNews(row: NewsItem) {
               </button>
             </div>
           )}
+          <DraftControls
+            className="span"
+            label="tin tức"
+            controller={newsDraft}
+            canSave={hasNewsDraftContent}
+            onRestore={restoreNewsDraft}
+          />
           <label>
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Tiêu đề tin tức" />
@@ -4068,7 +4404,10 @@ function editNews(row: NewsItem) {
                     : api.create('/admin/news', payload),
                 editingNewsId ? 'Đã cập nhật tin tức' : 'Đã tạo tin riêng',
               );
-              if (ok) resetNewsForm();
+              if (ok) {
+                newsDraft.clearDraft();
+                resetNewsForm();
+              }
             }}
           >
             <Save size={16} />
@@ -4313,6 +4652,15 @@ function RssManager({ data, run }: { data: DataState; run: RunAction }) {
 function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   const [content, setContent] = useState('');
   const [editingQuoteId, setEditingQuoteId] = useState('');
+  const savedQuoteDraftRef = useRef(quoteDraftSnapshot(''));
+  const quoteDraftValue = useMemo(() => ({ content }), [content]);
+  const quoteSnapshot = useMemo(() => quoteDraftSnapshot(content), [content]);
+  const hasQuoteDraftContent = Boolean(content.trim());
+  const quoteDraft = useAdminContentDraft({
+    key: `quote:${editingQuoteId || 'new'}`,
+    value: quoteDraftValue,
+    active: hasQuoteDraftContent && quoteSnapshot !== savedQuoteDraftRef.current,
+  });
   const [selectedQuoteIds, setSelectedQuoteIds] = useState<string[]>(data.quoteRotation.quoteIds);
   const [uploadingBackgrounds, setUploadingBackgrounds] = useState(false);
   const activeQuote = data.quotes.find((quote) => quote.active);
@@ -4327,12 +4675,18 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   function editQuote(row: QuoteRecord) {
     setEditingQuoteId(row.id);
     setContent(row.content);
+    savedQuoteDraftRef.current = quoteDraftSnapshot(row.content);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function resetQuoteForm() {
     setEditingQuoteId('');
     setContent('');
+    savedQuoteDraftRef.current = quoteDraftSnapshot('');
+  }
+
+  function restoreQuoteDraft(draft: { content: string }) {
+    setContent(draft.content ?? '');
   }
 
   function toggleSelected(id: string, checked: boolean) {
@@ -4403,6 +4757,13 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               </button>
             </div>
           )}
+          <DraftControls
+            className="span"
+            label="trích dẫn"
+            controller={quoteDraft}
+            canSave={hasQuoteDraftContent}
+            onRestore={restoreQuoteDraft}
+          />
           <label className="span">
             Nội dung
             <textarea
@@ -4424,7 +4785,10 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
                     : api.create('/admin/quote', { content }),
                 editingQuoteId ? 'Đã cập nhật trích dẫn' : 'Đã tạo trích dẫn',
               );
-              if (ok) resetQuoteForm();
+              if (ok) {
+                quoteDraft.clearDraft();
+                resetQuoteForm();
+              }
             }}
           >
             <Save size={16} />

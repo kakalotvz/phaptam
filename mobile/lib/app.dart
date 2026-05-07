@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/presence/app_presence_service.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/content/content_providers.dart';
@@ -22,6 +23,7 @@ class _PhapTamAppState extends ConsumerState<PhapTamApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(AppPresenceService.instance.start());
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (mounted) {
         setState(() => _showSplash = false);
@@ -32,13 +34,22 @@ class _PhapTamAppState extends ConsumerState<PhapTamApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(AppPresenceService.instance.stop());
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(AppPresenceService.instance.start());
       unawaited(refreshPublicContent(ref));
+      return;
+    }
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      unawaited(AppPresenceService.instance.stop());
     }
   }
 
