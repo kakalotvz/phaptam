@@ -62,9 +62,63 @@ final knowledgeListProvider = FutureProvider<List<NewsItem>>((ref) async {
   return items
       .cast<Map<String, dynamic>>()
       .map(NewsItem.fromJson)
+      .map(_normalizeKnowledgeItem)
       .where((item) => item.title.trim().isNotEmpty)
       .toList();
 });
+
+NewsItem _normalizeKnowledgeItem(NewsItem item) {
+  return item.copyWith(content: _normalizeKnowledgeMarkdown(item.content));
+}
+
+String _normalizeKnowledgeMarkdown(String value) {
+  var normalized = value
+      .replaceAll('＊', '*')
+      .replaceAll('［', '[')
+      .replaceAll('］', ']')
+      .replaceAll('（', '(')
+      .replaceAll('）', ')')
+      .replaceAll('！', '!')
+      .replaceAll('&ast;', '*')
+      .replaceAll(r'\*', '*')
+      .replaceAll(r'\_', '_')
+      .replaceAll(r'\[', '[')
+      .replaceAll(r'\]', ']')
+      .replaceAll(r'\(', '(')
+      .replaceAll(r'\)', ')')
+      .replaceAll(r'\!', '!');
+
+  normalized = normalized.replaceAllMapped(
+    RegExp(
+      r"""!\s*\[(.*?)(?:\|(left|center|right))?\]\s*\(\s*<a[^>]*href=["']([^"']+)["'][^>]*>.*?</a>\s*\)""",
+      caseSensitive: false,
+      dotAll: true,
+    ),
+    (match) {
+      final alt = match.group(1) ?? 'Hình ảnh';
+      final align = match.group(2);
+      final url = (match.group(3) ?? '').trim().replaceAll(RegExp(r'\s+'), '');
+      final suffix = align == null ? '' : '|$align';
+      return '\n\n![$alt$suffix]($url)\n\n';
+    },
+  );
+
+  normalized = normalized.replaceAllMapped(
+    RegExp(
+      r'!\s*\[(.*?)(?:\|(left|center|right))?\]\s*\(\s*(https?:\/\/[^)]+?)\s*\)',
+      caseSensitive: false,
+    ),
+    (match) {
+      final alt = match.group(1) ?? 'Hình ảnh';
+      final align = match.group(2);
+      final url = (match.group(3) ?? '').trim().replaceAll(RegExp(r'\s+'), '');
+      final suffix = align == null ? '' : '|$align';
+      return '\n\n![$alt$suffix]($url)\n\n';
+    },
+  );
+
+  return normalized.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+}
 
 final meditationProgramsProvider = FutureProvider<List<MeditationProgram>>((
   ref,

@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 typedef RichContentWordLongPressStart =
@@ -46,6 +47,17 @@ class _RichContentState extends State<RichContent> {
     final style =
         widget.baseStyle ??
         Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.58);
+    if (widget.onWordLongPressStart == null && widget.onWordTap == null) {
+      return HtmlWidget(
+        _htmlContentForLibrary(widget.content),
+        textStyle: style,
+        onTapUrl: (url) async {
+          await _openExternalUrl(url);
+          return true;
+        },
+      );
+    }
+
     final wordCounter = _WordIndexCounter();
     final blocks = _richContentBlocks(_normalize(widget.content));
 
@@ -179,12 +191,10 @@ class _RichBlock extends StatelessWidget {
       );
     }
 
-    final image = RegExp(
-      r'^!\[(.*?)(?:\|(left|center|right))?\]\((https?:\/\/[^)]+)\)$',
-    ).firstMatch(block);
+    final image = _markdownImageBlockPattern.firstMatch(block);
     if (image != null) {
       return _AlignedNetworkImage(
-        url: image.group(3)!,
+        url: _cleanMarkdownUrl(image.group(3) ?? ''),
         alignment: _readTextAlign(image.group(2)),
       );
     }
@@ -281,13 +291,29 @@ class _RichBlock extends StatelessWidget {
       );
     }
 
+    if (block == _blankLineBlock) {
+      return SizedBox(height: compact ? 8 : 18);
+    }
+
     final rawText = lines.join('\n');
-    final aligned = _looseAlignBlockPattern.firstMatch(rawText);
-    final looseAlign = _looseAlignOpenPattern.firstMatch(rawText);
-    final alignedText = aligned?.group(2) ?? _stripLooseAlignTags(rawText);
-    final alignedTextAlign = _readTextAlign(
-      aligned?.group(1) ?? looseAlign?.group(1),
-    );
+    final resolvedAlign = _resolveAlignedText(rawText);
+    final alignedText = resolvedAlign.text;
+    final alignedTextAlign = resolvedAlign.textAlign;
+
+    if (alignedText == _blankLineBlock) {
+      return SizedBox(height: compact ? 8 : 18);
+    }
+
+    final mediaText = _stripFullStyleWrappers(alignedText);
+    final alignedImage = _markdownImageBlockPattern.firstMatch(mediaText);
+    if (alignedImage != null) {
+      return _AlignedNetworkImage(
+        url: _cleanMarkdownUrl(alignedImage.group(3) ?? ''),
+        alignment: _readTextAlign(alignedImage.group(2)) == TextAlign.left
+            ? alignedTextAlign
+            : _readTextAlign(alignedImage.group(2)),
+      );
+    }
 
     if (alignedText.startsWith('## ')) {
       return Text.rich(
@@ -352,10 +378,17 @@ class _RichBlock extends StatelessWidget {
 }
 
 String _normalize(String value) {
-  final normalized = _decodeHtmlEntities(value)
+  final normalized = _normalizeMarkdownSyntax(_decodeHtmlEntities(value))
       .replaceAll('&amp;nbsp;', ' ')
       .replaceAll('&nbsp;', ' ')
       .replaceAll('\u00A0', ' ')
+      .replaceAllMapped(
+        RegExp(
+          r'(?:<br\s*/?>\s*){2,}',
+          caseSensitive: false,
+        ),
+        (_) => '\n\n$_blankLineBlock\n\n',
+      )
       .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
       .replaceAllMapped(
         RegExp(
@@ -384,6 +417,7 @@ String _normalize(String value) {
         (match) {
           final attrs = match.group(2) ?? '';
           final body = match.group(3) ?? '';
+          if (_isBlankHtmlBlock(body)) return '\n\n$_blankLineBlock\n\n';
           final align = _htmlTextAlign(attrs);
           if (align == null) return '\n\n$body\n\n';
           return '\n\n[align=$align]$body[/align]\n\n';
@@ -583,9 +617,146 @@ String _normalize(String value) {
         RegExp(r'\[url\](.*?)\[/url\]', caseSensitive: false, dotAll: true),
         (match) => '[${match.group(1) ?? ''}](${match.group(1) ?? ''})',
       )
+      .replaceAllMapped(
+        _markdownImageInlinePattern,
+        (match) =>
+            '\n\n${_markdownImage(_cleanMarkdownUrl(match.group(3) ?? ''), match.group(2))}\n\n',
+      )
       .replaceAll(RegExp(r'<[^>]+>'), '')
       .trim();
   return _decodeHtmlEntities(normalized);
+}
+
+String _htmlContentForLibrary(String value) {
+  final decoded = _normalizeMarkdownSyntax(_decodeHtmlEntities(value.trim()));
+  if (decoded.isEmpty) return '';
+  final html = _looksLikeHtml(decoded) ? decoded : _markdownToHtml(decoded);
+  return _preserveBlankHtmlLines(html);
+}
+
+bool _looksLikeHtml(String value) {
+  return RegExp(r'</?[a-z][\s\S]*>', caseSensitive: false).hasMatch(value);
+}
+
+String _preserveBlankHtmlLines(String value) {
+  return value
+      .replaceAllMapped(
+        RegExp(
+          r'<(p|div)([^>]*)>\s*(?:<br\s*/?>|&nbsp;|\u00A0|\s)*</\1>',
+          caseSensitive: false,
+          dotAll: true,
+        ),
+        (_) => _blankLineHtml,
+      )
+      .replaceAllMapped(
+        RegExp(r'(?:<br\s*/?>\s*){2,}', caseSensitive: false),
+        (_) => '<br>$_blankLineHtml',
+      );
+}
+
+String _markdownToHtml(String value) {
+  final blocks = value
+      .split(RegExp(r'\n{2,}'))
+      .map((block) => block.trim())
+      .where((block) => block.isNotEmpty);
+  return blocks.map(_markdownBlockToHtml).join();
+}
+
+String _markdownBlockToHtml(String block) {
+  final aligned = _resolveAlignedText(block);
+  final align = aligned.textAlign == TextAlign.left
+      ? null
+      : aligned.textAlign.name;
+  final body = _stripFullStyleWrappers(aligned.text);
+  final style = align == null ? '' : ' style="text-align: ${_escapeHtml(align)}"';
+
+  final image = _markdownImageBlockPattern.firstMatch(body);
+  if (image != null) {
+    final url = _escapeHtml(_cleanMarkdownUrl(image.group(3) ?? ''));
+    final alt = _escapeHtml(image.group(1) ?? 'Hình ảnh');
+    return '<p$style><img src="$url" alt="$alt"></p>';
+  }
+
+  if (body.startsWith('## ')) {
+    return '<h2$style>${_inlineMarkdownToHtml(body.substring(3))}</h2>';
+  }
+  if (body.startsWith('### ')) {
+    return '<h3$style>${_inlineMarkdownToHtml(body.substring(4))}</h3>';
+  }
+  if (body.startsWith('> ')) {
+    return '<blockquote$style>${_inlineMarkdownToHtml(body.replaceAll(RegExp(r'^> ', multiLine: true), ''))}</blockquote>';
+  }
+
+  final lines = body.split('\n').map((line) => line.trim()).where((line) => line.isNotEmpty).toList();
+  if (lines.isNotEmpty && lines.every((line) => line.startsWith('- '))) {
+    return '<ul$style>${lines.map((line) => '<li>${_inlineMarkdownToHtml(line.substring(2))}</li>').join()}</ul>';
+  }
+  if (lines.isNotEmpty && lines.every((line) => RegExp(r'^\d+\. ').hasMatch(line))) {
+    return '<ol$style>${lines.map((line) => '<li>${_inlineMarkdownToHtml(line.replaceFirst(RegExp(r'^\d+\. '), ''))}</li>').join()}</ol>';
+  }
+
+  return '<p$style>${body.split('\n').map(_inlineMarkdownToHtml).join('<br>')}</p>';
+}
+
+String _inlineMarkdownToHtml(String value) {
+  return _escapeHtml(value)
+      .replaceAllMapped(
+        RegExp(r'\*\*\*([\s\S]+?)\*\*\*'),
+        (match) => '<strong><em>${match.group(1) ?? ''}</em></strong>',
+      )
+      .replaceAllMapped(
+        RegExp(r'\*\*([\s\S]+?)\*\*'),
+        (match) => '<strong>${match.group(1) ?? ''}</strong>',
+      )
+      .replaceAllMapped(
+        RegExp(r'__([\s\S]+?)__'),
+        (match) => '<u>${match.group(1) ?? ''}</u>',
+      )
+      .replaceAllMapped(
+        RegExp(r'\*([\s\S]+?)\*'),
+        (match) => '<em>${match.group(1) ?? ''}</em>',
+      )
+      .replaceAllMapped(
+        RegExp(r'\[(.+?)\]\((https?:\/\/[^)]+)\)'),
+        (match) => '<a href="${match.group(2)}">${match.group(1)}</a>',
+      );
+}
+
+String _escapeHtml(String value) {
+  return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+}
+
+const String _blankLineHtml = '<p>&nbsp;</p>';
+
+String _normalizeMarkdownSyntax(String value) {
+  return value
+      .replaceAll('＊', '*')
+      .replaceAll('［', '[')
+      .replaceAll('］', ']')
+      .replaceAll('（', '(')
+      .replaceAll('）', ')')
+      .replaceAll('！', '!')
+      .replaceAll('&ast;', '*')
+      .replaceAll(r'\*', '*')
+      .replaceAll(r'\_', '_')
+      .replaceAll(r'\[', '[')
+      .replaceAll(r'\]', ']')
+      .replaceAll(r'\(', '(')
+      .replaceAll(r'\)', ')')
+      .replaceAll(r'\!', '!')
+      .replaceAllMapped(
+        RegExp(
+          r"""!\s*\[(.*?)(?:\|(left|center|right))?\]\s*\(\s*<a[^>]*href=["']([^"']+)["'][^>]*>.*?</a>\s*\)""",
+          caseSensitive: false,
+          dotAll: true,
+        ),
+        (match) =>
+            '\n\n${_markdownImage(_cleanMarkdownUrl(match.group(3) ?? ''), match.group(2))}\n\n',
+      );
 }
 
 String _normalizeAlignedBbCode(Match match) {
@@ -619,7 +790,8 @@ List<String> _richContentBlocks(String value) {
   final rawBlocks = value
       .split(RegExp(r'\n{2,}'))
       .map((block) => block.trim())
-      .where((block) => block.isNotEmpty);
+      .where((block) => block.isNotEmpty)
+      .expand(_splitMarkdownImageBlocks);
   final blocks = <String>[];
   String? pendingAlignBlock;
 
@@ -663,6 +835,26 @@ List<String> _richContentBlocks(String value) {
   return blocks;
 }
 
+List<String> _splitMarkdownImageBlocks(String block) {
+  final normalized = _normalizeMarkdownSyntax(block);
+  final matches = _markdownImageInlinePattern.allMatches(normalized).toList();
+  if (matches.isEmpty) return [normalized];
+
+  final parts = <String>[];
+  var cursor = 0;
+  for (final match in matches) {
+    final before = normalized.substring(cursor, match.start).trim();
+    if (before.isNotEmpty) parts.add(before);
+    final url = _cleanMarkdownUrl(match.group(3) ?? '');
+    if (url.isNotEmpty) parts.add(_markdownImage(url, match.group(2)));
+    cursor = match.end;
+  }
+
+  final after = normalized.substring(cursor).trim();
+  if (after.isNotEmpty) parts.add(after);
+  return parts.isEmpty ? [normalized] : parts;
+}
+
 String _stripUnmatchedLooseAlignTags(String value) {
   if (_looseAlignBlockPattern.hasMatch(value)) return value;
   return _stripLooseAlignTags(value).trim();
@@ -678,6 +870,42 @@ String? _repairLooseAlignBlock(String value) {
   final cleanedBody = body.replaceAll(RegExp(r'\n{2,}'), '\n').trim();
   if (cleanedBody.isEmpty) return null;
   return '[align=$align]$cleanedBody[/align]';
+}
+
+_ResolvedAlignedText _resolveAlignedText(String value) {
+  var text = _normalizeMarkdownSyntax(value).trim();
+  var textAlign = TextAlign.left;
+
+  while (true) {
+    final aligned = _looseAlignBlockPattern.firstMatch(text);
+    if (aligned == null) break;
+    textAlign = _readTextAlign(aligned.group(1));
+    text = (aligned.group(2) ?? '').trim();
+  }
+
+  final looseAlign = _looseAlignOpenPattern.firstMatch(text);
+  if (looseAlign != null) textAlign = _readTextAlign(looseAlign.group(1));
+
+  return _ResolvedAlignedText(
+    text: _stripLooseAlignTags(text).trim(),
+    textAlign: textAlign,
+  );
+}
+
+String _stripFullStyleWrappers(String value) {
+  var text = value.trim();
+  while (true) {
+    final styled = _fullStyleBlockPattern.firstMatch(text);
+    if (styled == null) return text;
+    text = (styled.group(2) ?? '').trim();
+  }
+}
+
+class _ResolvedAlignedText {
+  const _ResolvedAlignedText({required this.text, required this.textAlign});
+
+  final String text;
+  final TextAlign textAlign;
 }
 
 String richContentPlainText(String value) {
@@ -696,11 +924,12 @@ List<InlineSpan> _inlineSpans(
   Set<int> tapWordIndexes = const {},
   Duration wordLongPressDuration = const Duration(milliseconds: 700),
   List<GestureRecognizer>? recognizers,
+  TextStyle? inheritedStyle,
 }) {
-  value = _stripLooseAlignTags(value);
+  value = _normalizeMarkdownSyntax(_stripLooseAlignTags(value));
   final spans = <InlineSpan>[];
   final pattern = RegExp(
-    r'\[style=([^\]]+)\]([\s\S]+?)\[/style\]|\[sup\]([\s\S]+?)\[/sup\]|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([\s\S]+?)\*|\[(.+?)\]\((https?:\/\/[^)]+)\)',
+    r'\[style=([^\]]+)\]([\s\S]+?)\[/style\]|\[sup\]([\s\S]+?)\[/sup\]|\*{3,}([\s\S]+?)\*{3,}|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([\s\S]+?)\*|\[(.+?)\]\((https?:\/\/[^)]+)\)',
   );
   var cursor = 0;
 
@@ -715,6 +944,7 @@ List<InlineSpan> _inlineSpans(
           tapWordIndexes,
           wordLongPressDuration,
           recognizers,
+          style: inheritedStyle,
         ),
       );
     }
@@ -722,23 +952,28 @@ List<InlineSpan> _inlineSpans(
     final styledCss = match.group(1);
     final styledText = match.group(2);
     final superscript = match.group(3);
-    final bold = match.group(4);
-    final underline = match.group(5);
-    final strike = match.group(6);
-    final italic = match.group(7);
-    final linkText = match.group(8);
-    final linkUrl = match.group(9);
+    final boldItalic = match.group(4);
+    final bold = match.group(5);
+    final underline = match.group(6);
+    final strike = match.group(7);
+    final italic = match.group(8);
+    final linkText = match.group(9);
+    final linkUrl = match.group(10);
     if (styledCss != null && styledText != null) {
       spans.addAll(
-        _wordAwareSpans(
+        _inlineSpans(
           styledText,
-          wordCounter,
-          onWordLongPressStart,
-          onWordTap,
-          tapWordIndexes,
-          wordLongPressDuration,
-          recognizers,
-          style: _styleFromCss(styledCss),
+          context,
+          wordCounter: wordCounter,
+          onWordLongPressStart: onWordLongPressStart,
+          onWordTap: onWordTap,
+          tapWordIndexes: tapWordIndexes,
+          wordLongPressDuration: wordLongPressDuration,
+          recognizers: recognizers,
+          inheritedStyle: _mergeInlineStyle(
+            inheritedStyle,
+            _styleFromCss(styledCss),
+          ),
         ),
       );
     } else if (superscript != null) {
@@ -751,9 +986,31 @@ List<InlineSpan> _inlineSpans(
           tapWordIndexes,
           wordLongPressDuration,
           recognizers,
-          style: const TextStyle(
-            fontSize: 11,
-            fontFeatures: [FontFeature.superscripts()],
+          style: _mergeInlineStyle(
+            inheritedStyle,
+            const TextStyle(
+              fontSize: 11,
+              fontFeatures: [FontFeature.superscripts()],
+            ),
+          ),
+        ),
+      );
+    } else if (boldItalic != null) {
+      spans.addAll(
+        _wordAwareSpans(
+          boldItalic,
+          wordCounter,
+          onWordLongPressStart,
+          onWordTap,
+          tapWordIndexes,
+          wordLongPressDuration,
+          recognizers,
+          style: _mergeInlineStyle(
+            inheritedStyle,
+            const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ),
       );
@@ -767,7 +1024,10 @@ List<InlineSpan> _inlineSpans(
           tapWordIndexes,
           wordLongPressDuration,
           recognizers,
-          style: const TextStyle(fontWeight: FontWeight.w800),
+          style: _mergeInlineStyle(
+            inheritedStyle,
+            const TextStyle(fontWeight: FontWeight.w800),
+          ),
         ),
       );
     } else if (underline != null) {
@@ -780,7 +1040,10 @@ List<InlineSpan> _inlineSpans(
           tapWordIndexes,
           wordLongPressDuration,
           recognizers,
-          style: const TextStyle(decoration: TextDecoration.underline),
+          style: _mergeInlineStyle(
+            inheritedStyle,
+            const TextStyle(decoration: TextDecoration.underline),
+          ),
         ),
       );
     } else if (strike != null) {
@@ -793,7 +1056,10 @@ List<InlineSpan> _inlineSpans(
           tapWordIndexes,
           wordLongPressDuration,
           recognizers,
-          style: const TextStyle(decoration: TextDecoration.lineThrough),
+          style: _mergeInlineStyle(
+            inheritedStyle,
+            const TextStyle(decoration: TextDecoration.lineThrough),
+          ),
         ),
       );
     } else if (italic != null) {
@@ -806,14 +1072,20 @@ List<InlineSpan> _inlineSpans(
           tapWordIndexes,
           wordLongPressDuration,
           recognizers,
-          style: const TextStyle(fontStyle: FontStyle.italic),
+          style: _mergeInlineStyle(
+            inheritedStyle,
+            const TextStyle(fontStyle: FontStyle.italic),
+          ),
         ),
       );
     } else if (linkText != null && linkUrl != null) {
-      final linkStyle = TextStyle(
-        color: Theme.of(context).colorScheme.primary,
-        decoration: TextDecoration.underline,
-        fontWeight: FontWeight.w700,
+      final linkStyle = _mergeInlineStyle(
+        inheritedStyle,
+        TextStyle(
+          color: Theme.of(context).colorScheme.primary,
+          decoration: TextDecoration.underline,
+          fontWeight: FontWeight.w700,
+        ),
       );
       if (onWordLongPressStart == null &&
           (onWordTap == null || tapWordIndexes.isEmpty)) {
@@ -853,10 +1125,17 @@ List<InlineSpan> _inlineSpans(
         tapWordIndexes,
         wordLongPressDuration,
         recognizers,
+        style: inheritedStyle,
       ),
     );
   }
   return spans;
+}
+
+TextStyle? _mergeInlineStyle(TextStyle? base, TextStyle? addition) {
+  if (base == null) return addition;
+  if (addition == null) return base;
+  return base.merge(addition);
 }
 
 List<InlineSpan> _wordAwareSpans(
@@ -878,7 +1157,9 @@ List<InlineSpan> _wordAwareSpans(
   var cursor = 0;
   for (final match in _richWordPattern.allMatches(value)) {
     if (match.start > cursor) {
-      spans.add(TextSpan(text: value.substring(cursor, match.start)));
+      spans.add(
+        TextSpan(text: value.substring(cursor, match.start), style: style),
+      );
     }
     final word = match.group(0) ?? '';
     final index = wordCounter.next();
@@ -897,7 +1178,9 @@ List<InlineSpan> _wordAwareSpans(
     spans.add(TextSpan(text: word, style: style, recognizer: recognizer));
     cursor = match.end;
   }
-  if (cursor < value.length) spans.add(TextSpan(text: value.substring(cursor)));
+  if (cursor < value.length) {
+    spans.add(TextSpan(text: value.substring(cursor), style: style));
+  }
   return spans;
 }
 
@@ -952,6 +1235,25 @@ final RegExp _looseAlignClosePattern = RegExp(
   caseSensitive: false,
 );
 
+final RegExp _fullStyleBlockPattern = RegExp(
+  r'^\s*\[style=([^\]]+)\]\s*([\s\S]*?)\s*\[/style\]\s*$',
+  caseSensitive: false,
+);
+
+final RegExp _markdownImageInlinePattern = RegExp(
+  r'\\?!\s*\\?\[(.*?)(?:\|(left|center|right))?\\?\]\s*\\?\(\s*(https?:\/\/[^)]+?)\s*\\?\)',
+  caseSensitive: false,
+);
+
+final RegExp _markdownImageBlockPattern = RegExp(
+  r'^\\?!\s*\\?\[(.*?)(?:\|(left|center|right))?\\?\]\s*\\?\(\s*(https?:\/\/[^)]+?)\s*\\?\)$',
+  caseSensitive: false,
+);
+
+String _cleanMarkdownUrl(String value) {
+  return value.trim().replaceAll(RegExp(r'\s+'), '');
+}
+
 bool _isLooseAlignCloseOnly(String value) {
   return RegExp(
     r'^\s*\[/\s*align\s*\]\s*$',
@@ -963,6 +1265,24 @@ String _stripLooseAlignTags(String value) {
   return value
       .replaceAll(_looseAlignOpenPattern, '')
       .replaceAll(_looseAlignClosePattern, '');
+}
+
+const String _blankLineBlock = '[[blank-line]]';
+
+bool _isBlankHtmlBlock(String value) {
+  if (_containsMediaHtml(value)) return false;
+  return _decodeHtmlEntities(value)
+      .replaceAll(RegExp(r'<[^>]+>'), '')
+      .replaceAll('\u00A0', ' ')
+      .trim()
+      .isEmpty;
+}
+
+bool _containsMediaHtml(String value) {
+  return RegExp(
+    r'<(?:img|video|iframe)\b|data-video\s*=',
+    caseSensitive: false,
+  ).hasMatch(value);
 }
 
 String? _htmlAttribute(String tag, String name) {

@@ -149,6 +149,34 @@ class NewsItem {
       shareEnabled: json['shareEnabled'] as bool? ?? true,
     );
   }
+
+  NewsItem copyWith({
+    String? id,
+    String? title,
+    String? category,
+    String? source,
+    DateTime? publishedAt,
+    String? summary,
+    String? content,
+    int? viewCount,
+    String? imageUrl,
+    String? link,
+    bool? shareEnabled,
+  }) {
+    return NewsItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      category: category ?? this.category,
+      source: source ?? this.source,
+      publishedAt: publishedAt ?? this.publishedAt,
+      summary: summary ?? this.summary,
+      content: content ?? this.content,
+      viewCount: viewCount ?? this.viewCount,
+      imageUrl: imageUrl ?? this.imageUrl,
+      link: link ?? this.link,
+      shareEnabled: shareEnabled ?? this.shareEnabled,
+    );
+  }
 }
 
 class MeditationProgram {
