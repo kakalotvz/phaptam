@@ -1010,7 +1010,14 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
   const [draftQuery, setDraftQuery] = useState('');
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [categoryDraftQuery, setCategoryDraftQuery] = useState('');
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [categoryUsageFilter, setCategoryUsageFilter] = useState('');
   const audioCategories = data.audioCategories.filter((item) => item.kind === 'AUDIO' && !item.parentId);
+  const filteredAudioCategories = useMemo(
+    () => filterAudioCategories(audioCategories, { query: categoryQuery, usage: categoryUsageFilter }),
+    [audioCategories, categoryQuery, categoryUsageFilter],
+  );
   const filteredAudios = useMemo(
     () => filterAudios(data.audios, { query, categoryId: categoryFilter }),
     [categoryFilter, data.audios, query],
@@ -1056,8 +1063,29 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
         />
       </Panel>
       <Panel title="Danh mục audio" className="span">
+        <ListFilterBar
+          draftQuery={categoryDraftQuery}
+          onDraftQueryChange={setCategoryDraftQuery}
+          placeholder="Tìm tên hoặc mô tả danh mục audio..."
+          onSearch={() => setCategoryQuery(categoryDraftQuery.trim())}
+          onReset={() => {
+            setCategoryDraftQuery('');
+            setCategoryQuery('');
+            setCategoryUsageFilter('');
+          }}
+        >
+          <label>
+            Sử dụng
+            <select value={categoryUsageFilter} onChange={(event) => setCategoryUsageFilter(event.target.value)}>
+              <option value="">Tất cả</option>
+              <option value="used">Đã có audio</option>
+              <option value="empty">Chưa có audio</option>
+            </select>
+          </label>
+        </ListFilterBar>
+        <ListFilterSummary visible={filteredAudioCategories.length} total={audioCategories.length} label="danh mục" />
         <Table
-          rows={audioCategories}
+          rows={filteredAudioCategories}
           columns={[
             ['name', 'Tên'],
             ['description', 'Mô tả'],
@@ -2653,6 +2681,16 @@ const weekdayOptions = [
 ] as const;
 
 function ScriptureReminderManager({ data }: { data: DataState }) {
+  const [draftQuery, setDraftQuery] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [modeFilter, setModeFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const filteredReminders = useMemo(
+    () => filterScriptureReminders(data.scriptureReminders, { query, status: statusFilter, mode: modeFilter, date: dateFilter }),
+    [data.scriptureReminders, dateFilter, modeFilter, query, statusFilter],
+  );
+
   return (
     <div className="single-column">
       <Panel title="Danh sách lịch nhắc tụng kinh của người dùng">
@@ -2662,8 +2700,43 @@ function ScriptureReminderManager({ data }: { data: DataState }) {
             <span>Admin xem người tạo, bài kinh, giờ nhắc, ngày nhắc, chế độ đọc và trạng thái. Việc tạo/sửa lịch nhắc thuộc về người dùng trong app.</span>
           </div>
         </div>
+        <ListFilterBar
+          draftQuery={draftQuery}
+          onDraftQueryChange={setDraftQuery}
+          placeholder="Tìm user, tên lịch, bộ kinh, giờ nhắc..."
+          onSearch={() => setQuery(draftQuery.trim())}
+          onReset={() => {
+            setDraftQuery('');
+            setQuery('');
+            setStatusFilter('');
+            setModeFilter('');
+            setDateFilter('');
+          }}
+        >
+          <label>
+            Trạng thái
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">Tất cả trạng thái</option>
+              <option value="active">Đang bật</option>
+              <option value="inactive">Tắt</option>
+            </select>
+          </label>
+          <label>
+            Chế độ
+            <select value={modeFilter} onChange={(event) => setModeFilter(event.target.value)}>
+              <option value="">Tất cả chế độ</option>
+              <option value="RESUME">Tiếp tục</option>
+              <option value="RESTART">Bắt đầu lại</option>
+            </select>
+          </label>
+          <label>
+            Ngày tạo
+            <input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
+          </label>
+        </ListFilterBar>
+        <ListFilterSummary visible={filteredReminders.length} total={data.scriptureReminders.length} label="lịch nhắc" />
         <Table
-          rows={data.scriptureReminders}
+          rows={filteredReminders}
           columns={[
             [(row: ScriptureReminder) => row.user?.name || row.user?.email || 'Lịch hệ thống', 'User'],
             ['title', 'Tên lịch'],
@@ -2687,6 +2760,13 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
   const [draftQuery, setDraftQuery] = useState('');
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [categoryDraftQuery, setCategoryDraftQuery] = useState('');
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [categoryUsageFilter, setCategoryUsageFilter] = useState('');
+  const filteredVideoCategories = useMemo(
+    () => filterVideoCategories(data.videoCategories, { query: categoryQuery, usage: categoryUsageFilter }),
+    [categoryQuery, categoryUsageFilter, data.videoCategories],
+  );
   const filteredVideos = useMemo(
     () => filterVideos(data.videos, { query, categoryId: categoryFilter }),
     [categoryFilter, data.videos, query],
@@ -2729,8 +2809,29 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
         />
       </Panel>
       <Panel title="Danh mục video" className="span">
+        <ListFilterBar
+          draftQuery={categoryDraftQuery}
+          onDraftQueryChange={setCategoryDraftQuery}
+          placeholder="Tìm tên hoặc mô tả danh mục video..."
+          onSearch={() => setCategoryQuery(categoryDraftQuery.trim())}
+          onReset={() => {
+            setCategoryDraftQuery('');
+            setCategoryQuery('');
+            setCategoryUsageFilter('');
+          }}
+        >
+          <label>
+            Sử dụng
+            <select value={categoryUsageFilter} onChange={(event) => setCategoryUsageFilter(event.target.value)}>
+              <option value="">Tất cả</option>
+              <option value="used">Đã có video</option>
+              <option value="empty">Chưa có video</option>
+            </select>
+          </label>
+        </ListFilterBar>
+        <ListFilterSummary visible={filteredVideoCategories.length} total={data.videoCategories.length} label="danh mục" />
         <Table
-          rows={data.videoCategories}
+          rows={filteredVideoCategories}
           columns={[
             ['name', 'Tên'],
             ['description', 'Mô tả'],
@@ -4314,11 +4415,18 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
   const [sourceFilter, setSourceFilter] = useState('');
   const [shareFilter, setShareFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  const [categoryDraftQuery, setCategoryDraftQuery] = useState('');
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [categoryUsageFilter, setCategoryUsageFilter] = useState('');
   const isKnowledge = contentType === 'KNOWLEDGE';
   const articleLabel = isKnowledge ? 'kiến thức' : 'tin tức';
   const articleTitle = isKnowledge ? 'Kiến thức' : 'Tin tức';
   const categories = isKnowledge ? data.knowledgeCategories : data.newsCategories;
   const items = isKnowledge ? data.knowledge : data.news;
+  const filteredCategories = useMemo(
+    () => filterNewsCategories(categories, { query: categoryQuery, usage: categoryUsageFilter }),
+    [categories, categoryQuery, categoryUsageFilter],
+  );
   const filteredItems = useMemo(
     () =>
       filterArticles(items, {
@@ -4437,8 +4545,29 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
             />
           </Panel>
           <Panel title={`Danh mục ${articleLabel}`}>
+            <ListFilterBar
+              draftQuery={categoryDraftQuery}
+              onDraftQueryChange={setCategoryDraftQuery}
+              placeholder={`Tìm tên hoặc mô tả danh mục ${articleLabel}...`}
+              onSearch={() => setCategoryQuery(categoryDraftQuery.trim())}
+              onReset={() => {
+                setCategoryDraftQuery('');
+                setCategoryQuery('');
+                setCategoryUsageFilter('');
+              }}
+            >
+              <label>
+                Sử dụng
+                <select value={categoryUsageFilter} onChange={(event) => setCategoryUsageFilter(event.target.value)}>
+                  <option value="">Tất cả</option>
+                  <option value="used">Đã có bài</option>
+                  <option value="empty">Chưa có bài</option>
+                </select>
+              </label>
+            </ListFilterBar>
+            <ListFilterSummary visible={filteredCategories.length} total={categories.length} label="danh mục" />
             <Table
-              rows={categories}
+              rows={filteredCategories}
               columns={[
                 ['name', 'Tên'],
                 ['description', 'Mô tả'],
@@ -4632,6 +4761,13 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
 
 function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingMeditation, setEditingMeditation] = useState<MeditationProgram | null>(null);
+  const [draftQuery, setDraftQuery] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const filteredMeditationPrograms = useMemo(
+    () => filterMeditationPrograms(data.meditationPrograms, { query, status: statusFilter }),
+    [data.meditationPrograms, query, statusFilter],
+  );
 
   return (
     <div className="single-column">
@@ -4647,8 +4783,29 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
         />
       </Panel>
       <Panel title="Danh sách bài Thiền">
+        <ListFilterBar
+          draftQuery={draftQuery}
+          onDraftQueryChange={setDraftQuery}
+          placeholder="Tìm tiêu đề, mô tả, audio..."
+          onSearch={() => setQuery(draftQuery.trim())}
+          onReset={() => {
+            setDraftQuery('');
+            setQuery('');
+            setStatusFilter('');
+          }}
+        >
+          <label>
+            Trạng thái
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">Tất cả trạng thái</option>
+              <option value="active">Đang bật</option>
+              <option value="inactive">Tắt</option>
+            </select>
+          </label>
+        </ListFilterBar>
+        <ListFilterSummary visible={filteredMeditationPrograms.length} total={data.meditationPrograms.length} label="bài Thiền" />
         <Table
-          rows={data.meditationPrograms}
+          rows={filteredMeditationPrograms}
           columns={[
             ['imageUrl', 'Ảnh'],
             ['title', 'Tiêu đề'],
@@ -4751,6 +4908,13 @@ function MeditationEditModal({
 
 function RssManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingRss, setEditingRss] = useState<RssSource | null>(null);
+  const [draftQuery, setDraftQuery] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const filteredRss = useMemo(
+    () => filterRssSources(data.rss, { query, status: statusFilter }),
+    [data.rss, query, statusFilter],
+  );
 
   function editRss(row: RssSource) {
     setEditingRss(row);
@@ -4765,8 +4929,29 @@ function RssManager({ data, run }: { data: DataState; run: RunAction }) {
         />
       </Panel>
       <Panel title="Nguồn RSS đang quản lý">
+        <ListFilterBar
+          draftQuery={draftQuery}
+          onDraftQueryChange={setDraftQuery}
+          placeholder="Tìm tên website hoặc RSS URL..."
+          onSearch={() => setQuery(draftQuery.trim())}
+          onReset={() => {
+            setDraftQuery('');
+            setQuery('');
+            setStatusFilter('');
+          }}
+        >
+          <label>
+            Trạng thái
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">Tất cả trạng thái</option>
+              <option value="active">Đang bật</option>
+              <option value="inactive">Tắt</option>
+            </select>
+          </label>
+        </ListFilterBar>
+        <ListFilterSummary visible={filteredRss.length} total={data.rss.length} label="nguồn RSS" />
         <Table
-          rows={data.rss}
+          rows={filteredRss}
           columns={[
             ['name', 'Tên'],
             ['url', 'URL'],
@@ -4818,6 +5003,10 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  const [backgroundDraftQuery, setBackgroundDraftQuery] = useState('');
+  const [backgroundQuery, setBackgroundQuery] = useState('');
+  const [backgroundStatusFilter, setBackgroundStatusFilter] = useState('');
+  const [backgroundRatioFilter, setBackgroundRatioFilter] = useState('');
   const savedQuoteDraftRef = useRef(quoteDraftSnapshot(''));
   const quoteDraftValue = useMemo(() => ({ content }), [content]);
   const quoteSnapshot = useMemo(() => quoteDraftSnapshot(content), [content]);
@@ -4836,6 +5025,15 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   const filteredQuotes = useMemo(
     () => filterQuotes(data.quotes, { query, status: statusFilter, date: dateFilter, activeQuoteId, selectedQuoteIds }),
     [activeQuoteId, data.quotes, dateFilter, query, selectedQuoteIds, statusFilter],
+  );
+  const filteredQuoteBackgrounds = useMemo(
+    () =>
+      filterQuoteBackgrounds(data.quoteBackgrounds, {
+        query: backgroundQuery,
+        status: backgroundStatusFilter,
+        ratio: backgroundRatioFilter,
+      }),
+    [backgroundQuery, backgroundRatioFilter, backgroundStatusFilter, data.quoteBackgrounds],
   );
 
   useEffect(() => {
@@ -5096,6 +5294,39 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
         />
       </Panel>
       <Panel title="Ảnh nền chia sẻ">
+        <ListFilterBar
+          draftQuery={backgroundDraftQuery}
+          onDraftQueryChange={setBackgroundDraftQuery}
+          placeholder="Tìm tên, URL hoặc kích thước ảnh nền..."
+          onSearch={() => setBackgroundQuery(backgroundDraftQuery.trim())}
+          onReset={() => {
+            setBackgroundDraftQuery('');
+            setBackgroundQuery('');
+            setBackgroundStatusFilter('');
+            setBackgroundRatioFilter('');
+          }}
+        >
+          <label>
+            Trạng thái
+            <select value={backgroundStatusFilter} onChange={(event) => setBackgroundStatusFilter(event.target.value)}>
+              <option value="">Tất cả trạng thái</option>
+              <option value="active">Đang dùng</option>
+              <option value="inactive">Đang tắt</option>
+            </select>
+          </label>
+          <label>
+            Tỉ lệ
+            <select value={backgroundRatioFilter} onChange={(event) => setBackgroundRatioFilter(event.target.value)}>
+              <option value="">Tất cả tỉ lệ</option>
+              <option value="portrait">Ảnh dọc</option>
+              <option value="story">Story 9:16</option>
+              <option value="square">Vuông</option>
+              <option value="landscape">Ảnh ngang</option>
+              <option value="unknown">Chưa có kích thước</option>
+            </select>
+          </label>
+        </ListFilterBar>
+        <ListFilterSummary visible={filteredQuoteBackgrounds.length} total={data.quoteBackgrounds.length} label="ảnh nền" />
         <div className="quote-background-tools">
           <div>
             <strong>Nền story 9:16 cho trích dẫn</strong>
@@ -5115,11 +5346,11 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             />
           </label>
         </div>
-        {data.quoteBackgrounds.length === 0 ? (
+        {filteredQuoteBackgrounds.length === 0 ? (
           <div className="empty">Chưa có ảnh nền chia sẻ.</div>
         ) : (
           <div className="quote-background-grid">
-            {data.quoteBackgrounds.map((item) => (
+            {filteredQuoteBackgrounds.map((item) => (
               <div className="quote-background-card" key={item.id}>
                 <button className="quote-background-thumb" type="button" onClick={() => zoomQuoteBackground(item)}>
                   <img src={item.imageUrl} alt={item.name} />
@@ -5169,6 +5400,13 @@ function quoteBackgroundMeta(item: QuoteBackground) {
 
 function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
+  const [draftQuery, setDraftQuery] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const filteredBanners = useMemo(
+    () => filterBanners(data.banners, { query, status: statusFilter }),
+    [data.banners, query, statusFilter],
+  );
 
   function editBanner(row: Banner) {
     setEditingBanner(row);
@@ -5183,8 +5421,29 @@ function BannerManager({ data, run }: { data: DataState; run: RunAction }) {
         />
       </Panel>
       <Panel title="Banner">
+        <ListFilterBar
+          draftQuery={draftQuery}
+          onDraftQueryChange={setDraftQuery}
+          placeholder="Tìm ảnh hoặc liên kết banner..."
+          onSearch={() => setQuery(draftQuery.trim())}
+          onReset={() => {
+            setDraftQuery('');
+            setQuery('');
+            setStatusFilter('');
+          }}
+        >
+          <label>
+            Trạng thái
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">Tất cả trạng thái</option>
+              <option value="active">Đang bật</option>
+              <option value="inactive">Tắt</option>
+            </select>
+          </label>
+        </ListFilterBar>
+        <ListFilterSummary visible={filteredBanners.length} total={data.banners.length} label="banner" />
         <Table
-          rows={data.banners}
+          rows={filteredBanners}
           columns={[
             ['imageUrl', 'Ảnh'],
             ['link', 'Liên kết'],
@@ -6190,6 +6449,36 @@ function matchesSearchQuery(value: string, query: string) {
   return normalized.includes(query);
 }
 
+function filterAudioCategories(rows: AudioCategory[], filters: { query: string; usage: string }) {
+  const query = normalizeSearchText(filters.query);
+  return rows.filter((row) => {
+    const count = row._count?.audios ?? 0;
+    const matchesQuery = matchesSearchQuery([row.name, row.description ?? ''].join(' '), query);
+    const matchesUsage = !filters.usage || (filters.usage === 'used' ? count > 0 : count === 0);
+    return matchesQuery && matchesUsage;
+  });
+}
+
+function filterVideoCategories(rows: VideoCategory[], filters: { query: string; usage: string }) {
+  const query = normalizeSearchText(filters.query);
+  return rows.filter((row) => {
+    const count = row._count?.videos ?? 0;
+    const matchesQuery = matchesSearchQuery([row.name, row.description ?? ''].join(' '), query);
+    const matchesUsage = !filters.usage || (filters.usage === 'used' ? count > 0 : count === 0);
+    return matchesQuery && matchesUsage;
+  });
+}
+
+function filterNewsCategories(rows: NewsCategory[], filters: { query: string; usage: string }) {
+  const query = normalizeSearchText(filters.query);
+  return rows.filter((row) => {
+    const count = row._count?.items ?? 0;
+    const matchesQuery = matchesSearchQuery([row.name, row.description ?? ''].join(' '), query);
+    const matchesUsage = !filters.usage || (filters.usage === 'used' ? count > 0 : count === 0);
+    return matchesQuery && matchesUsage;
+  });
+}
+
 function filterAudios(rows: Audio[], filters: { query: string; categoryId: string }) {
   const query = normalizeSearchText(filters.query);
   return rows.filter((row) => {
@@ -6208,6 +6497,70 @@ function filterVideos(rows: Video[], filters: { query: string; categoryId: strin
     const matchesCategory = !filters.categoryId || row.categoryId === filters.categoryId;
     return matchesQuery && matchesCategory;
   });
+}
+
+function filterScriptureReminders(
+  rows: ScriptureReminder[],
+  filters: { query: string; status: string; mode: string; date: string },
+) {
+  const query = normalizeSearchText(filters.query);
+  return rows.filter((row) => {
+    const userLabel = [row.user?.username ?? '', row.user?.name ?? '', row.user?.email ?? ''].join(' ');
+    const weekdays = row.weekdays.map((day) => weekdayOptions.find(([value]) => value === day)?.[1] ?? day).join(' ');
+    const haystack = [userLabel, row.title, row.scripture?.title ?? '', row.timeOfDay, weekdays, row.resumeMode].join(' ');
+    const matchesQuery = matchesSearchQuery(haystack, query);
+    const matchesStatus = !filters.status || (filters.status === 'active' ? row.active : !row.active);
+    const matchesMode = !filters.mode || row.resumeMode === filters.mode;
+    const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
+    return matchesQuery && matchesStatus && matchesMode && matchesDate;
+  });
+}
+
+function filterMeditationPrograms(rows: MeditationProgram[], filters: { query: string; status: string }) {
+  const query = normalizeSearchText(filters.query);
+  return rows.filter((row) => {
+    const haystack = [row.title, row.description ?? '', row.audioUrl ?? '', row.imageUrl ?? ''].join(' ');
+    const matchesQuery = matchesSearchQuery(haystack, query);
+    const matchesStatus = !filters.status || (filters.status === 'active' ? row.active : !row.active);
+    return matchesQuery && matchesStatus;
+  });
+}
+
+function filterRssSources(rows: RssSource[], filters: { query: string; status: string }) {
+  const query = normalizeSearchText(filters.query);
+  return rows.filter((row) => {
+    const matchesQuery = matchesSearchQuery([row.name, row.url].join(' '), query);
+    const matchesStatus = !filters.status || (filters.status === 'active' ? row.active : !row.active);
+    return matchesQuery && matchesStatus;
+  });
+}
+
+function filterBanners(rows: Banner[], filters: { query: string; status: string }) {
+  const query = normalizeSearchText(filters.query);
+  return rows.filter((row) => {
+    const matchesQuery = matchesSearchQuery([row.imageUrl, row.link ?? ''].join(' '), query);
+    const matchesStatus = !filters.status || (filters.status === 'active' ? row.active : !row.active);
+    return matchesQuery && matchesStatus;
+  });
+}
+
+function filterQuoteBackgrounds(rows: QuoteBackground[], filters: { query: string; status: string; ratio: string }) {
+  const query = normalizeSearchText(filters.query);
+  return rows.filter((row) => {
+    const dimensions = row.width && row.height ? `${row.width} ${row.height}` : '';
+    const matchesQuery = matchesSearchQuery([row.name, row.imageUrl, dimensions, quoteBackgroundMeta(row)].join(' '), query);
+    const matchesStatus = !filters.status || (filters.status === 'active' ? row.active : !row.active);
+    const matchesRatio = !filters.ratio || quoteBackgroundRatio(row) === filters.ratio;
+    return matchesQuery && matchesStatus && matchesRatio;
+  });
+}
+
+function quoteBackgroundRatio(row: QuoteBackground) {
+  if (!row.width || !row.height) return 'unknown';
+  const ratio = row.width / row.height;
+  if (Math.abs(ratio - 9 / 16) < 0.04) return 'story';
+  if (Math.abs(ratio - 1) < 0.08) return 'square';
+  return ratio < 1 ? 'portrait' : 'landscape';
 }
 
 function filterArticles(
