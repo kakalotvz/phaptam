@@ -5480,14 +5480,10 @@ function normalizeSearchText(value?: string | null) {
     .trim();
 }
 
-function searchTokens(value: string) {
-  return normalizeSearchText(value).split(' ').filter(Boolean);
-}
-
-function matchesSearchTokens(value: string, tokens: string[]) {
-  if (tokens.length === 0) return true;
+function matchesSearchQuery(value: string, query: string) {
+  if (!query) return true;
   const normalized = normalizeSearchText(value);
-  return tokens.every((token) => normalized.includes(token));
+  return normalized.includes(query);
 }
 
 function categoryMatchesArchiveScope(id: string, categories: AudioCategory[], filters: { parentId: string; childIds: Set<string> }) {
@@ -5511,8 +5507,8 @@ function buildArchiveVisibleCategoryIds({
   rowsByCategory: Record<string, Scripture[]>;
   filters: { query: string; parentId: string; childIds: Set<string>; date: string };
 }) {
-  const tokens = searchTokens(filters.query);
-  const hasActiveFilter = tokens.length > 0 || Boolean(filters.parentId || filters.childIds.size > 0 || filters.date);
+  const query = normalizeSearchText(filters.query);
+  const hasActiveFilter = Boolean(query || filters.parentId || filters.childIds.size > 0 || filters.date);
   if (!hasActiveFilter) return null;
 
   const visibleIds = new Set<string>();
@@ -5530,10 +5526,10 @@ function buildArchiveVisibleCategoryIds({
     if (categoryId !== 'uncategorized' && rows.length > 0) addPath(categoryId);
   });
 
-  if (tokens.length > 0) {
+  if (query) {
     categories.forEach((category) => {
       if (!categoryMatchesArchiveScope(category.id, categories, filters)) return;
-      if (matchesSearchTokens(categorySearchText(category, categories), tokens)) addScopedSubtree(category.id);
+      if (matchesSearchQuery(categorySearchText(category, categories), query)) addScopedSubtree(category.id);
     });
   }
 
@@ -5545,11 +5541,11 @@ function filterScriptureReadings(
   categories: AudioCategory[],
   filters: { query: string; parentId: string; childIds: Set<string>; date: string },
 ) {
-  const tokens = searchTokens(filters.query);
+  const query = normalizeSearchText(filters.query);
   return readings.filter((row) => {
     const categoryPath = row.categoryId ? categoryPathLabel(row.categoryId, categories) : 'Chưa phân loại';
-    const haystack = [row.title, row.description ?? '', newsContentToPlainText(row.content ?? ''), categoryPath].join(' ').toLowerCase();
-    const matchesQuery = matchesSearchTokens(haystack, tokens);
+    const haystack = [row.title, row.description ?? '', newsContentToPlainText(row.content ?? ''), categoryPath].join(' ');
+    const matchesQuery = matchesSearchQuery(haystack, query);
     const matchesParent = !filters.parentId || (row.categoryId ? categoryRootId(row.categoryId, categories) === filters.parentId : false);
     const matchesChild = filters.childIds.size === 0 || filters.childIds.has(row.categoryId ?? '');
     const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
@@ -5562,12 +5558,12 @@ function filterScriptures(
   categories: AudioCategory[],
   filters: { query: string; parentId: string; childIds: Set<string>; date: string },
 ) {
-  const tokens = searchTokens(filters.query);
+  const query = normalizeSearchText(filters.query);
   return scriptures.filter((row) => {
     const categoryPath = row.categoryId ? categoryPathLabel(row.categoryId, categories) : 'Chưa phân loại';
     const lineText = (row.lines ?? []).map((line) => line.content).join(' ');
-    const haystack = [row.title, row.description ?? '', lineText, categoryPath].join(' ').toLowerCase();
-    const matchesQuery = matchesSearchTokens(haystack, tokens);
+    const haystack = [row.title, row.description ?? '', lineText, categoryPath].join(' ');
+    const matchesQuery = matchesSearchQuery(haystack, query);
     const matchesParent = !filters.parentId || (row.categoryId ? categoryRootId(row.categoryId, categories) === filters.parentId : false);
     const matchesChild = filters.childIds.size === 0 || filters.childIds.has(row.categoryId ?? '');
     const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
