@@ -43,7 +43,6 @@ export type Scripture = {
   title: string;
   description?: string;
   content?: string;
-  audioUrl?: string;
   backgroundImageUrl?: string;
   categoryId?: string;
   viewCount: number;
@@ -184,7 +183,6 @@ export type AdminUser = {
 export type UploadKind =
   | 'audio'
   | 'audio/library'
-  | 'audio/scripture'
   | 'audio/meditation'
   | 'video'
   | 'video/dharma'
@@ -425,16 +423,7 @@ function ensureWebpFileName(name: string) {
 }
 
 function contentTypeFromFileName(name: string) {
-  const lower = name.toLowerCase();
-  if (lower.endsWith('.webp')) return 'image/webp';
-  if (lower.endsWith('.mp3')) return 'audio/mpeg';
-  if (lower.endsWith('.m4a')) return 'audio/x-m4a';
-  if (lower.endsWith('.aac')) return 'audio/aac';
-  if (lower.endsWith('.ogg') || lower.endsWith('.oga')) return 'audio/ogg';
-  if (lower.endsWith('.webm') || lower.endsWith('.opus')) return 'audio/webm';
-  if (lower.endsWith('.wav')) return 'audio/wav';
-  if (lower.endsWith('.flac')) return 'audio/flac';
-  if (lower.endsWith('.mp4')) return 'video/mp4';
+  if (name.toLowerCase().endsWith('.webp')) return 'image/webp';
   return 'application/octet-stream';
 }
 

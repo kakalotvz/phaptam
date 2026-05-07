@@ -296,7 +296,6 @@ model Scripture {
   title              String
   description        String?
   content            String?
-  audioUrl           String?             @map("audio_url")
   backgroundImageUrl String?             @map("background_image_url")
   categoryId         String?             @map("category_id")
   category           AudioCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)

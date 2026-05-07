@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/network/api_client.dart';
@@ -2134,7 +2133,6 @@ class ScriptureReader extends ConsumerStatefulWidget {
     this.chapterIndex = 0,
     this.autoAdvanceChapters = false,
     this.autoStart = false,
-    this.initialChantWithTeacher = false,
     super.key,
   });
 
@@ -2145,7 +2143,6 @@ class ScriptureReader extends ConsumerStatefulWidget {
   final int chapterIndex;
   final bool autoAdvanceChapters;
   final bool autoStart;
-  final bool initialChantWithTeacher;
 
   @override
   ConsumerState<ScriptureReader> createState() => _ScriptureReaderState();
@@ -2263,11 +2260,7 @@ String _ritualSummary(String note) {
 class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<int> _activeIndex = ValueNotifier<int>(0);
-  final AudioPlayer _teacherPlayer = AudioPlayer();
-  final GlobalKey<TooltipState> _teacherTooltipKey = GlobalKey<TooltipState>();
   final Set<String> _completedRitualPauseKeys = <String>{};
-  StreamSubscription<Duration>? _teacherPositionSubscription;
-  StreamSubscription<PlayerState>? _teacherStateSubscription;
   Timer? _timer;
   Timer? _controlsHideTimer;
   Timer? _chapterAdvanceTimer;
@@ -2287,18 +2280,13 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
   String _backgroundUrl = '';
   Duration _elapsed = Duration.zero;
   bool _playing = false;
-  bool _chantWithTeacher = false;
-  bool _teacherAudioLoading = false;
   bool _autoAdvanceChapters = false;
   bool _controlsVisible = true;
   int _chapterAdvanceCountdown = 0;
   DateTime? _lastTick;
   double _fontSize = 24;
-  String? _loadedTeacherAudioUrl;
 
   double get _itemHeight => (_fontSize * 3.8).clamp(82, 142);
-  bool get _hasTeacherAudio =>
-      widget.scripture.audioUrl?.trim().isNotEmpty == true;
   bool get _ritualPauseActive =>
       _ritualPause != null && _ritualPauseRemaining > Duration.zero;
   bool get _hasChapterSequence =>
@@ -2324,22 +2312,10 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
     _backgroundUrl = widget.scripture.backgroundImageUrl ?? '';
     _autoAdvanceChapters = widget.autoAdvanceChapters;
     unawaited(_loadSavedSpeedPreference());
-    _teacherPositionSubscription = _teacherPlayer.positionStream.listen(
-      _handleTeacherPosition,
-    );
-    _teacherStateSubscription = _teacherPlayer.playerStateStream.listen(
-      _handleTeacherState,
-    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _centerLine(safeIndex, jump: true);
       _scheduleControlsHide();
-      if (widget.autoStart) {
-        if (widget.initialChantWithTeacher && _hasTeacherAudio) {
-          unawaited(_enableTeacherChant());
-        } else {
-          _startPlayback();
-        }
-      }
+      if (widget.autoStart) _startPlayback();
     });
   }
 
@@ -2348,9 +2324,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
     _timer?.cancel();
     _controlsHideTimer?.cancel();
     _chapterAdvanceTimer?.cancel();
-    _teacherPositionSubscription?.cancel();
-    _teacherStateSubscription?.cancel();
-    _teacherPlayer.dispose();
     _activeIndex.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -2385,7 +2358,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
       _startPlayback();
     } else {
       _timer?.cancel();
-      if (_chantWithTeacher) unawaited(_teacherPlayer.pause());
     }
   }
 
@@ -2396,108 +2368,9 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
       _playing = true;
       _chapterAdvanceCountdown = 0;
     });
-    if (_chantWithTeacher) {
-      _timer?.cancel();
-      unawaited(_teacherPlayer.setSpeed(_speed));
-      unawaited(_seekTeacher(_elapsed, play: true));
-      return;
-    }
     _lastTick = DateTime.now();
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(milliseconds: 16), (_) => _tick());
-  }
-
-  Future<void> _enableTeacherChant() async {
-    _showControls();
-    final audioUrl = widget.scripture.audioUrl?.trim() ?? '';
-    if (audioUrl.isEmpty) {
-      _showMissingTeacherAudio();
-      return;
-    }
-    if (_teacherAudioLoading) return;
-
-    setState(() => _teacherAudioLoading = true);
-    try {
-      if (_loadedTeacherAudioUrl != audioUrl) {
-        await _teacherPlayer.setUrl(audioUrl);
-        _loadedTeacherAudioUrl = audioUrl;
-      }
-      await _teacherPlayer.setSpeed(_speed);
-      if (_elapsed >= _endTime) {
-        _elapsed = _startTime;
-        _completedRepeats = 0;
-        _completedRitualPauseKeys.clear();
-        _setActiveIndex(0);
-      }
-      await _teacherPlayer.seek(_elapsed);
-      if (!mounted) return;
-      _timer?.cancel();
-      _chapterAdvanceTimer?.cancel();
-      setState(() {
-        _chantWithTeacher = true;
-        _playing = true;
-        _teacherAudioLoading = false;
-        _chapterAdvanceCountdown = 0;
-        _clearRitualPause();
-      });
-      await _teacherPlayer.play();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _teacherAudioLoading = false;
-        _chantWithTeacher = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không phát được tiếng thầy tụng: $error')),
-      );
-      if (_playing) _startPlayback();
-    }
-  }
-
-  void _disableTeacherChant() {
-    _showControls();
-    unawaited(_teacherPlayer.pause());
-    setState(() => _chantWithTeacher = false);
-    if (_playing) _startPlayback();
-  }
-
-  void _toggleTeacherChant() {
-    if (_chantWithTeacher) {
-      _disableTeacherChant();
-    } else {
-      unawaited(_enableTeacherChant());
-    }
-  }
-
-  void _showMissingTeacherAudio() {
-    _showControls();
-    _teacherTooltipKey.currentState?.ensureTooltipVisible();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Chưa có tiếng thầy tụng cho bài kinh này.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _handleTeacherPosition(Duration position) {
-    if (!_chantWithTeacher || !mounted || widget.scripture.lines.isEmpty) {
-      return;
-    }
-    _elapsed = position;
-    _setActiveIndex(_indexFor(position));
-  }
-
-  void _handleTeacherState(PlayerState state) {
-    if (!_chantWithTeacher || !mounted) return;
-    if (state.processingState == ProcessingState.completed) {
-      _handleCompletedPass();
-    }
-  }
-
-  Future<void> _seekTeacher(Duration position, {required bool play}) async {
-    await _teacherPlayer.seek(position);
-    if (play) await _teacherPlayer.play();
   }
 
   void _tick() {
@@ -2593,9 +2466,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
         _elapsed = _startTime;
       });
       _setActiveIndex(0);
-      if (_chantWithTeacher) {
-        unawaited(_seekTeacher(_startTime, play: true));
-      }
       return;
     }
     setState(() {
@@ -2604,7 +2474,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
       _elapsed = _endTime;
     });
     _timer?.cancel();
-    if (_chantWithTeacher) unawaited(_teacherPlayer.pause());
     _setActiveIndex(_lastLineIndex);
     if (_autoAdvanceChapters && _nextChapter != null) {
       _scheduleNextChapter();
@@ -2641,7 +2510,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
           chapterIndex: widget.chapterIndex + 1,
           autoAdvanceChapters: _autoAdvanceChapters,
           autoStart: autoStart,
-          initialChantWithTeacher: _chantWithTeacher,
         ),
       ),
     );
@@ -2727,9 +2595,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
       _completedRitualPauseKeys.clear();
     });
     _setActiveIndex(index);
-    if (_chantWithTeacher) {
-      unawaited(_seekTeacher(_elapsed, play: _playing));
-    }
   }
 
   void _restart() {
@@ -2758,10 +2623,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
                 _completedRitualPauseKeys.clear();
                 _timer?.cancel();
                 _chapterAdvanceTimer?.cancel();
-                if (_chantWithTeacher) {
-                  unawaited(_teacherPlayer.pause());
-                  unawaited(_teacherPlayer.seek(_startTime));
-                }
               });
               _setActiveIndex(0);
             },
@@ -2782,7 +2643,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
       if (value == 'normal') _speed = 1;
       if (value == 'fast') _speed = 1.25;
     });
-    if (_chantWithTeacher) unawaited(_teacherPlayer.setSpeed(_speed));
   }
 
   Future<void> _loadSavedSpeedPreference() async {
@@ -2803,7 +2663,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
         _speedMode = speedMode;
         _loadedSpeedScope = scope;
       });
-      if (_chantWithTeacher) unawaited(_teacherPlayer.setSpeed(_speed));
     } catch (_) {
       // Không chặn màn đọc nếu phiên đăng nhập hết hạn hoặc mạng chập chờn.
     }
@@ -3150,43 +3009,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
                               spacing: 10,
                               runSpacing: 8,
                               children: [
-                                if (_hasTeacherAudio)
-                                  InkWell(
-                                    borderRadius: BorderRadius.circular(999),
-                                    onTap: _teacherAudioLoading
-                                        ? null
-                                        : _toggleTeacherChant,
-                                    child: _ReaderControlChip(
-                                      icon: _teacherAudioLoading
-                                          ? Icons.sync
-                                          : Icons.record_voice_over_outlined,
-                                      label: _teacherAudioLoading
-                                          ? 'Đang tải thầy'
-                                          : 'Tụng cùng thầy',
-                                      selected: _chantWithTeacher,
-                                      showArrow: false,
-                                    ),
-                                  )
-                                else
-                                  Tooltip(
-                                    key: _teacherTooltipKey,
-                                    message:
-                                        'Chưa có tiếng thầy tụng cho bài kinh này',
-                                    triggerMode: TooltipTriggerMode.manual,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(999),
-                                      onTap: _showMissingTeacherAudio,
-                                      child: Opacity(
-                                        opacity: .48,
-                                        child: _ReaderControlChip(
-                                          icon:
-                                              Icons.record_voice_over_outlined,
-                                          label: 'Tụng cùng thầy',
-                                          showArrow: false,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                                 PopupMenuButton<String>(
                                   tooltip: 'Chế độ lặp lại',
                                   onSelected: _selectRepeat,
@@ -3385,11 +3207,6 @@ class _ScriptureReaderState extends ConsumerState<ScriptureReader> {
                                           _loadedSpeedScope = null;
                                           _speed = value;
                                         });
-                                        if (_chantWithTeacher) {
-                                          unawaited(
-                                            _teacherPlayer.setSpeed(_speed),
-                                          );
-                                        }
                                       },
                                     ),
                                   ),

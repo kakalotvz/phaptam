@@ -7,7 +7,6 @@ class PresignedUrlDto {
   @IsIn([
     'audio',
     'audio/library',
-    'audio/scripture',
     'audio/meditation',
     'video',
     'video/dharma',
@@ -23,7 +22,6 @@ class PresignedUrlDto {
   kind!:
     | 'audio'
     | 'audio/library'
-    | 'audio/scripture'
     | 'audio/meditation'
     | 'video'
     | 'video/dharma'
@@ -47,34 +45,9 @@ export class UploadController {
   @Post('presigned-url')
   @UseGuards(AdminAuthGuard)
   presignedUrl(@Body() dto: PresignedUrlDto) {
-    if (!isSupportedUpload(dto.kind, dto.contentType)) {
+    if (!['audio/mpeg', 'video/mp4', 'image/webp'].includes(dto.contentType)) {
       throw new BadRequestException('Unsupported MIME type');
     }
     return this.r2.createPresignedPutUrl(dto.kind, dto.contentType);
   }
-}
-
-const supportedAudioTypes = [
-  'audio/mpeg',
-  'audio/mp3',
-  'audio/mp4',
-  'audio/x-m4a',
-  'audio/aac',
-  'audio/ogg',
-  'application/ogg',
-  'audio/webm',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/flac',
-  'audio/x-flac',
-];
-
-function isSupportedUpload(kind: PresignedUrlDto['kind'], contentType: string) {
-  if (kind.startsWith('audio/')) {
-    return contentType.startsWith('audio/') || contentType === 'application/ogg';
-  }
-  if (kind === 'audio') return supportedAudioTypes.includes(contentType);
-  if (kind.startsWith('video')) return contentType === 'video/mp4';
-  if (kind.startsWith('images')) return contentType === 'image/webp';
-  return false;
 }
