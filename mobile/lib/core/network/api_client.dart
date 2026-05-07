@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -14,6 +15,7 @@ class ApiClient {
   static const _storage = FlutterSecureStorage();
   static const _tokenKey = 'phaptam_access_token';
   static const _userIdKey = 'phaptam_user_id';
+  static const _requestTimeout = Duration(seconds: 15);
 
   final http.Client _client;
   String? accessToken;
@@ -45,34 +47,24 @@ class ApiClient {
   Future<void> clearSession() => saveSession(token: null, userId: null);
 
   Future<List<dynamic>> getList(String path) async {
-    final response = await _client.get(
-      Uri.parse('$baseUrl$path'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (accessToken != null) 'Authorization': 'Bearer $accessToken',
-      },
+    final response = await _send(
+      () => _client.get(_uri(path), headers: _headers),
+      fallbackMessage: 'Không tải được dữ liệu',
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        response.body.isEmpty ? 'Không tải được dữ liệu' : response.body,
-      );
-    }
     return jsonDecode(response.body) as List<dynamic>;
   }
 
-  Future<Map<String, dynamic>> getMap(String path) async {
-    final response = await _client.get(
-      Uri.parse('$baseUrl$path'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (accessToken != null) 'Authorization': 'Bearer $accessToken',
-      },
+  Future<Map<String, dynamic>> getMap(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    final response = await _send(
+      () => _client.get(
+        _uri(path, queryParameters: queryParameters),
+        headers: _headers,
+      ),
+      fallbackMessage: 'Không tải được dữ liệu',
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        response.body.isEmpty ? 'Không tải được dữ liệu' : response.body,
-      );
-    }
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
@@ -80,19 +72,10 @@ class ApiClient {
     String path,
     Map<String, dynamic> body,
   ) async {
-    final response = await _client.post(
-      Uri.parse('$baseUrl$path'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (accessToken != null) 'Authorization': 'Bearer $accessToken',
-      },
-      body: jsonEncode(body),
+    final response = await _send(
+      () => _client.post(_uri(path), headers: _headers, body: jsonEncode(body)),
+      fallbackMessage: 'Thao tác thất bại',
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        response.body.isEmpty ? 'Thao tác thất bại' : response.body,
-      );
-    }
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
@@ -100,33 +83,53 @@ class ApiClient {
     String path,
     Map<String, dynamic> body,
   ) async {
-    final response = await _client.patch(
-      Uri.parse('$baseUrl$path'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (accessToken != null) 'Authorization': 'Bearer $accessToken',
-      },
-      body: jsonEncode(body),
+    final response = await _send(
+      () =>
+          _client.patch(_uri(path), headers: _headers, body: jsonEncode(body)),
+      fallbackMessage: 'Thao tác thất bại',
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        response.body.isEmpty ? 'Thao tác thất bại' : response.body,
-      );
-    }
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Future<void> delete(String path) async {
-    final response = await _client.delete(
-      Uri.parse('$baseUrl$path'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+    await _send(
+      () => _client.delete(_uri(path), headers: _headers),
+      fallbackMessage: 'Thao tác thất bại',
+    );
+  }
+
+  Uri _uri(String path, {Map<String, dynamic>? queryParameters}) {
+    final uri = Uri.parse('$baseUrl$path');
+    if (queryParameters == null || queryParameters.isEmpty) return uri;
+    return uri.replace(
+      queryParameters: {
+        ...uri.queryParameters,
+        for (final entry in queryParameters.entries)
+          entry.key: '${entry.value}',
       },
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+  }
+
+  Map<String, String> get _headers => {
+    'Content-Type': 'application/json',
+    if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+  };
+
+  Future<http.Response> _send(
+    Future<http.Response> Function() request, {
+    required String fallbackMessage,
+  }) async {
+    try {
+      final response = await request().timeout(_requestTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          response.body.isEmpty ? fallbackMessage : response.body,
+        );
+      }
+      return response;
+    } on TimeoutException {
       throw Exception(
-        response.body.isEmpty ? 'Thao tác thất bại' : response.body,
+        'Kết nối tới máy chủ quá lâu. Kiểm tra lại API_BASE_URL hoặc mạng của thiết bị.',
       );
     }
   }

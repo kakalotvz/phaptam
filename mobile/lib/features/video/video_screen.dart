@@ -9,11 +9,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/network/paged_public_feed.dart';
 import '../../core/offline/media_downloads.dart';
 import '../../shared/widgets/content_cards.dart';
 import '../../shared/widgets/media_download_button.dart';
 import '../content/content_models.dart';
-import '../content/content_providers.dart';
 
 enum _VideoSortOrder { newest, oldest, popular }
 
@@ -35,77 +35,129 @@ class VideoScreen extends ConsumerStatefulWidget {
 }
 
 class _VideoScreenState extends ConsumerState<VideoScreen> {
+  late final PagedPublicFeed<VideoItem> _feed;
+  late final ScrollController _scrollController;
   String _query = '';
   String? _teacherFilter;
   String? _topicFilter;
   _VideoSortOrder _sortOrder = _VideoSortOrder.newest;
 
   @override
+  void initState() {
+    super.initState();
+    _feed = PagedPublicFeed<VideoItem>(
+      path: '/video',
+      fromJson: VideoItem.fromJson,
+      isValid: (item) =>
+          item.title.trim().isNotEmpty && item.videoUrl.trim().isNotEmpty,
+    )..addListener(_onFeedChanged);
+    _scrollController = ScrollController()..addListener(_handleScroll);
+    unawaited(_feed.loadInitial());
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    _feed
+      ..removeListener(_onFeedChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onFeedChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      unawaited(_feed.loadMore());
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final videos = ref.watch(videoListProvider);
+    final items = _feed.items;
+    if (_query.trim().isNotEmpty ||
+        _teacherFilter != null ||
+        _topicFilter != null) {
+      unawaited(_feed.ensureAllLoaded());
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pháp thoại')),
-      body: videos.when(
-        loading: () => const _EmptyVideoList(),
-        error: (error, stackTrace) => const _EmptyVideoList(),
-        data: (items) {
-          final teachers = items
-              .map((e) => e.teacher)
-              .where((teacher) => teacher.trim().isNotEmpty)
-              .toSet()
-              .toList();
-          final topics = items
-              .map((e) => e.topic)
-              .where((topic) => topic.trim().isNotEmpty)
-              .toSet()
-              .toList();
-          final visibleItems = _sortVideos(_filterVideos(items), _sortOrder);
-          return RefreshIndicator(
-            onRefresh: () async {
-              await refreshPublicContent(ref);
-              await ref.read(videoListProvider.future);
-            },
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-              children: [
-                _VideoSearchControls(
-                  query: _query,
-                  filterLabel: _filterLabel,
-                  sortOrder: _sortOrder,
-                  onQueryChanged: (value) => setState(() => _query = value),
-                  onFilterPressed: () => _showFilterSheet(teachers, topics),
-                  onSortChanged: (value) => setState(() => _sortOrder = value),
-                ),
-                const SizedBox(height: 14),
-                if (visibleItems.isEmpty)
-                  const Card(
-                    child: ListTile(
-                      leading: Icon(Icons.video_library_outlined),
-                      title: Text('Chưa có videos'),
-                    ),
-                  ),
-                for (final video in visibleItems) ...[
-                  InkWell(
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: () => _showVideoPlayer(context, video),
-                    child: VideoCard(
-                      video: video,
-                      action: _isDirectVideoUrl(video.videoUrl)
-                          ? MediaDownloadButton(
-                              mediaKey: mediaKey('video', video.id),
-                              title: video.title,
-                              url: video.videoUrl,
-                            )
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-              ],
-            ),
-          );
-        },
+      body: RefreshIndicator(
+        onRefresh: _feed.refresh,
+        child: _feed.loadingInitial && !_feed.initialized
+            ? const _EmptyVideoList()
+            : Builder(
+                builder: (context) {
+                  final teachers = items
+                      .map((e) => e.teacher)
+                      .where((teacher) => teacher.trim().isNotEmpty)
+                      .toSet()
+                      .toList();
+                  final topics = items
+                      .map((e) => e.topic)
+                      .where((topic) => topic.trim().isNotEmpty)
+                      .toSet()
+                      .toList();
+                  final visibleItems = _sortVideos(
+                    _filterVideos(items),
+                    _sortOrder,
+                  );
+                  return ListView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                    children: [
+                      _VideoSearchControls(
+                        query: _query,
+                        filterLabel: _filterLabel,
+                        sortOrder: _sortOrder,
+                        onQueryChanged: (value) =>
+                            setState(() => _query = value),
+                        onFilterPressed: () =>
+                            _showFilterSheet(teachers, topics),
+                        onSortChanged: (value) =>
+                            setState(() => _sortOrder = value),
+                      ),
+                      const SizedBox(height: 14),
+                      if (visibleItems.isEmpty)
+                        const Card(
+                          child: ListTile(
+                            leading: Icon(Icons.video_library_outlined),
+                            title: Text('Không có video phù hợp'),
+                          ),
+                        ),
+                      for (final video in visibleItems) ...[
+                        InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => _showVideoPlayer(context, video),
+                          child: VideoCard(
+                            video: video,
+                            action: _isDirectVideoUrl(video.videoUrl)
+                                ? MediaDownloadButton(
+                                    mediaKey: mediaKey('video', video.id),
+                                    title: video.title,
+                                    url: video.videoUrl,
+                                  )
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+                      if (_feed.loadingMore || _feed.loadingAll)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                    ],
+                  );
+                },
+              ),
       ),
     );
   }

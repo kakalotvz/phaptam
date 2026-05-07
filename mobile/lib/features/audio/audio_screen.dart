@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../core/network/paged_public_feed.dart';
 import '../../core/offline/media_downloads.dart';
 import '../../core/network/api_client.dart';
 import '../../shared/widgets/content_cards.dart';
@@ -31,17 +32,58 @@ class AudioScreen extends ConsumerStatefulWidget {
 }
 
 class _AudioScreenState extends ConsumerState<AudioScreen> {
+  late final PagedPublicFeed<AudioItem> _feed;
+  late final ScrollController _scrollController;
   String _query = '';
   _AudioSortOrder _sortOrder = _AudioSortOrder.newest;
+
+  @override
+  void initState() {
+    super.initState();
+    _feed = PagedPublicFeed<AudioItem>(
+      path: '/audio',
+      fromJson: AudioItem.fromJson,
+      isValid: (item) =>
+          item.title.trim().isNotEmpty && item.audioUrl.trim().isNotEmpty,
+    )..addListener(_onFeedChanged);
+    _scrollController = ScrollController()..addListener(_handleScroll);
+    unawaited(_feed.loadInitial());
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    _feed
+      ..removeListener(_onFeedChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onFeedChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      unawaited(_feed.loadMore());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final categories = ref.watch(audioCategoriesProvider);
     final selected = ref.watch(selectedAudioCategoryProvider);
     final audios = _sortAudios(
-      _filterAudios(ref.watch(filteredAudioProvider)),
+      _filterAudios(_selectedAudios(selected)),
       _sortOrder,
     );
+    if (_query.trim().isNotEmpty || selected != null) {
+      unawaited(_feed.ensureAllLoaded());
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Kinh Phật')),
@@ -49,11 +91,9 @@ class _AudioScreenState extends ConsumerState<AudioScreen> {
         loading: () => const _EmptyAudioList(),
         error: (error, stackTrace) => const _EmptyAudioList(),
         data: (items) => RefreshIndicator(
-          onRefresh: () async {
-            await refreshPublicContent(ref);
-            await ref.read(audioListProvider.future);
-          },
+          onRefresh: _feed.refresh,
           child: ListView(
+            controller: _scrollController,
             padding: const EdgeInsets.fromLTRB(18, 8, 18, 120),
             children: [
               _AudioSearchControls(
@@ -80,19 +120,30 @@ class _AudioScreenState extends ConsumerState<AudioScreen> {
                     return ChoiceChip(
                       label: Text(name),
                       selected: isSelected,
-                      onSelected: (_) => ref
-                          .read(selectedAudioCategoryProvider.notifier)
-                          .select(index == 0 ? null : name),
+                      onSelected: (_) {
+                        ref
+                            .read(selectedAudioCategoryProvider.notifier)
+                            .select(index == 0 ? null : name);
+                        if (index != 0) unawaited(_feed.ensureAllLoaded());
+                      },
                     );
                   },
                 ),
               ),
               const SizedBox(height: 18),
-              if (ref.watch(audioListProvider).isLoading || audios.isEmpty)
+              if (_feed.loadingInitial ||
+                  (!_feed.initialized && audios.isEmpty))
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.library_music_outlined),
                     title: Text('Chưa có audio'),
+                  ),
+                )
+              else if (audios.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.library_music_outlined),
+                    title: Text('Không có audio phù hợp'),
                   ),
                 )
               else
@@ -116,6 +167,11 @@ class _AudioScreenState extends ConsumerState<AudioScreen> {
                     ],
                   ),
                 ),
+              if (_feed.loadingMore || _feed.loadingAll)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
             ],
           ),
         ),
@@ -131,6 +187,11 @@ class _AudioScreenState extends ConsumerState<AudioScreen> {
           item.category.toLowerCase().contains(query) ||
           (item.description ?? '').toLowerCase().contains(query);
     }).toList();
+  }
+
+  List<AudioItem> _selectedAudios(String? selected) {
+    if (selected == null) return _feed.items;
+    return _feed.items.where((item) => item.category == selected).toList();
   }
 
   List<AudioItem> _sortAudios(List<AudioItem> items, _AudioSortOrder order) {

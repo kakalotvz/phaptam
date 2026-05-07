@@ -8,45 +8,78 @@ import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/network/paged_public_feed.dart';
 import '../../shared/widgets/rich_content.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
-class ScriptureScreen extends ConsumerWidget {
+class ScriptureScreen extends ConsumerStatefulWidget {
   const ScriptureScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scripturesAsync = ref.watch(scriptureListProvider);
+  ConsumerState<ScriptureScreen> createState() => _ScriptureScreenState();
+}
+
+class _ScriptureScreenState extends ConsumerState<ScriptureScreen> {
+  late final PagedPublicFeed<Scripture> _feed;
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _feed = PagedPublicFeed<Scripture>(
+      path: '/scriptures',
+      fromJson: Scripture.fromJson,
+      isValid: (item) => item.title.trim().isNotEmpty,
+    )..addListener(_onFeedChanged);
+    _scrollController = ScrollController()..addListener(_handleScroll);
+    unawaited(_feed.loadInitial());
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    _feed
+      ..removeListener(_onFeedChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onFeedChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      unawaited(_feed.loadMore());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final remindersAsync = ref.watch(scriptureReminderProvider);
     final isLoggedIn = ref.watch(isLoggedInProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Tụng kinh')),
-      body: scripturesAsync.when(
-        loading: () => _ScriptureContent(
-          scriptures: const [],
+      body: RefreshIndicator(
+        onRefresh: _feed.refresh,
+        child: _ScriptureContent(
+          scrollController: _scrollController,
+          scriptures: _feed.items,
           remindersAsync: remindersAsync,
           isLoggedIn: isLoggedIn,
           ref: ref,
-        ),
-        error: (error, _) => _ScriptureContent(
-          scriptures: const [],
-          remindersAsync: remindersAsync,
-          isLoggedIn: isLoggedIn,
-          ref: ref,
-        ),
-        data: (scriptures) => RefreshIndicator(
-          onRefresh: () async {
-            await refreshPublicContent(ref);
-            await ref.read(scriptureListProvider.future);
-          },
-          child: _ScriptureContent(
-            scriptures: scriptures,
-            remindersAsync: remindersAsync,
-            isLoggedIn: isLoggedIn,
-            ref: ref,
-          ),
+          onOpenReminderSheet: () =>
+              _showReminderSheet(context, ref, _feed.items),
+          onNeedFullDataset: _feed.ensureAllLoaded,
+          isLoadingInitial: _feed.loadingInitial && !_feed.initialized,
+          isLoadingMore: _feed.loadingMore || _feed.loadingAll,
+          hasMore: _feed.hasMore,
         ),
       ),
     );
@@ -214,16 +247,28 @@ enum _ScriptureSortOrder { newest, oldest, popular }
 
 class _ScriptureContent extends StatefulWidget {
   const _ScriptureContent({
+    required this.scrollController,
     required this.scriptures,
     required this.remindersAsync,
     required this.isLoggedIn,
     required this.ref,
+    required this.onOpenReminderSheet,
+    required this.onNeedFullDataset,
+    required this.isLoadingInitial,
+    required this.isLoadingMore,
+    required this.hasMore,
   });
 
+  final ScrollController scrollController;
   final List<Scripture> scriptures;
   final AsyncValue<List<ScriptureReminder>> remindersAsync;
   final bool isLoggedIn;
   final WidgetRef ref;
+  final VoidCallback onOpenReminderSheet;
+  final Future<void> Function() onNeedFullDataset;
+  final bool isLoadingInitial;
+  final bool isLoadingMore;
+  final bool hasMore;
 
   @override
   State<_ScriptureContent> createState() => _ScriptureContentState();
@@ -236,6 +281,9 @@ class _ScriptureContentState extends State<_ScriptureContent> {
 
   @override
   Widget build(BuildContext context) {
+    if (_query.trim().isNotEmpty || _categoryFilter != null) {
+      unawaited(widget.onNeedFullDataset());
+    }
     final visibleScriptures = _sortScriptures(
       _filterScriptures(widget.scriptures),
       _sortOrder,
@@ -248,6 +296,7 @@ class _ScriptureContentState extends State<_ScriptureContent> {
         .toList();
 
     return ListView(
+      controller: widget.scrollController,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         FilledButton.icon(
@@ -258,11 +307,7 @@ class _ScriptureContentState extends State<_ScriptureContent> {
                     context.push('/login');
                     return;
                   }
-                  const ScriptureScreen()._showReminderSheet(
-                    context,
-                    widget.ref,
-                    widget.scriptures,
-                  );
+                  widget.onOpenReminderSheet();
                 },
           icon: const Icon(Icons.add_alarm),
           label: const Text('Đặt lịch nhắc tụng kinh'),
@@ -329,22 +374,39 @@ class _ScriptureContentState extends State<_ScriptureContent> {
           query: _query,
           filterLabel: _categoryFilter ?? 'Tất cả',
           sortOrder: _sortOrder,
-          onQueryChanged: (value) => setState(() => _query = value),
+          onQueryChanged: (value) {
+            setState(() => _query = value);
+            if (value.trim().isNotEmpty) {
+              unawaited(widget.onNeedFullDataset());
+            }
+          },
           onFilterPressed: () => _showFilterSheet(categories),
           onSortChanged: (value) => setState(() => _sortOrder = value),
         ),
         const SizedBox(height: 12),
-        if (visibleScriptures.isEmpty)
+        if (widget.isLoadingInitial)
           const Card(
             child: ListTile(
               leading: Icon(Icons.menu_book_outlined),
-              title: Text('Chưa có bản Kinh tụng'),
+              title: Text('Đang tải Kinh tụng'),
+            ),
+          )
+        else if (visibleScriptures.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.menu_book_outlined),
+              title: Text('Không có bản Kinh tụng phù hợp'),
             ),
           ),
         for (final group in scriptureGroups) ...[
           _ScriptureGroupCard(group: group),
           const SizedBox(height: 12),
         ],
+        if (widget.isLoadingMore)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Center(child: CircularProgressIndicator()),
+          ),
       ],
     );
   }
@@ -412,6 +474,7 @@ class _ScriptureContentState extends State<_ScriptureContent> {
                   selected: _categoryFilter == category,
                   onTap: () {
                     setState(() => _categoryFilter = category);
+                    unawaited(widget.onNeedFullDataset());
                     Navigator.pop(context);
                   },
                 ),
@@ -680,46 +743,92 @@ class _EmptyReminderCard extends StatelessWidget {
   }
 }
 
-class ScriptureReadingScreen extends ConsumerWidget {
+class ScriptureReadingScreen extends ConsumerStatefulWidget {
   const ScriptureReadingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final readingsAsync = ref.watch(scriptureReadingListProvider);
+  ConsumerState<ScriptureReadingScreen> createState() =>
+      _ScriptureReadingScreenState();
+}
+
+class _ScriptureReadingScreenState
+    extends ConsumerState<ScriptureReadingScreen> {
+  late final PagedPublicFeed<Scripture> _feed;
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _feed = PagedPublicFeed<Scripture>(
+      path: '/scripture-readings',
+      fromJson: Scripture.fromJson,
+      isValid: (item) =>
+          item.title.trim().isNotEmpty &&
+          (item.content ?? '').trim().isNotEmpty,
+    )..addListener(_onFeedChanged);
+    _scrollController = ScrollController()..addListener(_handleScroll);
+    unawaited(_feed.loadInitial());
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    _feed
+      ..removeListener(_onFeedChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onFeedChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      unawaited(_feed.loadMore());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Kinh đọc')),
-      body: readingsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) =>
-            const Center(child: Text('Không tải được Kinh đọc')),
-        data: (readings) => RefreshIndicator(
-          onRefresh: () async {
-            await refreshPublicContent(ref);
-            await ref.read(scriptureReadingListProvider.future);
-          },
-          child: readings.isEmpty
-              ? ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: const [
-                    Card(
-                      child: ListTile(
-                        leading: Icon(Icons.menu_book_outlined),
-                        title: Text('Chưa có Kinh đọc'),
-                      ),
+      body: RefreshIndicator(
+        onRefresh: _feed.refresh,
+        child: _feed.loadingInitial && !_feed.initialized
+            ? const Center(child: CircularProgressIndicator())
+            : _feed.items.isEmpty
+            ? ListView(
+                padding: const EdgeInsets.all(16),
+                children: const [
+                  Card(
+                    child: ListTile(
+                      leading: Icon(Icons.menu_book_outlined),
+                      title: Text('Chưa có Kinh đọc'),
                     ),
-                  ],
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-                  itemCount: _groupReadings(readings).length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final groups = _groupReadings(readings);
-                    return _ReadingGroupCard(group: groups[index]);
-                  },
-                ),
-        ),
+                  ),
+                ],
+              )
+            : ListView.separated(
+                controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                itemCount:
+                    _groupReadings(_feed.items).length +
+                    (_feed.loadingMore || _feed.loadingAll ? 1 : 0),
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final groups = _groupReadings(_feed.items);
+                  if (index >= groups.length) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  return _ReadingGroupCard(group: groups[index]);
+                },
+              ),
       ),
     );
   }

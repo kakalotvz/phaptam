@@ -40,8 +40,26 @@ export class PublicController {
   }
 
   @Get('audio')
-  audio(@Query('category_id') categoryId?: string) {
-    return this.prisma.audio.findMany({ where: { categoryId }, include: { category: true }, take: 30 });
+  async audio(
+    @Query('category_id') categoryId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pagination = parsePagination(page, limit);
+    if (pagination == null) {
+      return this.prisma.audio.findMany({
+        where: { categoryId },
+        include: { category: true },
+        take: 30,
+      });
+    }
+    const items = await this.prisma.audio.findMany({
+      where: { categoryId },
+      include: { category: true },
+      take: pagination.limit,
+      skip: pagination.skip,
+    });
+    return paginated(items, pagination);
   }
 
   @Post('audio/:id/view')
@@ -54,10 +72,15 @@ export class PublicController {
   }
 
   @Get('scriptures')
-  scriptures(@Query('category_id') categoryId?: string) {
-    return this.prisma.scripture.findMany({
-      where: { kind: 'CHANT', categoryId },
-      orderBy: { createdAt: 'desc' },
+  async scriptures(
+    @Query('category_id') categoryId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pagination = parsePagination(page, limit);
+    const query = {
+      where: { kind: 'CHANT' as const, categoryId },
+      orderBy: { createdAt: 'desc' as const },
       select: {
         id: true,
         title: true,
@@ -69,13 +92,24 @@ export class PublicController {
         viewCount: true,
         createdAt: true,
         lines: {
-          orderBy: { orderIndex: 'asc' },
+          orderBy: { orderIndex: 'asc' as const },
           select: { content: true, startTime: true },
         },
         _count: { select: { lines: true } },
       },
-      take: 30,
+    };
+    if (pagination == null) {
+      return this.prisma.scripture.findMany({
+        ...query,
+        take: 30,
+      });
+    }
+    const items = await this.prisma.scripture.findMany({
+      ...query,
+      take: pagination.limit,
+      skip: pagination.skip,
     });
+    return paginated(items, pagination);
   }
 
   @Get('scriptures/:id')
@@ -116,10 +150,15 @@ export class PublicController {
   }
 
   @Get('scripture-readings')
-  scriptureReadings(@Query('category_id') categoryId?: string) {
-    return this.prisma.scripture.findMany({
-      where: { kind: 'READING', categoryId },
-      orderBy: { createdAt: 'desc' },
+  async scriptureReadings(
+    @Query('category_id') categoryId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pagination = parsePagination(page, limit);
+    const query = {
+      where: { kind: 'READING' as const, categoryId },
+      orderBy: { createdAt: 'desc' as const },
       select: {
         id: true,
         kind: true,
@@ -131,8 +170,19 @@ export class PublicController {
         viewCount: true,
         createdAt: true,
       },
-      take: 50,
+    };
+    if (pagination == null) {
+      return this.prisma.scripture.findMany({
+        ...query,
+        take: 50,
+      });
+    }
+    const items = await this.prisma.scripture.findMany({
+      ...query,
+      take: pagination.limit,
+      skip: pagination.skip,
     });
+    return paginated(items, pagination);
   }
 
   @Get('scripture-readings/:id')
@@ -163,8 +213,26 @@ export class PublicController {
   }
 
   @Get('video')
-  video(@Query('category_id') categoryId?: string) {
-    return this.prisma.video.findMany({ where: { categoryId }, include: { category: true }, take: 30 });
+  async video(
+    @Query('category_id') categoryId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pagination = parsePagination(page, limit);
+    if (pagination == null) {
+      return this.prisma.video.findMany({
+        where: { categoryId },
+        include: { category: true },
+        take: 30,
+      });
+    }
+    const items = await this.prisma.video.findMany({
+      where: { categoryId },
+      include: { category: true },
+      take: pagination.limit,
+      skip: pagination.skip,
+    });
+    return paginated(items, pagination);
   }
 
   @Post('video/:id/view')
@@ -215,12 +283,31 @@ export class PublicController {
   }
 
   @Get('news')
-  news(@Query('category_id') categoryId?: string) {
-    return this.prisma.newsItem.findMany({
-      where: { categoryId, contentType: NewsContentType.NEWS },
-      orderBy: { publishedAt: 'desc' },
-      include: { category: true },
-    });
+  async news(
+    @Query('category_id') categoryId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pagination = parsePagination(page, limit);
+    const where = { categoryId, contentType: NewsContentType.NEWS };
+    if (pagination == null) {
+      return this.prisma.newsItem.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        include: { category: true },
+      });
+    }
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.newsItem.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        include: { category: true },
+        take: pagination.limit,
+        skip: pagination.skip,
+      }),
+      this.prisma.newsItem.count({ where }),
+    ]);
+    return paginated(items, pagination, { total });
   }
 
   @Get('knowledge/categories')
@@ -229,12 +316,31 @@ export class PublicController {
   }
 
   @Get('knowledge')
-  knowledge(@Query('category_id') categoryId?: string) {
-    return this.prisma.newsItem.findMany({
-      where: { categoryId, contentType: NewsContentType.KNOWLEDGE },
-      orderBy: { publishedAt: 'desc' },
-      include: { category: true },
-    });
+  async knowledge(
+    @Query('category_id') categoryId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pagination = parsePagination(page, limit);
+    const where = { categoryId, contentType: NewsContentType.KNOWLEDGE };
+    if (pagination == null) {
+      return this.prisma.newsItem.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        include: { category: true },
+      });
+    }
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.newsItem.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        include: { category: true },
+        take: pagination.limit,
+        skip: pagination.skip,
+      }),
+      this.prisma.newsItem.count({ where }),
+    ]);
+    return paginated(items, pagination, { total });
   }
 
   @Get('news/:id')
@@ -397,4 +503,31 @@ function quoteRotationIndex(settings: QuoteRotationSettings, length: number) {
 
 function positiveModulo(value: number, length: number) {
   return ((value % length) + length) % length;
+}
+
+function parsePagination(page?: string, limit?: string) {
+  const parsedPage = Number(page);
+  const parsedLimit = Number(limit);
+  if (!Number.isFinite(parsedPage) || !Number.isFinite(parsedLimit)) return null;
+  const safePage = Math.max(1, Math.floor(parsedPage));
+  const safeLimit = Math.min(20, Math.max(1, Math.floor(parsedLimit)));
+  return {
+    page: safePage,
+    limit: safeLimit,
+    skip: (safePage - 1) * safeLimit,
+  };
+}
+
+function paginated<T>(
+  items: T[],
+  pagination: { page: number; limit: number; skip: number },
+  options: { total?: number } = {},
+) {
+  const total = options.total ?? pagination.skip + items.length + (items.length == pagination.limit ? 1 : 0);
+  return {
+    items,
+    page: pagination.page,
+    limit: pagination.limit,
+    hasMore: pagination.skip + items.length < total,
+  };
 }

@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../content/content_providers.dart';
 import '../home/home_screen.dart';
 import '../meditation/meditation_screen.dart';
 import '../scripture/scripture_screen.dart';
@@ -64,20 +61,9 @@ class _KnowledgeFromPracticeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _KnowledgeProviderBridge();
-  }
-}
-
-class _KnowledgeProviderBridge extends ConsumerWidget {
-  const _KnowledgeProviderBridge();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final knowledge = ref.watch(knowledgeListProvider);
-    return knowledge.when(
-      data: (items) => ArticleCollectionScreen(title: 'Kiến thức', items: items),
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, stackTrace) => const Scaffold(body: Center(child: Text('Không tải được kiến thức'))),
+    return const ArticleCollectionScreen(
+      title: 'Kiến thức',
+      endpointPath: '/knowledge',
     );
   }
 }

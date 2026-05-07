@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/network/paged_public_feed.dart';
 import '../../shared/widgets/content_cards.dart';
 import '../../shared/widgets/rich_content.dart';
 import '../audio/audio_screen.dart';
@@ -183,6 +184,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     emptyLabel: 'Chưa có tin tức',
                     items: _sortNews(items, _NewsSortOrder.newest),
                     collectionTitle: 'Tin tức',
+                    endpointPath: '/news',
                   ),
                   loading: () => const _EmptyCard(
                     icon: Icons.article_outlined,
@@ -201,6 +203,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     emptyLabel: 'Chưa có bài kiến thức',
                     items: _sortNews(items, _NewsSortOrder.newest),
                     collectionTitle: 'Kiến thức',
+                    endpointPath: '/knowledge',
                   ),
                   loading: () => const _EmptyCard(
                     icon: Icons.menu_book_outlined,
@@ -225,6 +228,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required String emptyLabel,
     required List<NewsItem> items,
     required String collectionTitle,
+    String? endpointPath,
   }) {
     if (items.isEmpty) {
       return _EmptyCard(icon: Icons.article_outlined, label: emptyLabel);
@@ -233,12 +237,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return CalmSection(
       title: title,
       action: TextButton(
-        onPressed: () => _openArticleCollection(context, collectionTitle, items),
+        onPressed: () => _openArticleCollection(
+          context,
+          collectionTitle,
+          items,
+          endpointPath,
+        ),
         child: const Text('Xem thêm'),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () => _openArticleCollection(context, collectionTitle, items),
+        onTap: () => _openArticleCollection(
+          context,
+          collectionTitle,
+          items,
+          endpointPath,
+        ),
         child: Column(
           children: [
             for (final item in previewItems) ...[
@@ -261,10 +275,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     BuildContext context,
     String title,
     List<NewsItem> items,
+    String? endpointPath,
   ) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ArticleCollectionScreen(title: title, items: items),
+        builder: (_) => ArticleCollectionScreen(
+          title: title,
+          items: items,
+          endpointPath: endpointPath,
+        ),
       ),
     );
   }
@@ -411,60 +430,143 @@ class _EmptyCard extends StatelessWidget {
 }
 
 class ArticleCollectionScreen extends StatefulWidget {
-  const ArticleCollectionScreen({required this.title, required this.items, super.key});
+  const ArticleCollectionScreen({
+    required this.title,
+    this.items = const [],
+    this.endpointPath,
+    super.key,
+  });
 
   final String title;
   final List<NewsItem> items;
+  final String? endpointPath;
 
   @override
-  State<ArticleCollectionScreen> createState() => _ArticleCollectionScreenState();
+  State<ArticleCollectionScreen> createState() =>
+      _ArticleCollectionScreenState();
 }
 
 class _ArticleCollectionScreenState extends State<ArticleCollectionScreen> {
+  PagedPublicFeed<NewsItem>? _feed;
+  ScrollController? _scrollController;
   String _query = '';
   String? _categoryFilter;
   String? _sourceFilter;
   _NewsSortOrder _sortOrder = _NewsSortOrder.newest;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.endpointPath != null) {
+      _feed = PagedPublicFeed<NewsItem>(
+        path: widget.endpointPath!,
+        fromJson: NewsItem.fromJson,
+        isValid: (item) => item.title.trim().isNotEmpty,
+      )..addListener(_onFeedChanged);
+      _scrollController = ScrollController()..addListener(_handleScroll);
+      unawaited(_feed!.loadInitial());
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ?..removeListener(_handleScroll)
+      ..dispose();
+    _feed
+      ?..removeListener(_onFeedChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onFeedChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _handleScroll() {
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return;
+    final position = controller.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      unawaited(_feed?.loadMore());
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final visibleItems = _sortArticles(_filterArticles(widget.items), _sortOrder);
-    final categories = widget.items.map((item) => item.category).toSet().toList();
-    final sources = widget.items.map((item) => item.source).toSet().toList();
+    final sourceItems = _feed?.items ?? widget.items;
+    if (_feed != null &&
+        (_query.trim().isNotEmpty ||
+            _categoryFilter != null ||
+            _sourceFilter != null)) {
+      unawaited(_feed!.ensureAllLoaded());
+    }
+    final visibleItems = _sortArticles(
+      _filterArticles(sourceItems),
+      _sortOrder,
+    );
+    final categories = sourceItems
+        .map((item) => item.category)
+        .toSet()
+        .toList();
+    final sources = sourceItems.map((item) => item.source).toSet().toList();
     final filterLabel = [?_categoryFilter, ?_sourceFilter].isEmpty
         ? 'Tất cả'
         : [?_categoryFilter, ?_sourceFilter].join(' • ');
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 120),
-        children: [
-          _NewsSearchControls(
-            query: _query,
-            filterLabel: filterLabel,
-            sortOrder: _sortOrder,
-            onQueryChanged: (value) => setState(() => _query = value),
-            onFilterPressed: () => _showFilterSheet(categories, sources),
-            onSortChanged: (value) => setState(() => _sortOrder = value),
-          ),
-          const SizedBox(height: 18),
-          if (visibleItems.isEmpty)
-            const Card(
-              child: ListTile(
-                leading: Icon(Icons.article_outlined),
-                title: Text('Không tìm thấy bài viết phù hợp'),
+      body: RefreshIndicator(
+        onRefresh: _feed?.refresh ?? () async {},
+        child: ListView(
+          controller: _scrollController,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 120),
+          children: [
+            _NewsSearchControls(
+              query: _query,
+              filterLabel: filterLabel,
+              sortOrder: _sortOrder,
+              onQueryChanged: (value) {
+                setState(() => _query = value);
+                if (value.trim().isNotEmpty) {
+                  unawaited(_feed?.ensureAllLoaded());
+                }
+              },
+              onFilterPressed: () => _showFilterSheet(categories, sources),
+              onSortChanged: (value) => setState(() => _sortOrder = value),
+            ),
+            const SizedBox(height: 18),
+            if (_feed != null && _feed!.loadingInitial && !_feed!.initialized)
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.article_outlined),
+                  title: Text('Đang tải bài viết'),
+                ),
+              )
+            else if (visibleItems.isEmpty)
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.article_outlined),
+                  title: Text('Không tìm thấy bài viết phù hợp'),
+                ),
               ),
-            ),
-          for (final item in visibleItems) ...[
-            _NewsListTile(
-              item: item,
-              onTap: () => _showArticleDetail(context, item),
-              onShare: item.shareEnabled ? () => _showShareSheet(context, item) : null,
-            ),
-            const SizedBox(height: 12),
+            for (final item in visibleItems) ...[
+              _NewsListTile(
+                item: item,
+                onTap: () => _showArticleDetail(context, item),
+                onShare: item.shareEnabled
+                    ? () => _showShareSheet(context, item)
+                    : null,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if ((_feed?.loadingMore ?? false) || (_feed?.loadingAll ?? false))
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Center(child: CircularProgressIndicator()),
+              ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -479,8 +581,10 @@ class _ArticleCollectionScreenState extends State<ArticleCollectionScreen> {
           item.source.toLowerCase().contains(query) ||
           item.summary.toLowerCase().contains(query) ||
           item.content.toLowerCase().contains(query);
-      final matchesCategory = _categoryFilter == null || item.category == _categoryFilter;
-      final matchesSource = _sourceFilter == null || item.source == _sourceFilter;
+      final matchesCategory =
+          _categoryFilter == null || item.category == _categoryFilter;
+      final matchesSource =
+          _sourceFilter == null || item.source == _sourceFilter;
       return matchesQuery && matchesCategory && matchesSource;
     }).toList();
   }
@@ -531,7 +635,11 @@ class _ArticleCollectionScreenState extends State<ArticleCollectionScreen> {
                       label: Text(category),
                       selected: _categoryFilter == category,
                       onSelected: (_) {
-                        setSheetState(() => _categoryFilter = _categoryFilter == category ? null : category);
+                        setSheetState(() {
+                          _categoryFilter = _categoryFilter == category
+                              ? null
+                              : category;
+                        });
                         setState(() {});
                       },
                     ),
@@ -548,7 +656,11 @@ class _ArticleCollectionScreenState extends State<ArticleCollectionScreen> {
                       label: Text(source),
                       selected: _sourceFilter == source,
                       onSelected: (_) {
-                        setSheetState(() => _sourceFilter = _sourceFilter == source ? null : source);
+                        setSheetState(() {
+                          _sourceFilter = _sourceFilter == source
+                              ? null
+                              : source;
+                        });
                         setState(() {});
                       },
                     ),
@@ -579,10 +691,17 @@ class _ArticleCollectionScreenState extends State<ArticleCollectionScreen> {
                 if (item.imageUrl != null)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(18),
-                    child: Image.network(item.imageUrl!, height: 190, fit: BoxFit.cover),
+                    child: Image.network(
+                      item.imageUrl!,
+                      height: 190,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 const SizedBox(height: 16),
-                Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  item.title,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 8),
                 Text(
                   '${item.category} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
@@ -592,7 +711,10 @@ class _ArticleCollectionScreenState extends State<ArticleCollectionScreen> {
                 if (item.summary.trim().isNotEmpty)
                   Text(
                     item.summary,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(height: 1.45, fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      height: 1.45,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 const SizedBox(height: 14),
                 RichContent(content: item.content),
@@ -947,9 +1069,9 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
               children: [
                 Text(
                   'Chọn ảnh nền',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 ListTile(
@@ -1125,7 +1247,10 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
       );
 
       final picture = recorder.endRecording();
-      final finalImage = await picture.toImage(size.width.toInt(), size.height.toInt());
+      final finalImage = await picture.toImage(
+        size.width.toInt(),
+        size.height.toInt(),
+      );
       final bytes = await finalImage.toByteData(format: ui.ImageByteFormat.png);
       finalImage.dispose();
       if (bytes == null) return null;
@@ -1183,7 +1308,10 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
   void _drawCoverImage(Canvas canvas, ui.Image image, Size size) {
     final input = Size(image.width.toDouble(), image.height.toDouble());
     final fitted = applyBoxFit(BoxFit.cover, input, size);
-    final source = Alignment.center.inscribe(fitted.source, Offset.zero & input);
+    final source = Alignment.center.inscribe(
+      fitted.source,
+      Offset.zero & input,
+    );
     final destination = Alignment.center.inscribe(
       fitted.destination,
       Offset.zero & size,
@@ -1191,7 +1319,10 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
     canvas.drawImageRect(image, source, destination, Paint());
   }
 
-  Future<_QuoteImageTone> _analyzeQuoteArea(ui.Image image, Size canvasSize) async {
+  Future<_QuoteImageTone> _analyzeQuoteArea(
+    ui.Image image,
+    Size canvasSize,
+  ) async {
     final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (bytes == null) return _QuoteImageTone.fallback();
 
@@ -1209,9 +1340,10 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         final imageX = (source.left + canvasX / canvasSize.width * source.width)
             .clamp(0, image.width - 1)
             .round();
-        final imageY = (source.top + canvasY / canvasSize.height * source.height)
-            .clamp(0, image.height - 1)
-            .round();
+        final imageY =
+            (source.top + canvasY / canvasSize.height * source.height)
+                .clamp(0, image.height - 1)
+                .round();
         final offset = (imageY * image.width + imageX) * 4;
         final red = bytes.getUint8(offset) / 255;
         final green = bytes.getUint8(offset + 1) / 255;
@@ -1219,7 +1351,9 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         final luminance = .2126 * red + .7152 * green + .0722 * blue;
         final maxChannel = math.max(red, math.max(green, blue));
         final minChannel = math.min(red, math.min(green, blue));
-        final saturation = maxChannel == 0 ? 0.0 : (maxChannel - minChannel) / maxChannel;
+        final saturation = maxChannel == 0
+            ? 0.0
+            : (maxChannel - minChannel) / maxChannel;
         luminanceSum += luminance;
         luminanceSquareSum += luminance * luminance;
         saturationSum += saturation;
@@ -1228,7 +1362,10 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
     }
 
     final average = luminanceSum / samples;
-    final variance = math.max(0, luminanceSquareSum / samples - average * average);
+    final variance = math.max(
+      0,
+      luminanceSquareSum / samples - average * average,
+    );
     return _QuoteImageTone(
       luminance: average,
       contrast: math.sqrt(variance),
@@ -1305,10 +1442,7 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Colors.transparent,
-            style.bottomShade,
-          ],
+          colors: [Colors.transparent, style.bottomShade],
         ).createShader(rect),
     );
   }
@@ -1324,18 +1458,19 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
     required FontWeight fontWeight,
     double letterSpacing = 0,
   }) {
-    final builder = ui.ParagraphBuilder(
-      ui.ParagraphStyle(textAlign: TextAlign.center, height: height),
-    )
-      ..pushStyle(
-        ui.TextStyle(
-          color: color,
-          fontSize: fontSize,
-          fontWeight: fontWeight,
-          letterSpacing: letterSpacing,
-        ),
-      )
-      ..addText(text);
+    final builder =
+        ui.ParagraphBuilder(
+            ui.ParagraphStyle(textAlign: TextAlign.center, height: height),
+          )
+          ..pushStyle(
+            ui.TextStyle(
+              color: color,
+              fontSize: fontSize,
+              fontWeight: fontWeight,
+              letterSpacing: letterSpacing,
+            ),
+          )
+          ..addText(text);
     final paragraph = builder.build()
       ..layout(ui.ParagraphConstraints(width: width));
     canvas.drawParagraph(paragraph, Offset((1080 - width) / 2, top));
@@ -1374,18 +1509,19 @@ class _DailyQuoteCardState extends State<_DailyQuoteCard> {
     required Color color,
     Paint? foreground,
   }) {
-    final builder = ui.ParagraphBuilder(
-      ui.ParagraphStyle(textAlign: TextAlign.center, height: 1.32),
-    )
-      ..pushStyle(
-        ui.TextStyle(
-          color: foreground == null ? color : null,
-          foreground: foreground,
-          fontSize: fontSize,
-          fontWeight: FontWeight.w800,
-        ),
-      )
-      ..addText(text);
+    final builder =
+        ui.ParagraphBuilder(
+            ui.ParagraphStyle(textAlign: TextAlign.center, height: 1.32),
+          )
+          ..pushStyle(
+            ui.TextStyle(
+              color: foreground == null ? color : null,
+              foreground: foreground,
+              fontSize: fontSize,
+              fontWeight: FontWeight.w800,
+            ),
+          )
+          ..addText(text);
     return builder.build()..layout(ui.ParagraphConstraints(width: width));
   }
 
