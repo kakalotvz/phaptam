@@ -1,6 +1,6 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard } from '../auth/admin.guard';
-import { AudioCategoryKind, NewsSourceType, ReminderResumeMode, Role } from '@prisma/client';
+import { AudioCategoryKind, NewsContentType, NewsSourceType, ReminderResumeMode, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,7 +32,9 @@ export class AdminController {
       scriptureCount,
       scriptureReadingCount,
       newsCount,
+      knowledgeCount,
       newsCategoryCount,
+      knowledgeCategoryCount,
       scriptureReminderCount,
       meditationProgramCount,
     ] = await Promise.all([
@@ -45,8 +47,10 @@ export class AdminController {
       this.prisma.user.count(),
       this.prisma.scripture.count({ where: { kind: 'CHANT' } }),
       this.prisma.scripture.count({ where: { kind: 'READING' } }),
-      this.prisma.newsItem.count(),
-      this.prisma.newsCategory.count(),
+      this.prisma.newsItem.count({ where: { contentType: NewsContentType.NEWS } }),
+      this.prisma.newsItem.count({ where: { contentType: NewsContentType.KNOWLEDGE } }),
+      this.prisma.newsCategory.count({ where: { contentType: NewsContentType.NEWS } }),
+      this.prisma.newsCategory.count({ where: { contentType: NewsContentType.KNOWLEDGE } }),
       this.prisma.scriptureReminder.count(),
       this.prisma.meditationProgram.count(),
     ]);
@@ -62,7 +66,9 @@ export class AdminController {
       scriptureCount,
       scriptureReadingCount,
       newsCount,
+      knowledgeCount,
       newsCategoryCount,
+      knowledgeCategoryCount,
       scriptureReminderCount,
       meditationProgramCount,
     };
@@ -867,13 +873,17 @@ export class AdminController {
   }
 
   @Get('news-category')
-  newsCategories() {
-    return this.prisma.newsCategory.findMany({ orderBy: { createdAt: 'desc' }, include: { _count: { select: { items: true } } } });
+  newsCategories(@Query('content_type') contentType: NewsContentType = NewsContentType.NEWS) {
+    return this.prisma.newsCategory.findMany({
+      where: { contentType },
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { items: true } } },
+    });
   }
 
   @Post('news-category')
-  createNewsCategory(@Body() data: { name: string; description?: string }) {
-    return this.prisma.newsCategory.create({ data });
+  createNewsCategory(@Body() data: { name: string; description?: string; contentType?: NewsContentType }) {
+    return this.prisma.newsCategory.create({ data: { ...data, contentType: data.contentType ?? NewsContentType.NEWS } });
   }
 
   @Patch('news-category/:id')
@@ -887,8 +897,9 @@ export class AdminController {
   }
 
   @Get('news')
-  newsItems() {
+  newsItems(@Query('content_type') contentType: NewsContentType = NewsContentType.NEWS) {
     return this.prisma.newsItem.findMany({
+      where: { contentType },
       orderBy: { publishedAt: 'desc' },
       include: { category: true },
       take: 100,
@@ -907,6 +918,7 @@ export class AdminController {
       categoryId?: string;
       sourceName?: string;
       sourceType?: NewsSourceType;
+      contentType?: NewsContentType;
       shareEnabled?: boolean;
       publishedAt?: string;
     },
@@ -921,6 +933,7 @@ export class AdminController {
         categoryId: data.categoryId || null,
         sourceName: data.sourceName || 'Pháp Tâm',
         sourceType: data.sourceType ?? NewsSourceType.MANUAL,
+        contentType: data.contentType ?? NewsContentType.NEWS,
         shareEnabled: data.shareEnabled ?? true,
         publishedAt: data.publishedAt ? new Date(data.publishedAt) : new Date(),
       },
@@ -941,6 +954,7 @@ export class AdminController {
       categoryId?: string;
       sourceName?: string;
       sourceType?: NewsSourceType;
+      contentType?: NewsContentType;
       shareEnabled?: boolean;
       publishedAt?: string;
     },
@@ -957,6 +971,7 @@ export class AdminController {
         categoryId: data.categoryId === undefined ? undefined : data.categoryId || null,
         sourceName: data.sourceName,
         sourceType: data.sourceType,
+        contentType: data.contentType,
         shareEnabled: data.shareEnabled,
         publishedAt: data.publishedAt ? new Date(data.publishedAt) : undefined,
       },

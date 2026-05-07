@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../content/content_providers.dart';
+import '../home/home_screen.dart';
 import '../meditation/meditation_screen.dart';
 import '../scripture/scripture_screen.dart';
 
@@ -13,6 +16,17 @@ class PracticeScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
         children: [
+          _PracticeTile(
+            icon: Icons.menu_book_outlined,
+            title: 'Kiến thức',
+            subtitle: 'Bài viết kiến thức Phật học và hướng dẫn tu tập.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const _KnowledgeFromPracticeScreen(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           _PracticeTile(
             icon: Icons.auto_stories_outlined,
             title: 'Đọc kinh',
@@ -41,6 +55,29 @@ class PracticeScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _KnowledgeFromPracticeScreen extends StatelessWidget {
+  const _KnowledgeFromPracticeScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _KnowledgeProviderBridge();
+  }
+}
+
+class _KnowledgeProviderBridge extends ConsumerWidget {
+  const _KnowledgeProviderBridge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final knowledge = ref.watch(knowledgeListProvider);
+    return knowledge.when(
+      data: (items) => ArticleCollectionScreen(title: 'Kiến thức', items: items),
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, stackTrace) => const Scaffold(body: Center(child: Text('Không tải được kiến thức'))),
     );
   }
 }

@@ -129,12 +129,14 @@ class NewsItem {
 
   factory NewsItem.fromJson(Map<String, dynamic> json) {
     final category = json['category'];
+    final contentType = json['contentType'] as String? ?? 'NEWS';
+    final fallbackLabel = contentType == 'KNOWLEDGE' ? 'Kiến thức' : 'Tin tức';
     return NewsItem(
       id: json['id'] as String,
-      title: json['title'] as String? ?? 'Tin tức',
+      title: json['title'] as String? ?? fallbackLabel,
       category: category is Map<String, dynamic>
-          ? category['name'] as String? ?? 'Tin tức'
-          : 'Tin tức',
+          ? category['name'] as String? ?? fallbackLabel
+          : fallbackLabel,
       source: json['sourceName'] as String? ?? 'Pháp Tâm',
       publishedAt:
           DateTime.tryParse(json['publishedAt'] as String? ?? '') ??

@@ -30,10 +30,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  String _newsQuery = '';
-  String? _newsCategoryFilter;
-  String? _newsSourceFilter;
-  _NewsSortOrder _newsSortOrder = _NewsSortOrder.newest;
   Timer? _quoteRefreshTimer;
 
   @override
@@ -57,6 +53,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final audios = ref.watch(audioListProvider);
     final videos = ref.watch(videoListProvider);
     final news = ref.watch(newsListProvider);
+    final knowledge = ref.watch(knowledgeListProvider);
     final quotes = ref.watch(dailyQuotesProvider);
     final quoteBackgrounds = ref.watch(quoteBackgroundsProvider);
     final banners = ref.watch(homeBannersProvider);
@@ -151,7 +148,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       : CalmSection(
                           title: 'Video nổi bật',
                           child: SizedBox(
-                            height: 228,
+                            height: 276,
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
                               itemCount: items.length,
@@ -180,59 +177,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 const SizedBox(height: 24),
                 news.when(
-                  data: (items) {
-                    final visibleNews = _sortNews(
-                      _filterNews(items),
-                      _newsSortOrder,
-                    );
-                    final categories = items
-                        .map((item) => item.category)
-                        .toSet()
-                        .toList();
-                    final sources = items
-                        .map((item) => item.source)
-                        .toSet()
-                        .toList();
-                    return items.isEmpty
-                        ? const _EmptyCard(
-                            icon: Icons.article_outlined,
-                            label: 'Chưa có tin tức',
-                          )
-                        : CalmSection(
-                            title: 'Tin Phật giáo',
-                            child: Column(
-                              children: [
-                                _NewsSearchControls(
-                                  query: _newsQuery,
-                                  filterLabel: _newsFilterLabel,
-                                  sortOrder: _newsSortOrder,
-                                  onQueryChanged: (value) =>
-                                      setState(() => _newsQuery = value),
-                                  onFilterPressed: () =>
-                                      _showNewsFilterSheet(categories, sources),
-                                  onSortChanged: (value) =>
-                                      setState(() => _newsSortOrder = value),
-                                ),
-                                const SizedBox(height: 12),
-                                if (visibleNews.isEmpty)
-                                  const Card(
-                                    child: ListTile(
-                                      leading: Icon(Icons.article_outlined),
-                                      title: Text('Chưa có tin tức'),
-                                    ),
-                                  ),
-                                for (final item in visibleNews)
-                                  _NewsListTile(
-                                    item: item,
-                                    onTap: () => _showNewsDetail(context, item),
-                                    onShare: item.shareEnabled
-                                        ? () => _showShareSheet(context, item)
-                                        : null,
-                                  ),
-                              ],
-                            ),
-                          );
-                  },
+                  data: (items) => _articlePreviewSection(
+                    context: context,
+                    title: 'Tin Phật giáo',
+                    emptyLabel: 'Chưa có tin tức',
+                    items: _sortNews(items, _NewsSortOrder.newest),
+                    collectionTitle: 'Tin tức',
+                  ),
                   loading: () => const _EmptyCard(
                     icon: Icons.article_outlined,
                     label: 'Chưa có tin tức',
@@ -240,6 +191,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   error: (error, stackTrace) => const _EmptyCard(
                     icon: Icons.article_outlined,
                     label: 'Không tải được tin tức',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                knowledge.when(
+                  data: (items) => _articlePreviewSection(
+                    context: context,
+                    title: 'Kiến thức',
+                    emptyLabel: 'Chưa có bài kiến thức',
+                    items: _sortNews(items, _NewsSortOrder.newest),
+                    collectionTitle: 'Kiến thức',
+                  ),
+                  loading: () => const _EmptyCard(
+                    icon: Icons.menu_book_outlined,
+                    label: 'Chưa có bài kiến thức',
+                  ),
+                  error: (error, stackTrace) => const _EmptyCard(
+                    icon: Icons.menu_book_outlined,
+                    label: 'Không tải được kiến thức',
                   ),
                 ),
               ],
@@ -250,27 +219,54 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  String get _newsFilterLabel {
-    final parts = [?_newsCategoryFilter, ?_newsSourceFilter];
-    return parts.isEmpty ? 'Tất cả' : parts.join(' • ');
+  Widget _articlePreviewSection({
+    required BuildContext context,
+    required String title,
+    required String emptyLabel,
+    required List<NewsItem> items,
+    required String collectionTitle,
+  }) {
+    if (items.isEmpty) {
+      return _EmptyCard(icon: Icons.article_outlined, label: emptyLabel);
+    }
+    final previewItems = items.take(10).toList();
+    return CalmSection(
+      title: title,
+      action: TextButton(
+        onPressed: () => _openArticleCollection(context, collectionTitle, items),
+        child: const Text('Xem thêm'),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => _openArticleCollection(context, collectionTitle, items),
+        child: Column(
+          children: [
+            for (final item in previewItems) ...[
+              _NewsListTile(
+                item: item,
+                onTap: () => _showNewsDetail(context, item),
+                onShare: item.shareEnabled
+                    ? () => _showShareSheet(context, item)
+                    : null,
+              ),
+              const SizedBox(height: 12),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
-  List<NewsItem> _filterNews(List<NewsItem> items) {
-    final query = _newsQuery.trim().toLowerCase();
-    return items.where((item) {
-      final matchesQuery =
-          query.isEmpty ||
-          item.title.toLowerCase().contains(query) ||
-          item.category.toLowerCase().contains(query) ||
-          item.source.toLowerCase().contains(query) ||
-          item.summary.toLowerCase().contains(query) ||
-          item.content.toLowerCase().contains(query);
-      final matchesCategory =
-          _newsCategoryFilter == null || item.category == _newsCategoryFilter;
-      final matchesSource =
-          _newsSourceFilter == null || item.source == _newsSourceFilter;
-      return matchesQuery && matchesCategory && matchesSource;
-    }).toList();
+  void _openArticleCollection(
+    BuildContext context,
+    String title,
+    List<NewsItem> items,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArticleCollectionScreen(title: title, items: items),
+      ),
+    );
   }
 
   List<NewsItem> _sortNews(List<NewsItem> items, _NewsSortOrder order) {
@@ -285,83 +281,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return sorted;
   }
 
-  void _showNewsFilterSheet(List<String> categories, List<String> sources) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(18),
-            shrinkWrap: true,
-            children: [
-              Text('Bộ lọc', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              FilterChip(
-                label: const Text('Tất cả'),
-                selected:
-                    _newsCategoryFilter == null && _newsSourceFilter == null,
-                onSelected: (_) {
-                  setSheetState(() {
-                    _newsCategoryFilter = null;
-                    _newsSourceFilter = null;
-                  });
-                  setState(() {});
-                },
-              ),
-              const SizedBox(height: 12),
-              Text('Danh mục', style: Theme.of(context).textTheme.titleMedium),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final category in categories)
-                    FilterChip(
-                      label: Text(category),
-                      selected: _newsCategoryFilter == category,
-                      onSelected: (_) {
-                        setSheetState(
-                          () => _newsCategoryFilter =
-                              _newsCategoryFilter == category ? null : category,
-                        );
-                        setState(() {});
-                      },
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text('Nguồn', style: Theme.of(context).textTheme.titleMedium),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final source in sources)
-                    FilterChip(
-                      label: Text(source),
-                      selected: _newsSourceFilter == source,
-                      onSelected: (_) {
-                        setSheetState(
-                          () => _newsSourceFilter = _newsSourceFilter == source
-                              ? null
-                              : source,
-                        );
-                        setState(() {});
-                      },
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _refreshHomeContent(WidgetRef ref) async {
     await refreshPublicContent(ref);
     await Future.wait([
       ref.refresh(audioListProvider.future),
       ref.refresh(videoListProvider.future),
       ref.refresh(newsListProvider.future),
+      ref.refresh(knowledgeListProvider.future),
       ref.refresh(dailyQuotesProvider.future),
       ref.refresh(quoteBackgroundsProvider.future),
       ref.refresh(homeBannersProvider.future),
@@ -480,6 +406,221 @@ class _EmptyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(leading: Icon(icon), title: Text(label)),
+    );
+  }
+}
+
+class ArticleCollectionScreen extends StatefulWidget {
+  const ArticleCollectionScreen({required this.title, required this.items, super.key});
+
+  final String title;
+  final List<NewsItem> items;
+
+  @override
+  State<ArticleCollectionScreen> createState() => _ArticleCollectionScreenState();
+}
+
+class _ArticleCollectionScreenState extends State<ArticleCollectionScreen> {
+  String _query = '';
+  String? _categoryFilter;
+  String? _sourceFilter;
+  _NewsSortOrder _sortOrder = _NewsSortOrder.newest;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleItems = _sortArticles(_filterArticles(widget.items), _sortOrder);
+    final categories = widget.items.map((item) => item.category).toSet().toList();
+    final sources = widget.items.map((item) => item.source).toSet().toList();
+    final filterLabel = [?_categoryFilter, ?_sourceFilter].isEmpty
+        ? 'Tất cả'
+        : [?_categoryFilter, ?_sourceFilter].join(' • ');
+
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 120),
+        children: [
+          _NewsSearchControls(
+            query: _query,
+            filterLabel: filterLabel,
+            sortOrder: _sortOrder,
+            onQueryChanged: (value) => setState(() => _query = value),
+            onFilterPressed: () => _showFilterSheet(categories, sources),
+            onSortChanged: (value) => setState(() => _sortOrder = value),
+          ),
+          const SizedBox(height: 18),
+          if (visibleItems.isEmpty)
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.article_outlined),
+                title: Text('Không tìm thấy bài viết phù hợp'),
+              ),
+            ),
+          for (final item in visibleItems) ...[
+            _NewsListTile(
+              item: item,
+              onTap: () => _showArticleDetail(context, item),
+              onShare: item.shareEnabled ? () => _showShareSheet(context, item) : null,
+            ),
+            const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<NewsItem> _filterArticles(List<NewsItem> items) {
+    final query = _query.trim().toLowerCase();
+    return items.where((item) {
+      final matchesQuery =
+          query.isEmpty ||
+          item.title.toLowerCase().contains(query) ||
+          item.category.toLowerCase().contains(query) ||
+          item.source.toLowerCase().contains(query) ||
+          item.summary.toLowerCase().contains(query) ||
+          item.content.toLowerCase().contains(query);
+      final matchesCategory = _categoryFilter == null || item.category == _categoryFilter;
+      final matchesSource = _sourceFilter == null || item.source == _sourceFilter;
+      return matchesQuery && matchesCategory && matchesSource;
+    }).toList();
+  }
+
+  List<NewsItem> _sortArticles(List<NewsItem> items, _NewsSortOrder order) {
+    final sorted = [...items];
+    sorted.sort((a, b) {
+      return switch (order) {
+        _NewsSortOrder.oldest => a.publishedAt.compareTo(b.publishedAt),
+        _NewsSortOrder.popular => b.viewCount.compareTo(a.viewCount),
+        _NewsSortOrder.newest => b.publishedAt.compareTo(a.publishedAt),
+      };
+    });
+    return sorted;
+  }
+
+  void _showFilterSheet(List<String> categories, List<String> sources) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(18),
+            shrinkWrap: true,
+            children: [
+              Text('Bộ lọc', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              FilterChip(
+                label: const Text('Tất cả'),
+                selected: _categoryFilter == null && _sourceFilter == null,
+                onSelected: (_) {
+                  setSheetState(() {
+                    _categoryFilter = null;
+                    _sourceFilter = null;
+                  });
+                  setState(() {});
+                },
+              ),
+              const SizedBox(height: 12),
+              Text('Danh mục', style: Theme.of(context).textTheme.titleMedium),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final category in categories)
+                    FilterChip(
+                      label: Text(category),
+                      selected: _categoryFilter == category,
+                      onSelected: (_) {
+                        setSheetState(() => _categoryFilter = _categoryFilter == category ? null : category);
+                        setState(() {});
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text('Nguồn', style: Theme.of(context).textTheme.titleMedium),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final source in sources)
+                    FilterChip(
+                      label: Text(source),
+                      selected: _sourceFilter == source,
+                      onSelected: (_) {
+                        setSheetState(() => _sourceFilter = _sourceFilter == source ? null : source);
+                        setState(() {});
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showArticleDetail(BuildContext context, NewsItem item) {
+    unawaited(apiClient.post('/news/${item.id}/view', {}));
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: .78,
+          maxChildSize: .94,
+          builder: (context, controller) {
+            return ListView(
+              controller: controller,
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+              children: [
+                if (item.imageUrl != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Image.network(item.imageUrl!, height: 190, fit: BoxFit.cover),
+                  ),
+                const SizedBox(height: 16),
+                Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                Text(
+                  '${item.category} • ${DateFormat('dd/MM/yyyy').format(item.publishedAt)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 14),
+                if (item.summary.trim().isNotEmpty)
+                  Text(
+                    item.summary,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(height: 1.45, fontWeight: FontWeight.w700),
+                  ),
+                const SizedBox(height: 14),
+                RichContent(content: item.content),
+                if (item.shareEnabled) ...[
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: () => _showShareSheet(context, item),
+                    icon: const Icon(Icons.share_outlined),
+                    label: const Text('Chia sẻ bài này'),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showShareSheet(BuildContext context, NewsItem item) {
+    final link = item.link ?? 'Pháp Tâm - ${item.title}';
+    unawaited(
+      SharePlus.instance.share(
+        ShareParams(
+          text: '${item.title}\n$link\n\nChia sẻ từ ứng dụng Pháp Tâm',
+          subject: item.title,
+        ),
+      ),
     );
   }
 }

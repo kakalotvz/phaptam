@@ -339,7 +339,7 @@ async function extractDocxText(file: File) {
     .join('\n');
 }
 
-type Section = 'overview' | 'audio' | 'scripture' | 'reading' | 'reminder' | 'video' | 'meditation' | 'news' | 'rss' | 'quote' | 'banner' | 'users' | 'feedback' | 'settings';
+type Section = 'overview' | 'audio' | 'scripture' | 'reading' | 'reminder' | 'video' | 'meditation' | 'news' | 'knowledge' | 'quote' | 'users' | 'feedback' | 'settings';
 
 type DataState = {
   overview: Record<string, number>;
@@ -356,6 +356,8 @@ type DataState = {
   rss: RssSource[];
   newsCategories: NewsCategory[];
   news: NewsItem[];
+  knowledgeCategories: NewsCategory[];
+  knowledge: NewsItem[];
   quotes: QuoteRecord[];
   quoteBackgrounds: QuoteBackground[];
   quoteRotation: QuoteRotation;
@@ -379,6 +381,8 @@ const emptyData: DataState = {
   rss: [],
   newsCategories: [],
   news: [],
+  knowledgeCategories: [],
+  knowledge: [],
   quotes: [],
   quoteBackgrounds: [],
   quoteRotation: { enabled: false, paused: false, quoteIds: [], startDate: '', offset: 0, currentQuoteId: null },
@@ -396,9 +400,8 @@ const nav = [
   { id: 'video', label: 'Video giảng', icon: Clapperboard },
   { id: 'meditation', label: 'Thiền', icon: Pause },
   { id: 'news', label: 'Tin tức', icon: Newspaper },
-  { id: 'rss', label: 'Nguồn RSS', icon: Newspaper },
+  { id: 'knowledge', label: 'Kiến thức', icon: BookOpenText },
   { id: 'quote', label: 'Trích dẫn', icon: Quote },
-  { id: 'banner', label: 'Banner', icon: Image },
   { id: 'users', label: 'Tài khoản', icon: ShieldCheck },
   { id: 'feedback', label: 'Góp ý', icon: MessageSquareText },
   { id: 'settings', label: 'Cấu hình', icon: Settings },
@@ -568,7 +571,8 @@ function App() {
 
   const getHashSection = (): Section => {
     const hash = window.location.hash.slice(1);
-    const validSections: Section[] = ['overview', 'audio', 'video', 'scripture', 'reading', 'reminder', 'news', 'quote', 'banner', 'meditation', 'rss', 'users', 'feedback', 'settings'];
+    if (hash === 'rss' || hash === 'banner') return 'settings';
+    const validSections: Section[] = ['overview', 'audio', 'video', 'scripture', 'reading', 'reminder', 'news', 'knowledge', 'quote', 'meditation', 'users', 'feedback', 'settings'];
     return validSections.includes(hash as Section) ? (hash as Section) : 'overview';
   };
 
@@ -616,6 +620,8 @@ function App() {
         rss,
         newsCategories,
         news,
+        knowledgeCategories,
+        knowledge,
         quotes,
         quoteBackgrounds,
         quoteRotation,
@@ -635,8 +641,10 @@ function App() {
         safe(() => api.videos(), []),
         safe(() => api.meditationPrograms(), []),
         safe(() => api.rss(), []),
-        safe(() => api.newsCategories(), []),
-        safe(() => api.news(), []),
+        safe(() => api.newsCategories('NEWS'), []),
+        safe(() => api.news('NEWS'), []),
+        safe(() => api.newsCategories('KNOWLEDGE'), []),
+        safe(() => api.news('KNOWLEDGE'), []),
         safe(() => api.quotes(), []),
         safe(() => api.quoteBackgrounds(), []),
         safe(() => api.quoteRotation(), { enabled: false, paused: false, quoteIds: [], startDate: '', offset: 0, currentQuoteId: null }),
@@ -660,6 +668,8 @@ function App() {
         rss,
         newsCategories,
         news,
+        knowledgeCategories,
+        knowledge,
         quotes,
         quoteBackgrounds,
         quoteRotation,
@@ -726,9 +736,8 @@ function App() {
     ['reminder', 'Lịch nhắc tụng kinh', <CalendarClock size={16} />],
     ['meditation', 'Chương trình thiền', <List size={16} />],
     ['news', 'Tin tức', <Newspaper size={16} />],
+    ['knowledge', 'Kiến thức', <BookOpenText size={16} />],
     ['quote', 'Trích dẫn', <Quote size={16} />],
-    ['banner', 'Banner', <Image size={16} />],
-    ['rss', 'RSS Nguồn', <RefreshCcw size={16} />],
     ['users', 'Người dùng', <FileText size={16} />],
     ['feedback', 'Phản hồi', <MessageSquareText size={16} />],
     ['settings', 'Cài đặt', <Settings size={16} />],
@@ -784,13 +793,12 @@ function App() {
               {section === 'reminder' && <ScriptureReminderManager data={data} />}
               {section === 'video' && <VideoManager data={data} run={run} />}
               {section === 'meditation' && <MeditationManager data={data} run={run} />}
-              {section === 'news' && <NewsManager data={data} run={run} />}
-              {section === 'rss' && <RssManager data={data} run={run} />}
+              {section === 'news' && <ArticleManager data={data} run={run} contentType="NEWS" />}
+              {section === 'knowledge' && <ArticleManager data={data} run={run} contentType="KNOWLEDGE" />}
               {section === 'quote' && <QuoteManager data={data} run={run} />}
-              {section === 'banner' && <BannerManager data={data} run={run} />}
               {section === 'users' && <UserManager data={data} run={run} />}
               {section === 'feedback' && <FeedbackManager data={data} run={run} />}
-              {section === 'settings' && <SettingsPanel onSaved={load} />}
+              {section === 'settings' && <SettingsPanel data={data} run={run} onSaved={load} />}
             </div>
           )}
         </main>
@@ -809,7 +817,9 @@ function Overview({ data }: { data: DataState }) {
     ['Video', data.overview.videoCount ?? 0, Clapperboard],
     ['Bài Thiền', data.overview.meditationProgramCount ?? 0, Pause],
     ['Tin tức', data.overview.newsCount ?? 0, Newspaper],
+    ['Kiến thức', data.overview.knowledgeCount ?? 0, BookOpenText],
     ['Danh mục tin', data.overview.newsCategoryCount ?? 0, Newspaper],
+    ['Danh mục kiến thức', data.overview.knowledgeCategoryCount ?? 0, BookOpenText],
     ['Nguồn RSS', data.overview.rssCount ?? 0, Newspaper],
     ['Tài khoản', data.overview.userCount ?? 0, ShieldCheck],
     ['Góp ý', data.overview.feedbackCount ?? 0, MessageSquareText],
@@ -4214,7 +4224,7 @@ function bbcodeInlineToHtml(value: string) {
     .replace(/\[url\](https?:\/\/[\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noreferrer">$1</a>');
 }
 
-function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
+function ArticleManager({ data, run, contentType }: { data: DataState; run: RunAction; contentType: 'NEWS' | 'KNOWLEDGE' }) {
   const [editingCategory, setEditingCategory] = useState<NewsCategory | null>(null);
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -4224,6 +4234,11 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const [link, setLink] = useState('');
   const [shareEnabled, setShareEnabled] = useState(true);
   const [editingNewsId, setEditingNewsId] = useState('');
+  const isKnowledge = contentType === 'KNOWLEDGE';
+  const articleLabel = isKnowledge ? 'kiến thức' : 'tin tức';
+  const articleTitle = isKnowledge ? 'Kiến thức' : 'Tin tức';
+  const categories = isKnowledge ? data.knowledgeCategories : data.newsCategories;
+  const items = isKnowledge ? data.knowledge : data.news;
   const savedNewsDraftRef = useRef(richDraftSnapshot({ title: '', summary: '', content: '', categoryId: '', imageUrl: '', link: '', shareEnabled: true }));
   const newsDraftValue = useMemo<RichContentDraft>(
     () => ({ title, summary, content, categoryId, imageUrl, link, shareEnabled }),
@@ -4232,7 +4247,7 @@ function NewsManager({ data, run }: { data: DataState; run: RunAction }) {
   const newsDraftSnapshot = useMemo(() => richDraftSnapshot(newsDraftValue), [newsDraftValue]);
   const hasNewsDraftContent = Boolean(title.trim() || summary.trim() || content.trim() || categoryId || imageUrl.trim() || link.trim());
   const newsDraft = useAdminContentDraft({
-    key: `news:${editingNewsId || 'new'}`,
+    key: `${contentType.toLowerCase()}:${editingNewsId || 'new'}`,
     value: newsDraftValue,
     active: hasNewsDraftContent && newsDraftSnapshot !== savedNewsDraftRef.current,
   });
@@ -4287,26 +4302,26 @@ function editNews(row: NewsItem) {
   return (
     <div className="single-column">
       <div className="two-column">
-        <Panel title="Tạo danh mục tin tức">
+        <Panel title={`Tạo danh mục ${articleLabel}`}>
           <SmartForm
             fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
             onSubmit={async (values) => {
               const name = await confirmDuplicateCategoryName({
                 name: values.name,
-                categories: data.newsCategories,
+                categories,
               });
               if (!name) return false;
-              return run(() => api.create('/admin/news-category', { ...values, name }), 'Đã tạo danh mục tin tức');
+              return run(() => api.create('/admin/news-category', { ...values, name, contentType }), `Đã tạo danh mục ${articleLabel}`);
             }}
           />
         </Panel>
-        <Panel title="Danh mục tin tức">
+        <Panel title={`Danh mục ${articleLabel}`}>
           <Table
-            rows={data.newsCategories}
+            rows={categories}
             columns={[
               ['name', 'Tên'],
               ['description', 'Mô tả'],
-              [(row: NewsCategory) => row._count?.items ?? 0, 'Số tin'],
+              [(row: NewsCategory) => row._count?.items ?? 0, isKnowledge ? 'Số bài' : 'Số tin'],
               [
                 (row: NewsCategory) => (
                   <button className="ghost" type="button" onClick={() => editCategory(row)}>
@@ -4317,40 +4332,40 @@ function editNews(row: NewsItem) {
                 'Thao tác',
               ],
             ]}
-            onDelete={(row) => run(() => api.remove(`/admin/news-category/${row.id}`), 'Đã xóa danh mục tin')}
+            onDelete={(row) => run(() => api.remove(`/admin/news-category/${row.id}`), `Đã xóa danh mục ${articleLabel}`)}
           />
         </Panel>
       </div>
 
-      <Panel title="Tạo tin riêng">
+      <Panel title={editingNewsId ? `Sửa ${articleLabel}` : `Tạo ${articleLabel}`}>
         <div className="news-editor">
           {editingNewsId && (
             <div className="scripture-form-heading span">
               <div>
-                <strong>Đang sửa tin</strong>
-                <span>Nội dung sẽ được cập nhật vào tin đã chọn.</span>
+                <strong>Đang sửa {articleLabel}</strong>
+                <span>Nội dung sẽ được cập nhật vào bài đã chọn.</span>
               </div>
               <button className="ghost" type="button" onClick={resetNewsForm}>
-                Tạo tin mới
+                Tạo mới
               </button>
             </div>
           )}
           <DraftControls
             className="span"
-            label="tin tức"
+            label={articleLabel}
             controller={newsDraft}
             canSave={hasNewsDraftContent}
             onRestore={restoreNewsDraft}
           />
           <label>
             Tiêu đề
-            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Tiêu đề tin tức" />
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={`Tiêu đề ${articleLabel}`} />
           </label>
           <label>
             Danh mục
             <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
               <option value="">Không chọn</option>
-              {data.newsCategories.map((item) => (
+              {categories.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
                 </option>
@@ -4374,7 +4389,7 @@ function editNews(row: NewsItem) {
             <RichTextEditor
               value={content}
               onChange={setContent}
-              placeholder="Viết nội dung tin tức"
+              placeholder={`Viết nội dung ${articleLabel}`}
               imageUploadKind="images/news"
             />
           </div>
@@ -4396,13 +4411,14 @@ function editNews(row: NewsItem) {
                 categoryId,
                 shareEnabled,
                 sourceType: 'MANUAL',
+                contentType,
               };
               const ok = await run(
                 () =>
                   editingNewsId
                     ? api.update(`/admin/news/${editingNewsId}`, payload)
                     : api.create('/admin/news', payload),
-                editingNewsId ? 'Đã cập nhật tin tức' : 'Đã tạo tin riêng',
+                editingNewsId ? `Đã cập nhật ${articleLabel}` : `Đã tạo ${articleLabel}`,
               );
               if (ok) {
                 newsDraft.clearDraft();
@@ -4411,19 +4427,19 @@ function editNews(row: NewsItem) {
             }}
           >
             <Save size={16} />
-            {editingNewsId ? 'Cập nhật tin' : 'Lưu tin'}
+            {editingNewsId ? `Cập nhật ${articleTitle}` : `Lưu ${articleTitle}`}
           </button>
         </div>
       </Panel>
 
-      <Panel title="Danh sách tin tức">
+      <Panel title={`Danh sách ${articleLabel}`}>
         <Table
-          rows={data.news}
+          rows={items}
           columns={[
             ['imageUrl', 'Ảnh'],
             ['title', 'Tiêu đề'],
             [(row: NewsItem) => row.category?.name ?? '-', 'Danh mục'],
-            [(row: NewsItem) => (row.sourceType === 'MANUAL' ? 'Tin riêng' : 'RSS'), 'Nguồn'],
+            [(row: NewsItem) => (row.sourceType === 'MANUAL' ? (isKnowledge ? 'Bài hướng dẫn' : 'Tin riêng') : 'RSS'), 'Nguồn'],
             [(row: NewsItem) => (row.shareEnabled ? 'Cho phép' : 'Tắt'), 'Chia sẻ'],
             [(row: NewsItem) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
             [(row: NewsItem) => new Date(row.publishedAt).toLocaleDateString('vi-VN'), 'Ngày đăng'],
@@ -4447,18 +4463,18 @@ function editNews(row: NewsItem) {
               'Thao tác',
             ],
           ]}
-          onDelete={(row) => run(() => api.remove(`/admin/news/${row.id}`), 'Đã xóa tin')}
+          onDelete={(row) => run(() => api.remove(`/admin/news/${row.id}`), `Đã xóa ${articleLabel}`)}
         />
       </Panel>
       {editingCategory && (
         <CategoryEditModal
-          title="Sửa danh mục tin tức"
+          title={`Sửa danh mục ${articleLabel}`}
           category={editingCategory}
           onClose={() => setEditingCategory(null)}
           onSave={async (values) => {
             const saved = await run(
               () => api.update(`/admin/news-category/${editingCategory.id}`, values),
-              'Đã cập nhật danh mục tin',
+              `Đã cập nhật danh mục ${articleLabel}`,
             );
             if (saved) setEditingCategory(null);
           }}
@@ -5184,7 +5200,7 @@ function feedbackDetail(row: Feedback) {
   return { source: 'Khách', name: 'Khách/không xác định', email: '', message: row.content };
 }
 
-function SettingsPanel({ onSaved }: { onSaved: () => void }) {
+function SettingsPanel({ data, run, onSaved }: { data: DataState; run: RunAction; onSaved: () => void }) {
   const [value, setValue] = useState(getApiBaseUrl());
   const settings = React.useContext(SettingsContext);
   const [contentPageSize, setContentPageSize] = useState(String(settings.contentPageSize));
@@ -5240,6 +5256,8 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
           </button>
         </form>
       </Panel>
+      <BannerManager data={data} run={run} />
+      <RssManager data={data} run={run} />
     </div>
   );
 }

@@ -75,6 +75,7 @@ export type NewsCategory = {
   id: string;
   name: string;
   description?: string;
+  contentType?: 'NEWS' | 'KNOWLEDGE';
   _count?: { items: number };
 };
 
@@ -89,6 +90,7 @@ export type NewsItem = {
   category?: NewsCategory;
   sourceName?: string;
   sourceType: 'RSS' | 'MANUAL';
+  contentType?: 'NEWS' | 'KNOWLEDGE';
   shareEnabled: boolean;
   viewCount: number;
   publishedAt: string;
@@ -301,8 +303,8 @@ export const api = {
     }),
   videos: () => request<Video[]>('/admin/video'),
   rss: () => request<RssSource[]>('/admin/rss'),
-  newsCategories: () => request<NewsCategory[]>('/admin/news-category'),
-  news: () => request<NewsItem[]>('/admin/news'),
+  newsCategories: (contentType: 'NEWS' | 'KNOWLEDGE' = 'NEWS') => request<NewsCategory[]>(`/admin/news-category?content_type=${contentType}`),
+  news: (contentType: 'NEWS' | 'KNOWLEDGE' = 'NEWS') => request<NewsItem[]>(`/admin/news?content_type=${contentType}`),
   scriptureReminders: async () => {
     try {
       return await request<ScriptureReminder[]>('/admin/scripture-reminder');

@@ -27,6 +27,11 @@ enum NewsSourceType {
   MANUAL
 }
 
+enum NewsContentType {
+  NEWS
+  KNOWLEDGE
+}
+
 enum ReminderResumeMode {
   RESUME
   RESTART
@@ -253,9 +258,12 @@ model NewsCategory {
   id          String     @id @default(uuid())
   name        String
   description String?
+  contentType NewsContentType @default(NEWS) @map("content_type")
   items       NewsItem[]
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@index([contentType])
 }
 
 model NewsItem {
@@ -269,6 +277,7 @@ model NewsItem {
   imageUrl     String?        @map("image_url")
   sourceName   String?        @map("source_name")
   sourceType   NewsSourceType @default(RSS) @map("source_type")
+  contentType  NewsContentType @default(NEWS) @map("content_type")
   shareEnabled Boolean        @default(true) @map("share_enabled")
   viewCount    Int            @default(0) @map("view_count")
   publishedAt  DateTime       @default(now()) @map("published_at")
@@ -277,6 +286,7 @@ model NewsItem {
   category     NewsCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([categoryId])
+  @@index([contentType])
   @@index([publishedAt])
 }
 

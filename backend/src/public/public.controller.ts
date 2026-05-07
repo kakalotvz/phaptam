@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { NewsContentType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 const scriptureCategoryInclude = {
@@ -210,16 +211,29 @@ export class PublicController {
 
   @Get('news/categories')
   newsCategories() {
-    return this.prisma.newsCategory.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.newsCategory.findMany({ where: { contentType: NewsContentType.NEWS }, orderBy: { createdAt: 'desc' } });
   }
 
   @Get('news')
   news(@Query('category_id') categoryId?: string) {
     return this.prisma.newsItem.findMany({
-      where: { categoryId },
+      where: { categoryId, contentType: NewsContentType.NEWS },
       orderBy: { publishedAt: 'desc' },
       include: { category: true },
-      take: 30,
+    });
+  }
+
+  @Get('knowledge/categories')
+  knowledgeCategories() {
+    return this.prisma.newsCategory.findMany({ where: { contentType: NewsContentType.KNOWLEDGE }, orderBy: { createdAt: 'desc' } });
+  }
+
+  @Get('knowledge')
+  knowledge(@Query('category_id') categoryId?: string) {
+    return this.prisma.newsItem.findMany({
+      where: { categoryId, contentType: NewsContentType.KNOWLEDGE },
+      orderBy: { publishedAt: 'desc' },
+      include: { category: true },
     });
   }
 

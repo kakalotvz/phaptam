@@ -56,6 +56,16 @@ final newsListProvider = FutureProvider<List<NewsItem>>((ref) async {
       .toList();
 });
 
+final knowledgeListProvider = FutureProvider<List<NewsItem>>((ref) async {
+  _refreshPeriodically(ref);
+  final items = await PublicListCache.getList(ref, '/knowledge');
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(NewsItem.fromJson)
+      .where((item) => item.title.trim().isNotEmpty)
+      .toList();
+});
+
 final meditationProgramsProvider = FutureProvider<List<MeditationProgram>>((
   ref,
 ) async {
@@ -130,6 +140,7 @@ const publicCachePaths = [
   '/audio',
   '/video',
   '/news',
+  '/knowledge',
   '/meditation',
   '/quotes',
   '/quote-backgrounds',
@@ -144,6 +155,7 @@ Future<void> refreshPublicContent(WidgetRef ref) async {
   ref.invalidate(audioListProvider);
   ref.invalidate(videoListProvider);
   ref.invalidate(newsListProvider);
+  ref.invalidate(knowledgeListProvider);
   ref.invalidate(meditationProgramsProvider);
   ref.invalidate(dailyQuotesProvider);
   ref.invalidate(quoteBackgroundsProvider);
