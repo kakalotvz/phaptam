@@ -4245,7 +4245,7 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
     [title, summary, content, categoryId, imageUrl, link, shareEnabled],
   );
   const newsDraftSnapshot = useMemo(() => richDraftSnapshot(newsDraftValue), [newsDraftValue]);
-  const hasNewsDraftContent = Boolean(title.trim() || summary.trim() || content.trim() || categoryId || imageUrl.trim() || link.trim());
+  const hasNewsDraftContent = Boolean(title.trim() || summary.trim() || content.trim() || (!isKnowledge && categoryId) || imageUrl.trim() || link.trim());
   const newsDraft = useAdminContentDraft({
     key: `${contentType.toLowerCase()}:${editingNewsId || 'new'}`,
     value: newsDraftValue,
@@ -4256,20 +4256,20 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
     setEditingCategory(row);
   }
 
-function editNews(row: NewsItem) {
+  function editNews(row: NewsItem) {
     setEditingNewsId(row.id);
     setTitle(row.title);
     setSummary(row.summary ?? '');
     setImageUrl(row.imageUrl ?? '');
     setLink(row.link ?? '');
     setContent(row.content ?? '');
-    setCategoryId(row.categoryId ?? '');
+    setCategoryId(isKnowledge ? '' : row.categoryId ?? '');
     setShareEnabled(row.shareEnabled);
     savedNewsDraftRef.current = richDraftSnapshot({
       title: row.title,
       summary: row.summary ?? '',
       content: row.content ?? '',
-      categoryId: row.categoryId ?? '',
+      categoryId: isKnowledge ? '' : row.categoryId ?? '',
       imageUrl: row.imageUrl ?? '',
       link: row.link ?? '',
       shareEnabled: row.shareEnabled,
@@ -4293,49 +4293,80 @@ function editNews(row: NewsItem) {
     setTitle(draft.title ?? '');
     setSummary(draft.summary ?? '');
     setContent(draft.content ?? '');
-    setCategoryId(draft.categoryId ?? '');
+    setCategoryId(isKnowledge ? '' : draft.categoryId ?? '');
     setImageUrl(draft.imageUrl ?? '');
     setLink(draft.link ?? '');
     setShareEnabled(draft.shareEnabled ?? true);
   }
 
+  const articleColumns: Array<[keyof NewsItem | ((row: NewsItem) => React.ReactNode), string]> = [
+    ['imageUrl', 'Ảnh'],
+    ['title', 'Tiêu đề'],
+    ...(!isKnowledge ? [[(row: NewsItem) => row.category?.name ?? '-', 'Danh mục'] as [((row: NewsItem) => React.ReactNode), string]] : []),
+    [(row: NewsItem) => (row.sourceType === 'MANUAL' ? (isKnowledge ? 'Bài hướng dẫn' : 'Tin riêng') : 'RSS'), 'Nguồn'],
+    [(row: NewsItem) => (row.shareEnabled ? 'Cho phép' : 'Tắt'), 'Chia sẻ'],
+    [(row: NewsItem) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
+    [(row: NewsItem) => new Date(row.publishedAt).toLocaleDateString('vi-VN'), 'Ngày đăng'],
+    [
+      (row: NewsItem) => (
+        <div className="action-group">
+          <button className="ghost" type="button" onClick={() => editNews(row)}>
+            <Pencil size={15} />
+            Sửa
+          </button>
+          <button
+            className="ghost"
+            type="button"
+            onClick={() => run(() => api.update(`/admin/news/${row.id}`, { shareEnabled: !row.shareEnabled }), row.shareEnabled ? 'Đã tắt chia sẻ' : 'Đã bật chia sẻ')}
+          >
+            <Share2 size={15} />
+            {row.shareEnabled ? 'Tắt chia sẻ' : 'Bật chia sẻ'}
+          </button>
+        </div>
+      ),
+      'Thao tác',
+    ],
+  ];
+
   return (
     <div className="single-column">
-      <div className="two-column">
-        <Panel title={`Tạo danh mục ${articleLabel}`}>
-          <SmartForm
-            fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
-            onSubmit={async (values) => {
-              const name = await confirmDuplicateCategoryName({
-                name: values.name,
-                categories,
-              });
-              if (!name) return false;
-              return run(() => api.create('/admin/news-category', { ...values, name, contentType }), `Đã tạo danh mục ${articleLabel}`);
-            }}
-          />
-        </Panel>
-        <Panel title={`Danh mục ${articleLabel}`}>
-          <Table
-            rows={categories}
-            columns={[
-              ['name', 'Tên'],
-              ['description', 'Mô tả'],
-              [(row: NewsCategory) => row._count?.items ?? 0, isKnowledge ? 'Số bài' : 'Số tin'],
-              [
-                (row: NewsCategory) => (
-                  <button className="ghost" type="button" onClick={() => editCategory(row)}>
-                    <Pencil size={15} />
-                    Sửa
-                  </button>
-                ),
-                'Thao tác',
-              ],
-            ]}
-            onDelete={(row) => run(() => api.remove(`/admin/news-category/${row.id}`), `Đã xóa danh mục ${articleLabel}`)}
-          />
-        </Panel>
-      </div>
+      {!isKnowledge && (
+        <div className="two-column">
+          <Panel title={`Tạo danh mục ${articleLabel}`}>
+            <SmartForm
+              fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
+              onSubmit={async (values) => {
+                const name = await confirmDuplicateCategoryName({
+                  name: values.name,
+                  categories,
+                });
+                if (!name) return false;
+                return run(() => api.create('/admin/news-category', { ...values, name, contentType }), `Đã tạo danh mục ${articleLabel}`);
+              }}
+            />
+          </Panel>
+          <Panel title={`Danh mục ${articleLabel}`}>
+            <Table
+              rows={categories}
+              columns={[
+                ['name', 'Tên'],
+                ['description', 'Mô tả'],
+                [(row: NewsCategory) => row._count?.items ?? 0, 'Số tin'],
+                [
+                  (row: NewsCategory) => (
+                    <button className="ghost" type="button" onClick={() => editCategory(row)}>
+                      <Pencil size={15} />
+                      Sửa
+                    </button>
+                  ),
+                  'Thao tác',
+                ],
+              ]}
+              onDelete={(row) => run(() => api.remove(`/admin/news-category/${row.id}`), `Đã xóa danh mục ${articleLabel}`)}
+            />
+          </Panel>
+        </div>
+      )}
 
       <Panel title={editingNewsId ? `Sửa ${articleLabel}` : `Tạo ${articleLabel}`}>
         <div className="news-editor">
@@ -4361,17 +4392,19 @@ function editNews(row: NewsItem) {
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={`Tiêu đề ${articleLabel}`} />
           </label>
-          <label>
-            Danh mục
-            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-              <option value="">Không chọn</option>
-              {categories.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!isKnowledge && (
+            <label>
+              Danh mục
+              <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+                <option value="">Không chọn</option>
+                {categories.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="span">
             Tóm tắt
             <textarea value={summary} onChange={(event) => setSummary(event.target.value)} />
@@ -4408,7 +4441,7 @@ function editNews(row: NewsItem) {
                 content,
                 imageUrl,
                 link,
-                categoryId,
+                categoryId: isKnowledge ? '' : categoryId,
                 shareEnabled,
                 sourceType: 'MANUAL',
                 contentType,
@@ -4435,34 +4468,7 @@ function editNews(row: NewsItem) {
       <Panel title={`Danh sách ${articleLabel}`}>
         <Table
           rows={items}
-          columns={[
-            ['imageUrl', 'Ảnh'],
-            ['title', 'Tiêu đề'],
-            [(row: NewsItem) => row.category?.name ?? '-', 'Danh mục'],
-            [(row: NewsItem) => (row.sourceType === 'MANUAL' ? (isKnowledge ? 'Bài hướng dẫn' : 'Tin riêng') : 'RSS'), 'Nguồn'],
-            [(row: NewsItem) => (row.shareEnabled ? 'Cho phép' : 'Tắt'), 'Chia sẻ'],
-            [(row: NewsItem) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
-            [(row: NewsItem) => new Date(row.publishedAt).toLocaleDateString('vi-VN'), 'Ngày đăng'],
-            [
-              (row: NewsItem) => (
-                <div className="action-group">
-                  <button className="ghost" type="button" onClick={() => editNews(row)}>
-                    <Pencil size={15} />
-                    Sửa
-                  </button>
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() => run(() => api.update(`/admin/news/${row.id}`, { shareEnabled: !row.shareEnabled }), row.shareEnabled ? 'Đã tắt chia sẻ' : 'Đã bật chia sẻ')}
-                  >
-                    <Share2 size={15} />
-                    {row.shareEnabled ? 'Tắt chia sẻ' : 'Bật chia sẻ'}
-                  </button>
-                </div>
-              ),
-              'Thao tác',
-            ],
-          ]}
+          columns={articleColumns}
           onDelete={(row) => run(() => api.remove(`/admin/news/${row.id}`), `Đã xóa ${articleLabel}`)}
         />
       </Panel>
