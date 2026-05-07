@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 type MediaKind =
   | 'audio'
   | 'audio/library'
+  | 'audio/scripture'
   | 'audio/meditation'
   | 'video'
   | 'video/dharma'
@@ -50,7 +51,7 @@ export class R2Service {
   }
 
   async createPresignedPutUrl(kind: MediaKind, contentType: string) {
-    const extension = contentType.includes('mpeg') ? 'mp3' : contentType.includes('mp4') ? 'mp4' : 'webp';
+    const extension = extensionFromContentType(contentType);
     const key = `${kind}/${randomUUID()}.${extension}`;
     const command = new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType });
     return {
@@ -159,4 +160,17 @@ export class R2Service {
 function parseNumericLimit(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function extensionFromContentType(contentType: string) {
+  if (contentType === 'audio/mpeg') return 'mp3';
+  if (contentType === 'audio/mp4' || contentType === 'audio/x-m4a') return 'm4a';
+  if (contentType === 'audio/aac') return 'aac';
+  if (contentType === 'audio/ogg' || contentType === 'application/ogg') return 'ogg';
+  if (contentType === 'audio/webm') return 'webm';
+  if (contentType === 'audio/wav' || contentType === 'audio/x-wav') return 'wav';
+  if (contentType === 'audio/flac' || contentType === 'audio/x-flac') return 'flac';
+  if (contentType === 'video/mp4') return 'mp4';
+  if (contentType.startsWith('audio/')) return contentType.slice('audio/'.length).replace(/[^a-z0-9]/gi, '') || 'audio';
+  return 'webp';
 }

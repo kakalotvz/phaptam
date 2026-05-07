@@ -300,6 +300,7 @@ export class AdminController {
     data: {
       title: string;
       description?: string;
+      audioUrl?: string;
       backgroundImageUrl?: string;
       categoryId?: string;
       lines: Array<{ content: string; start_time?: number; startTime?: number }>;
@@ -322,6 +323,7 @@ export class AdminController {
         title: data.title,
         kind: 'CHANT',
         description: data.description,
+        audioUrl: data.audioUrl || null,
         backgroundImageUrl: data.backgroundImageUrl,
         categoryId: data.categoryId || null,
         lines: {
@@ -346,11 +348,13 @@ export class AdminController {
     data: {
       title?: string;
       description?: string;
+      audioUrl?: string;
       backgroundImageUrl?: string;
       categoryId?: string;
       lines?: Array<{ content: string; start_time?: number; startTime?: number }>;
     },
   ) {
+    const current = await this.prisma.scripture.findUniqueOrThrow({ where: { id } });
     const lines = data.lines?.map((line) => ({
       content: line.content,
       start_time: Number(line.start_time ?? line.startTime),
@@ -365,7 +369,7 @@ export class AdminController {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       if (lines) {
         await tx.scriptureLine.deleteMany({ where: { scriptureId: id } });
       }
@@ -376,6 +380,7 @@ export class AdminController {
           title: data.title,
           kind: 'CHANT',
           description: data.description,
+          audioUrl: data.audioUrl === undefined ? undefined : data.audioUrl || null,
           backgroundImageUrl: data.backgroundImageUrl,
           categoryId: data.categoryId === undefined ? undefined : data.categoryId || null,
           lines: lines
@@ -394,11 +399,16 @@ export class AdminController {
         },
       });
     });
+    await this.deleteReplacedR2Media([[current.audioUrl, data.audioUrl], [current.backgroundImageUrl, data.backgroundImageUrl]]);
+    return updated;
   }
 
   @Delete('scripture/:id')
-  deleteScripture(@Param('id') id: string) {
-    return this.prisma.scripture.delete({ where: { id } });
+  async deleteScripture(@Param('id') id: string) {
+    const scripture = await this.prisma.scripture.findUniqueOrThrow({ where: { id } });
+    const deleted = await this.prisma.scripture.delete({ where: { id } });
+    await this.r2.deletePublicUrls([scripture.audioUrl, scripture.backgroundImageUrl]);
+    return deleted;
   }
 
   @Get('scripture-reading')

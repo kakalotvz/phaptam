@@ -101,6 +101,7 @@ Nếu trả về `uploadUrl` và `publicUrl`, backend đã kết nối R2.
 Admin hiện upload media mới theo cây thư mục R2:
 
 - Audio kinh/pháp âm -> `/audio/library/{uuid}.mp3`
+- Tiếng thầy tụng theo bài Kinh tụng -> `/audio/scripture/{uuid}.mp3` hoặc các đuôi audio được hỗ trợ như `.m4a`, `.aac`, `.ogg`, `.wav`, `.flac`
 - Audio thiền/âm nền -> `/audio/meditation/{uuid}.mp3`
 - Video pháp thoại -> `/video/dharma/{uuid}.mp4`
 - Ảnh audio -> `/images/audio/{uuid}.webp`

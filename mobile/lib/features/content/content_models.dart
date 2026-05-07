@@ -294,6 +294,7 @@ class Scripture {
     this.kind = 'CHANT',
     this.description,
     this.content,
+    this.audioUrl,
     this.backgroundImageUrl,
     this.categoryId,
     this.category,
@@ -327,6 +328,7 @@ class Scripture {
       title: json['title'] as String? ?? 'Bản Kinh tụng',
       description: json['description'] as String?,
       content: json['content'] as String?,
+      audioUrl: json['audioUrl'] as String?,
       backgroundImageUrl: json['backgroundImageUrl'] as String?,
       categoryId: json['categoryId'] as String?,
       category: category is Map<String, dynamic>
@@ -357,6 +359,7 @@ class Scripture {
   final String title;
   final String? description;
   final String? content;
+  final String? audioUrl;
   final String? backgroundImageUrl;
   final String? categoryId;
   final String? category;

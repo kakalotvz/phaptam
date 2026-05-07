@@ -106,6 +106,7 @@ type LocalContentDraft<T> = { savedAt: string; value: T };
 type ScriptureContentDraft = {
   title: string;
   description: string;
+  audioUrl: string;
   backgroundImageUrl: string;
   categoryId: string;
   rawText: string;
@@ -294,6 +295,7 @@ function normalizeImportedLines(lines: ScriptureLine[]): EditableScriptureLine[]
 function scriptureDraftSnapshot(draft: {
   title: string;
   description: string;
+  audioUrl: string;
   backgroundImageUrl: string;
   categoryId: string;
   rawText: string;
@@ -302,6 +304,7 @@ function scriptureDraftSnapshot(draft: {
   return JSON.stringify({
     title: draft.title.trim(),
     description: draft.description.trim(),
+    audioUrl: draft.audioUrl.trim(),
     backgroundImageUrl: draft.backgroundImageUrl.trim(),
     categoryId: draft.categoryId,
     rawText: draft.rawText.trim(),
@@ -1134,6 +1137,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   const [selectedScriptureId, setSelectedScriptureId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [audioUrl, setAudioUrl] = useState('');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [scriptureStatus, setScriptureStatus] = useState('');
@@ -1142,17 +1146,17 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
   const [lines, setLines] = useState<EditableScriptureLine[]>([]);
   const autoTimingTimer = useRef<number | undefined>(undefined);
   const autoTimingRequest = useRef(0);
-  const savedDraftRef = useRef(scriptureDraftSnapshot({ title: '', description: '', backgroundImageUrl: '', categoryId: '', rawText: '', lines: [] }));
+  const savedDraftRef = useRef(scriptureDraftSnapshot({ title: '', description: '', audioUrl: '', backgroundImageUrl: '', categoryId: '', rawText: '', lines: [] }));
   const currentDraft = useMemo(
-    () => scriptureDraftSnapshot({ title, description, backgroundImageUrl, categoryId, rawText, lines }),
-    [title, description, backgroundImageUrl, categoryId, rawText, lines],
+    () => scriptureDraftSnapshot({ title, description, audioUrl, backgroundImageUrl, categoryId, rawText, lines }),
+    [title, description, audioUrl, backgroundImageUrl, categoryId, rawText, lines],
   );
   const hasUnsavedChanges = currentDraft !== savedDraftRef.current;
   const scriptureDraftValue = useMemo<ScriptureContentDraft>(
-    () => ({ title, description, backgroundImageUrl, categoryId, rawText, lines }),
-    [title, description, backgroundImageUrl, categoryId, rawText, lines],
+    () => ({ title, description, audioUrl, backgroundImageUrl, categoryId, rawText, lines }),
+    [title, description, audioUrl, backgroundImageUrl, categoryId, rawText, lines],
   );
-  const hasScriptureDraftContent = Boolean(title.trim() || description.trim() || backgroundImageUrl.trim() || categoryId || rawText.trim() || lines.length > 0);
+  const hasScriptureDraftContent = Boolean(title.trim() || description.trim() || audioUrl.trim() || backgroundImageUrl.trim() || categoryId || rawText.trim() || lines.length > 0);
   const scriptureDraft = useAdminContentDraft({
     key: `scripture:${selectedScriptureId || 'new'}`,
     value: scriptureDraftValue,
@@ -1201,7 +1205,15 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     setScriptureBusy(true);
     if (!options.quiet) setScriptureStatus(`Đang tự tính thời gian cho ${cleanLines.length} dòng...`);
     try {
-      const generated = await api.generateScriptureTiming({ lines: cleanLines });
+      let audioDuration: number | undefined;
+      if (audioUrl.trim()) {
+        try {
+          audioDuration = await detectMediaDuration(audioUrl.trim(), 'audio');
+        } catch {
+          audioDuration = undefined;
+        }
+      }
+      const generated = await api.generateScriptureTiming({ lines: cleanLines, audioDuration });
       if (requestId !== autoTimingRequest.current) return;
       setLines(generated);
       setRawText(generated.map((line) => line.content).join('\n'));
@@ -1237,6 +1249,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
         const importedLines = normalizeImportedLines(parsed.lines ?? []);
         setTitle(parsed.title ?? title);
         setDescription(parsed.description ?? description);
+        setAudioUrl(parsed.audio_url ?? parsed.audioUrl ?? audioUrl);
         setCategoryId(parsed.category_id ?? parsed.categoryId ?? categoryId);
         setRawText(importedLines.map((line) => line.content).join('\n'));
         setLines(importedLines);
@@ -1263,6 +1276,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     setSelectedScriptureId(scripture.id);
     setTitle(scripture.title);
     setDescription(scripture.description ?? '');
+    setAudioUrl(scripture.audioUrl ?? '');
     setBackgroundImageUrl(scripture.backgroundImageUrl ?? '');
     setCategoryId(scripture.categoryId ?? '');
     setRawText(nextRawText);
@@ -1270,6 +1284,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     savedDraftRef.current = scriptureDraftSnapshot({
       title: scripture.title,
       description: scripture.description ?? '',
+      audioUrl: scripture.audioUrl ?? '',
       backgroundImageUrl: scripture.backgroundImageUrl ?? '',
       categoryId: scripture.categoryId ?? '',
       rawText: nextRawText,
@@ -1287,11 +1302,12 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     setSelectedScriptureId('');
     setTitle('');
     setDescription('');
+    setAudioUrl('');
     setBackgroundImageUrl('');
     setCategoryId('');
     setRawText('');
     setLines([]);
-    savedDraftRef.current = scriptureDraftSnapshot({ title: '', description: '', backgroundImageUrl: '', categoryId: '', rawText: '', lines: [] });
+    savedDraftRef.current = scriptureDraftSnapshot({ title: '', description: '', audioUrl: '', backgroundImageUrl: '', categoryId: '', rawText: '', lines: [] });
     setScriptureStatus('');
   }
 
@@ -1299,6 +1315,7 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
     const nextLines = normalizeImportedLines(draft.lines ?? []);
     setTitle(draft.title ?? '');
     setDescription(draft.description ?? '');
+    setAudioUrl(draft.audioUrl ?? '');
     setBackgroundImageUrl(draft.backgroundImageUrl ?? '');
     setCategoryId(draft.categoryId ?? '');
     setRawText(draft.rawText ?? nextLines.map((line) => line.content).join('\n'));
@@ -1325,12 +1342,14 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
           (selectedScriptureId ? api.update(`/admin/scripture/${selectedScriptureId}`, {
             title,
             description,
+            audioUrl,
             backgroundImageUrl,
             categoryId,
             lines,
           }) : api.create('/admin/scripture', {
             title,
             description,
+            audioUrl,
             backgroundImageUrl,
             categoryId,
             lines,
@@ -1467,6 +1486,13 @@ function ScriptureManager({ data, run }: { data: DataState; run: RunAction }) {
             <UploadField kind="images/scripture" value={backgroundImageUrl} onUploaded={setBackgroundImageUrl} />
             <small className="field-note">
               Khuyến nghị 1600x2400 hoặc tỷ lệ 2:3 cho ảnh dọc. App sẽ tự phủ kín màn hình từng thiết bị, ảnh có thể được cắt nhẹ ở mép.
+            </small>
+          </label>
+          <label>
+            Tiếng thầy tụng
+            <UploadField kind="audio/scripture" value={audioUrl} onUploaded={setAudioUrl} />
+            <small className="field-note">
+              Upload tệp audio hoặc dán URL .mp3, .m4a, .aac, .ogg, .wav, .flac. App chỉ bật "Tụng cùng thầy" khi bài kinh có tệp này.
             </small>
           </label>
           <label className="span">
@@ -2159,6 +2185,7 @@ function ScriptureRows({ scriptures, onEdit, onDelete }: { scriptures: Scripture
           <div className="reading-item-grid" key={row.id}>
             <div className="reading-item-title">
               <strong>{row.title}</strong>
+              {row.audioUrl?.trim() && <span className="reading-preview-text">Có tiếng thầy tụng</span>}
               <span className="reading-preview-text" title={preview === '-' ? undefined : preview}>
                 {preview}
               </span>
@@ -5398,7 +5425,11 @@ function UploadField({
   onUploaded: (url: string) => void;
 }) {
   const [uploading, setUploading] = useState(false);
-  const accept = kind.startsWith('audio') ? 'audio/mpeg,.mp3' : kind.startsWith('video') ? 'video/mp4,.mp4' : 'image/*,.webp,image/webp';
+  const accept = kind.startsWith('audio')
+    ? 'audio/*,.mp3,.m4a,.aac,.ogg,.oga,.wav,.flac'
+    : kind.startsWith('video')
+      ? 'video/mp4,.mp4'
+      : 'image/*,.webp,image/webp';
 
   async function onFileSelected(file?: File) {
     if (!file) return;
