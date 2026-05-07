@@ -13,6 +13,7 @@ import '../../core/network/paged_public_feed.dart';
 import '../../core/offline/media_downloads.dart';
 import '../../shared/widgets/content_cards.dart';
 import '../../shared/widgets/media_download_button.dart';
+import '../../shared/widgets/paged_list_footer.dart';
 import '../content/content_models.dart';
 
 enum _VideoSortOrder { newest, oldest, popular }
@@ -153,6 +154,12 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
                         const Padding(
                           padding: EdgeInsets.only(top: 8),
                           child: Center(child: CircularProgressIndicator()),
+                        ),
+                      if (_feed.initialized &&
+                          !_feed.hasMore &&
+                          visibleItems.isNotEmpty)
+                        const PagedListFooter(
+                          label: 'Đã tải hết video để xem rồi.',
                         ),
                     ],
                   );

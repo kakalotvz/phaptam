@@ -15,6 +15,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/paged_public_feed.dart';
 import '../../shared/widgets/content_cards.dart';
+import '../../shared/widgets/paged_list_footer.dart';
 import '../../shared/widgets/rich_content.dart';
 import '../audio/audio_screen.dart';
 import '../content/content_models.dart';
@@ -564,6 +565,14 @@ class _ArticleCollectionScreenState extends State<ArticleCollectionScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Center(child: CircularProgressIndicator()),
+              ),
+            if ((_feed?.initialized ?? false) &&
+                !(_feed?.hasMore ?? true) &&
+                visibleItems.isNotEmpty)
+              PagedListFooter(
+                label: widget.title == 'Kiến thức'
+                    ? 'Bạn đã xem hết bài kiến thức rồi.'
+                    : 'Bạn đã xem hết bài viết rồi.',
               ),
           ],
         ),

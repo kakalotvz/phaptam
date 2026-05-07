@@ -9,6 +9,7 @@ import '../../core/offline/media_downloads.dart';
 import '../../core/network/api_client.dart';
 import '../../shared/widgets/content_cards.dart';
 import '../../shared/widgets/media_download_button.dart';
+import '../../shared/widgets/paged_list_footer.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
 
@@ -172,6 +173,8 @@ class _AudioScreenState extends ConsumerState<AudioScreen> {
                   padding: EdgeInsets.only(top: 8),
                   child: Center(child: CircularProgressIndicator()),
                 ),
+              if (_feed.initialized && !_feed.hasMore && audios.isNotEmpty)
+                const PagedListFooter(label: 'Đã tải hết audio để nghe rồi.'),
             ],
           ),
         ),

@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/network/paged_public_feed.dart';
+import '../../shared/widgets/paged_list_footer.dart';
 import '../../shared/widgets/rich_content.dart';
 import '../content/content_models.dart';
 import '../content/content_providers.dart';
@@ -406,6 +407,12 @@ class _ScriptureContentState extends State<_ScriptureContent> {
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Center(child: CircularProgressIndicator()),
+          ),
+        if (!widget.isLoadingMore &&
+            !widget.hasMore &&
+            visibleScriptures.isNotEmpty)
+          const PagedListFooter(
+            label: 'Bạn đã xem hết danh sách Kinh tụng rồi.',
           ),
       ],
     );
@@ -818,13 +825,20 @@ class _ScriptureReadingScreenState
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
                 itemCount:
                     _groupReadings(_feed.items).length +
-                    (_feed.loadingMore || _feed.loadingAll ? 1 : 0),
+                    (_feed.loadingMore || _feed.loadingAll
+                        ? 1
+                        : (!_feed.hasMore && _feed.items.isNotEmpty ? 1 : 0)),
                 separatorBuilder: (context, index) =>
                     const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final groups = _groupReadings(_feed.items);
                   if (index >= groups.length) {
-                    return const Center(child: CircularProgressIndicator());
+                    if (_feed.loadingMore || _feed.loadingAll) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    return const PagedListFooter(
+                      label: 'Bạn đã xem hết danh sách Kinh đọc rồi.',
+                    );
                   }
                   return _ReadingGroupCard(group: groups[index]);
                 },

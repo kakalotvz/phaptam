@@ -1551,6 +1551,22 @@ th {
   border-radius: 14px;
 }
 
+.list-filter-summary {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  margin: 10px 0;
+  color: #7a655b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.list-filter-summary strong {
+  color: #2e2420;
+  font-family: "Noto Serif", "Noto Sans", serif;
+  font-size: 18px;
+}
+
 .reading-archive-summary {
   display: flex;
   flex-wrap: wrap;
