@@ -47,3 +47,7 @@ flutter build apk --release --dart-define=API_BASE_URL=http://208.87.132.135:800
 R2 usage token api cfut_NfQnwSjgou8gNZdHOZcNzHDS4VAisvhsGO6ycMAGd2f18f49zgjt ubjb ukel zaco
 
 Gmail app 
+
+sudo chown -R phaptam:phaptam node_modules
+npx prisma generate
+npx prisma migrate dev --name add_scripture_audio_url
