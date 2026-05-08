@@ -26,6 +26,7 @@ export type Audio = {
   categoryId: string;
   duration: number;
   viewCount: number;
+  createdAt?: string;
   category?: AudioCategory;
 };
 
@@ -61,6 +62,7 @@ export type Video = {
   categoryId: string;
   teacher?: string;
   viewCount: number;
+  createdAt?: string;
   category?: VideoCategory;
 };
 
@@ -154,6 +156,7 @@ export type MeditationProgram = {
   audioUrl?: string;
   imageUrl?: string;
   active: boolean;
+  createdAt?: string;
 };
 
 export type Feedback = {

@@ -1013,6 +1013,9 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
   const [draftQuery, setDraftQuery] = useState('');
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [durationFilter, setDurationFilter] = useState('');
+  const [viewFilter, setViewFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
   const [categoryDraftQuery, setCategoryDraftQuery] = useState('');
   const [categoryQuery, setCategoryQuery] = useState('');
   const [categoryUsageFilter, setCategoryUsageFilter] = useState('');
@@ -1022,8 +1025,8 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
     [audioCategories, categoryQuery, categoryUsageFilter],
   );
   const filteredAudios = useMemo(
-    () => filterAudios(data.audios, { query, categoryId: categoryFilter }),
-    [categoryFilter, data.audios, query],
+    () => filterAudios(data.audios, { query, categoryId: categoryFilter, duration: durationFilter, views: viewFilter, date: dateFilter }),
+    [categoryFilter, data.audios, dateFilter, durationFilter, query, viewFilter],
   );
 
   function editCategory(row: AudioCategory) {
@@ -1116,6 +1119,9 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
             setDraftQuery('');
             setQuery('');
             setCategoryFilter('');
+            setDurationFilter('');
+            setViewFilter('');
+            setDateFilter('');
           }}
         >
           <label>
@@ -1128,6 +1134,28 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            Thời lượng
+            <select value={durationFilter} onChange={(event) => setDurationFilter(event.target.value)}>
+              <option value="">Tất cả thời lượng</option>
+              <option value="short">Dưới 15 phút</option>
+              <option value="medium">15-45 phút</option>
+              <option value="long">Trên 45 phút</option>
+              <option value="unknown">Chưa có thời lượng</option>
+            </select>
+          </label>
+          <label>
+            Lượt xem
+            <select value={viewFilter} onChange={(event) => setViewFilter(event.target.value)}>
+              <option value="">Tất cả lượt xem</option>
+              <option value="popular">Từ 100 lượt</option>
+              <option value="quiet">Chưa có lượt xem</option>
+            </select>
+          </label>
+          <label>
+            Ngày tạo
+            <input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
           </label>
         </ListFilterBar>
         <ListFilterSummary visible={filteredAudios.length} total={data.audios.length} label="audio" />
@@ -2763,6 +2791,9 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
   const [draftQuery, setDraftQuery] = useState('');
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [viewFilter, setViewFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
   const [categoryDraftQuery, setCategoryDraftQuery] = useState('');
   const [categoryQuery, setCategoryQuery] = useState('');
   const [categoryUsageFilter, setCategoryUsageFilter] = useState('');
@@ -2771,8 +2802,8 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
     [categoryQuery, categoryUsageFilter, data.videoCategories],
   );
   const filteredVideos = useMemo(
-    () => filterVideos(data.videos, { query, categoryId: categoryFilter }),
-    [categoryFilter, data.videos, query],
+    () => filterVideos(data.videos, { query, categoryId: categoryFilter, source: sourceFilter, views: viewFilter, date: dateFilter }),
+    [categoryFilter, data.videos, dateFilter, query, sourceFilter, viewFilter],
   );
 
   function editCategory(row: VideoCategory) {
@@ -2862,6 +2893,9 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
             setDraftQuery('');
             setQuery('');
             setCategoryFilter('');
+            setSourceFilter('');
+            setViewFilter('');
+            setDateFilter('');
           }}
         >
           <label>
@@ -2874,6 +2908,26 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            Nguồn video
+            <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+              <option value="">Tất cả nguồn</option>
+              <option value="youtube">YouTube</option>
+              <option value="file">Tệp/URL MP4</option>
+            </select>
+          </label>
+          <label>
+            Lượt xem
+            <select value={viewFilter} onChange={(event) => setViewFilter(event.target.value)}>
+              <option value="">Tất cả lượt xem</option>
+              <option value="popular">Từ 100 lượt</option>
+              <option value="quiet">Chưa có lượt xem</option>
+            </select>
+          </label>
+          <label>
+            Ngày tạo
+            <input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
           </label>
         </ListFilterBar>
         <ListFilterSummary visible={filteredVideos.length} total={data.videos.length} label="video" />
@@ -4417,6 +4471,7 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
   const [categoryFilter, setCategoryFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [shareFilter, setShareFilter] = useState('');
+  const [mediaFilter, setMediaFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [categoryDraftQuery, setCategoryDraftQuery] = useState('');
   const [categoryQuery, setCategoryQuery] = useState('');
@@ -4434,12 +4489,13 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
     () =>
       filterArticles(items, {
         query,
-        categoryId: isKnowledge ? '' : categoryFilter,
+        categoryId: categoryFilter,
         sourceType: sourceFilter,
         share: shareFilter,
+        media: mediaFilter,
         date: dateFilter,
       }),
-    [categoryFilter, dateFilter, isKnowledge, items, query, shareFilter, sourceFilter],
+    [categoryFilter, dateFilter, items, mediaFilter, query, shareFilter, sourceFilter],
   );
   const savedNewsDraftRef = useRef(richDraftSnapshot({ title: '', summary: '', content: '', categoryId: '', imageUrl: '', link: '', shareEnabled: true }));
   const newsDraftValue = useMemo<RichContentDraft>(
@@ -4447,7 +4503,7 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
     [title, summary, content, categoryId, imageUrl, link, shareEnabled],
   );
   const newsDraftSnapshot = useMemo(() => richDraftSnapshot(newsDraftValue), [newsDraftValue]);
-  const hasNewsDraftContent = Boolean(title.trim() || summary.trim() || content.trim() || (!isKnowledge && categoryId) || imageUrl.trim() || link.trim());
+  const hasNewsDraftContent = Boolean(title.trim() || summary.trim() || content.trim() || categoryId || imageUrl.trim() || link.trim());
   const newsDraft = useAdminContentDraft({
     key: `${contentType.toLowerCase()}:${editingNewsId || 'new'}`,
     value: newsDraftValue,
@@ -4465,13 +4521,13 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
     setImageUrl(row.imageUrl ?? '');
     setLink(row.link ?? '');
     setContent(row.content ?? '');
-    setCategoryId(isKnowledge ? '' : row.categoryId ?? '');
+    setCategoryId(row.categoryId ?? '');
     setShareEnabled(row.shareEnabled);
     savedNewsDraftRef.current = richDraftSnapshot({
       title: row.title,
       summary: row.summary ?? '',
       content: row.content ?? '',
-      categoryId: isKnowledge ? '' : row.categoryId ?? '',
+      categoryId: row.categoryId ?? '',
       imageUrl: row.imageUrl ?? '',
       link: row.link ?? '',
       shareEnabled: row.shareEnabled,
@@ -4495,7 +4551,7 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
     setTitle(draft.title ?? '');
     setSummary(draft.summary ?? '');
     setContent(draft.content ?? '');
-    setCategoryId(isKnowledge ? '' : draft.categoryId ?? '');
+    setCategoryId(draft.categoryId ?? '');
     setImageUrl(draft.imageUrl ?? '');
     setLink(draft.link ?? '');
     setShareEnabled(draft.shareEnabled ?? true);
@@ -4504,7 +4560,7 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
   const articleColumns: Array<[keyof NewsItem | ((row: NewsItem) => React.ReactNode), string]> = [
     ['imageUrl', 'Ảnh'],
     ['title', 'Tiêu đề'],
-    ...(!isKnowledge ? [[(row: NewsItem) => row.category?.name ?? '-', 'Danh mục'] as [((row: NewsItem) => React.ReactNode), string]] : []),
+    [(row: NewsItem) => row.category?.name ?? '-', 'Danh mục'],
     [(row: NewsItem) => (row.sourceType === 'MANUAL' ? (isKnowledge ? 'Bài hướng dẫn' : 'Tin riêng') : 'RSS'), 'Nguồn'],
     [(row: NewsItem) => (row.shareEnabled ? 'Cho phép' : 'Tắt'), 'Chia sẻ'],
     [(row: NewsItem) => row.viewCount.toLocaleString('vi-VN'), 'Lượt xem'],
@@ -4532,64 +4588,62 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
 
   return (
     <div className="single-column">
-      {!isKnowledge && (
-        <div className="two-column">
-          <Panel title={`Tạo danh mục ${articleLabel}`}>
-            <SmartForm
-              fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
-              onSubmit={async (values) => {
-                const name = await confirmDuplicateCategoryName({
-                  name: values.name,
-                  categories,
-                });
-                if (!name) return false;
-                return run(() => api.create('/admin/news-category', { ...values, name, contentType }), `Đã tạo danh mục ${articleLabel}`);
-              }}
-            />
-          </Panel>
-          <Panel title={`Danh mục ${articleLabel}`}>
-            <ListFilterBar
-              draftQuery={categoryDraftQuery}
-              onDraftQueryChange={setCategoryDraftQuery}
-              placeholder={`Tìm tên hoặc mô tả danh mục ${articleLabel}...`}
-              onSearch={() => setCategoryQuery(categoryDraftQuery.trim())}
-              onReset={() => {
-                setCategoryDraftQuery('');
-                setCategoryQuery('');
-                setCategoryUsageFilter('');
-              }}
-            >
-              <label>
-                Sử dụng
-                <select value={categoryUsageFilter} onChange={(event) => setCategoryUsageFilter(event.target.value)}>
-                  <option value="">Tất cả</option>
-                  <option value="used">Đã có bài</option>
-                  <option value="empty">Chưa có bài</option>
-                </select>
-              </label>
-            </ListFilterBar>
-            <ListFilterSummary visible={filteredCategories.length} total={categories.length} label="danh mục" />
-            <Table
-              rows={filteredCategories}
-              columns={[
-                ['name', 'Tên'],
-                ['description', 'Mô tả'],
-                [(row: NewsCategory) => row._count?.items ?? 0, 'Số tin'],
-                [
-                  (row: NewsCategory) => (
-                    <button className="ghost" type="button" onClick={() => editCategory(row)}>
-                      <Pencil size={15} />
-                      Sửa
-                    </button>
-                  ),
-                  'Thao tác',
-                ],
-              ]}
-              onDelete={(row) => run(() => api.remove(`/admin/news-category/${row.id}`), `Đã xóa danh mục ${articleLabel}`)}
-            />
-          </Panel>
-        </div>
-      )}
+      <div className="two-column">
+        <Panel title={`Tạo danh mục ${articleLabel}`}>
+          <SmartForm
+            fields={[['name', 'Tên danh mục'], ['description', 'Mô tả']]}
+            onSubmit={async (values) => {
+              const name = await confirmDuplicateCategoryName({
+                name: values.name,
+                categories,
+              });
+              if (!name) return false;
+              return run(() => api.create('/admin/news-category', { ...values, name, contentType }), `Đã tạo danh mục ${articleLabel}`);
+            }}
+          />
+        </Panel>
+        <Panel title={`Danh mục ${articleLabel}`}>
+          <ListFilterBar
+            draftQuery={categoryDraftQuery}
+            onDraftQueryChange={setCategoryDraftQuery}
+            placeholder={`Tìm tên hoặc mô tả danh mục ${articleLabel}...`}
+            onSearch={() => setCategoryQuery(categoryDraftQuery.trim())}
+            onReset={() => {
+              setCategoryDraftQuery('');
+              setCategoryQuery('');
+              setCategoryUsageFilter('');
+            }}
+          >
+            <label>
+              Sử dụng
+              <select value={categoryUsageFilter} onChange={(event) => setCategoryUsageFilter(event.target.value)}>
+                <option value="">Tất cả</option>
+                <option value="used">Đã có bài</option>
+                <option value="empty">Chưa có bài</option>
+              </select>
+            </label>
+          </ListFilterBar>
+          <ListFilterSummary visible={filteredCategories.length} total={categories.length} label="danh mục" />
+          <Table
+            rows={filteredCategories}
+            columns={[
+              ['name', 'Tên'],
+              ['description', 'Mô tả'],
+              [(row: NewsCategory) => row._count?.items ?? 0, 'Số bài'],
+              [
+                (row: NewsCategory) => (
+                  <button className="ghost" type="button" onClick={() => editCategory(row)}>
+                    <Pencil size={15} />
+                    Sửa
+                  </button>
+                ),
+                'Thao tác',
+              ],
+            ]}
+            onDelete={(row) => run(() => api.remove(`/admin/news-category/${row.id}`), `Đã xóa danh mục ${articleLabel}`)}
+          />
+        </Panel>
+      </div>
 
       <Panel title={editingNewsId ? `Sửa ${articleLabel}` : `Tạo ${articleLabel}`}>
         <div className="news-editor">
@@ -4615,19 +4669,17 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
             Tiêu đề
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={`Tiêu đề ${articleLabel}`} />
           </label>
-          {!isKnowledge && (
-            <label>
-              Danh mục
-              <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-                <option value="">Không chọn</option>
-                {categories.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <label>
+            Danh mục
+            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+              <option value="">Không chọn</option>
+              {categories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="span">
             Tóm tắt
             <textarea value={summary} onChange={(event) => setSummary(event.target.value)} />
@@ -4664,7 +4716,7 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
                 content,
                 imageUrl,
                 link,
-                categoryId: isKnowledge ? '' : categoryId,
+                categoryId,
                 shareEnabled,
                 sourceType: 'MANUAL',
                 contentType,
@@ -4700,22 +4752,21 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
             setCategoryFilter('');
             setSourceFilter('');
             setShareFilter('');
+            setMediaFilter('');
             setDateFilter('');
           }}
         >
-          {!isKnowledge && (
-            <label>
-              Danh mục
-              <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-                <option value="">Tất cả danh mục</option>
-                {categories.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <label>
+            Danh mục
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <option value="">Tất cả danh mục</option>
+              {categories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Nguồn
             <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
@@ -4730,6 +4781,16 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
               <option value="">Tất cả</option>
               <option value="enabled">Cho phép</option>
               <option value="disabled">Tắt</option>
+            </select>
+          </label>
+          <label>
+            Media
+            <select value={mediaFilter} onChange={(event) => setMediaFilter(event.target.value)}>
+              <option value="">Tất cả media</option>
+              <option value="hasImage">Có ảnh</option>
+              <option value="noImage">Chưa có ảnh</option>
+              <option value="hasLink">Có link</option>
+              <option value="noLink">Chưa có link</option>
             </select>
           </label>
           <label>
@@ -4767,9 +4828,11 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
   const [draftQuery, setDraftQuery] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [mediaFilter, setMediaFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
   const filteredMeditationPrograms = useMemo(
-    () => filterMeditationPrograms(data.meditationPrograms, { query, status: statusFilter }),
-    [data.meditationPrograms, query, statusFilter],
+    () => filterMeditationPrograms(data.meditationPrograms, { query, status: statusFilter, media: mediaFilter, date: dateFilter }),
+    [data.meditationPrograms, dateFilter, mediaFilter, query, statusFilter],
   );
 
   return (
@@ -4795,6 +4858,8 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
             setDraftQuery('');
             setQuery('');
             setStatusFilter('');
+            setMediaFilter('');
+            setDateFilter('');
           }}
         >
           <label>
@@ -4804,6 +4869,20 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
               <option value="active">Đang bật</option>
               <option value="inactive">Tắt</option>
             </select>
+          </label>
+          <label>
+            Media
+            <select value={mediaFilter} onChange={(event) => setMediaFilter(event.target.value)}>
+              <option value="">Tất cả media</option>
+              <option value="complete">Đủ audio và ảnh</option>
+              <option value="audio">Có audio</option>
+              <option value="image">Có ảnh</option>
+              <option value="missing">Thiếu media</option>
+            </select>
+          </label>
+          <label>
+            Ngày tạo
+            <input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
           </label>
         </ListFilterBar>
         <ListFilterSummary visible={filteredMeditationPrograms.length} total={data.meditationPrograms.length} label="bài Thiền" />
@@ -5005,6 +5084,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   const [draftQuery, setDraftQuery] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [lengthFilter, setLengthFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [backgroundDraftQuery, setBackgroundDraftQuery] = useState('');
   const [backgroundQuery, setBackgroundQuery] = useState('');
@@ -5026,8 +5106,8 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
   const hasLockedActive = Boolean(activeQuoteId);
   const selectedCount = selectedQuoteIds.length;
   const filteredQuotes = useMemo(
-    () => filterQuotes(data.quotes, { query, status: statusFilter, date: dateFilter, activeQuoteId, selectedQuoteIds }),
-    [activeQuoteId, data.quotes, dateFilter, query, selectedQuoteIds, statusFilter],
+    () => filterQuotes(data.quotes, { query, status: statusFilter, length: lengthFilter, date: dateFilter, activeQuoteId, selectedQuoteIds }),
+    [activeQuoteId, data.quotes, dateFilter, lengthFilter, query, selectedQuoteIds, statusFilter],
   );
   const filteredQuoteBackgrounds = useMemo(
     () =>
@@ -5177,6 +5257,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
             setDraftQuery('');
             setQuery('');
             setStatusFilter('');
+            setLengthFilter('');
             setDateFilter('');
           }}
         >
@@ -5188,6 +5269,15 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
               <option value="active">Đang bật</option>
               <option value="inactive">Đang tắt</option>
               <option value="selected">Đã chọn auto</option>
+            </select>
+          </label>
+          <label>
+            Độ dài
+            <select value={lengthFilter} onChange={(event) => setLengthFilter(event.target.value)}>
+              <option value="">Tất cả độ dài</option>
+              <option value="short">Ngắn</option>
+              <option value="medium">Vừa</option>
+              <option value="long">Dài</option>
             </select>
           </label>
           <label>
@@ -6452,6 +6542,21 @@ function matchesSearchQuery(value: string, query: string) {
   return normalized.includes(query);
 }
 
+function hasText(value?: string | null) {
+  return Boolean(value?.trim());
+}
+
+function isYoutubeVideoUrl(value?: string | null) {
+  return /(?:youtube\.com|youtu\.be)/i.test(value ?? '');
+}
+
+function matchesViewFilter(viewCount: number, filter: string) {
+  if (!filter) return true;
+  if (filter === 'popular') return viewCount >= 100;
+  if (filter === 'quiet') return viewCount === 0;
+  return true;
+}
+
 function filterAudioCategories(rows: AudioCategory[], filters: { query: string; usage: string }) {
   const query = normalizeSearchText(filters.query);
   return rows.filter((row) => {
@@ -6482,23 +6587,36 @@ function filterNewsCategories(rows: NewsCategory[], filters: { query: string; us
   });
 }
 
-function filterAudios(rows: Audio[], filters: { query: string; categoryId: string }) {
+function filterAudios(rows: Audio[], filters: { query: string; categoryId: string; duration: string; views: string; date: string }) {
   const query = normalizeSearchText(filters.query);
   return rows.filter((row) => {
     const haystack = [row.title, row.description ?? '', row.category?.name ?? '', row.audioUrl].join(' ');
+    const duration = row.duration ?? 0;
     const matchesQuery = matchesSearchQuery(haystack, query);
     const matchesCategory = !filters.categoryId || row.categoryId === filters.categoryId;
-    return matchesQuery && matchesCategory;
+    const matchesDuration =
+      !filters.duration ||
+      (filters.duration === 'short' && duration > 0 && duration < 15 * 60) ||
+      (filters.duration === 'medium' && duration >= 15 * 60 && duration <= 45 * 60) ||
+      (filters.duration === 'long' && duration > 45 * 60) ||
+      (filters.duration === 'unknown' && duration <= 0);
+    const matchesViews = matchesViewFilter(row.viewCount, filters.views);
+    const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
+    return matchesQuery && matchesCategory && matchesDuration && matchesViews && matchesDate;
   });
 }
 
-function filterVideos(rows: Video[], filters: { query: string; categoryId: string }) {
+function filterVideos(rows: Video[], filters: { query: string; categoryId: string; source: string; views: string; date: string }) {
   const query = normalizeSearchText(filters.query);
   return rows.filter((row) => {
     const haystack = [row.title, row.teacher ?? '', row.description ?? '', row.category?.name ?? '', row.videoUrl].join(' ');
     const matchesQuery = matchesSearchQuery(haystack, query);
     const matchesCategory = !filters.categoryId || row.categoryId === filters.categoryId;
-    return matchesQuery && matchesCategory;
+    const isYoutube = isYoutubeVideoUrl(row.videoUrl);
+    const matchesSource = !filters.source || (filters.source === 'youtube' ? isYoutube : !isYoutube);
+    const matchesViews = matchesViewFilter(row.viewCount, filters.views);
+    const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
+    return matchesQuery && matchesCategory && matchesSource && matchesViews && matchesDate;
   });
 }
 
@@ -6519,13 +6637,22 @@ function filterScriptureReminders(
   });
 }
 
-function filterMeditationPrograms(rows: MeditationProgram[], filters: { query: string; status: string }) {
+function filterMeditationPrograms(rows: MeditationProgram[], filters: { query: string; status: string; media: string; date: string }) {
   const query = normalizeSearchText(filters.query);
   return rows.filter((row) => {
     const haystack = [row.title, row.description ?? '', row.audioUrl ?? '', row.imageUrl ?? ''].join(' ');
+    const hasAudio = hasText(row.audioUrl);
+    const hasImage = hasText(row.imageUrl);
     const matchesQuery = matchesSearchQuery(haystack, query);
     const matchesStatus = !filters.status || (filters.status === 'active' ? row.active : !row.active);
-    return matchesQuery && matchesStatus;
+    const matchesMedia =
+      !filters.media ||
+      (filters.media === 'complete' && hasAudio && hasImage) ||
+      (filters.media === 'audio' && hasAudio) ||
+      (filters.media === 'image' && hasImage) ||
+      (filters.media === 'missing' && (!hasAudio || !hasImage));
+    const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
+    return matchesQuery && matchesStatus && matchesMedia && matchesDate;
   });
 }
 
@@ -6568,7 +6695,7 @@ function quoteBackgroundRatio(row: QuoteBackground) {
 
 function filterArticles(
   rows: NewsItem[],
-  filters: { query: string; categoryId: string; sourceType: string; share: string; date: string },
+  filters: { query: string; categoryId: string; sourceType: string; share: string; media: string; date: string },
 ) {
   const query = normalizeSearchText(filters.query);
   return rows.filter((row) => {
@@ -6585,18 +6712,27 @@ function filterArticles(
     const matchesCategory = !filters.categoryId || row.categoryId === filters.categoryId;
     const matchesSource = !filters.sourceType || row.sourceType === filters.sourceType;
     const matchesShare = !filters.share || (filters.share === 'enabled' ? row.shareEnabled : !row.shareEnabled);
+    const hasImage = hasText(row.imageUrl);
+    const hasLink = hasText(row.link);
+    const matchesMedia =
+      !filters.media ||
+      (filters.media === 'hasImage' && hasImage) ||
+      (filters.media === 'noImage' && !hasImage) ||
+      (filters.media === 'hasLink' && hasLink) ||
+      (filters.media === 'noLink' && !hasLink);
     const matchesDate = !filters.date || readingDateKey(row.publishedAt) === filters.date;
-    return matchesQuery && matchesCategory && matchesSource && matchesShare && matchesDate;
+    return matchesQuery && matchesCategory && matchesSource && matchesShare && matchesMedia && matchesDate;
   });
 }
 
 function filterQuotes(
   rows: QuoteRecord[],
-  filters: { query: string; status: string; date: string; activeQuoteId: string | null; selectedQuoteIds: string[] },
+  filters: { query: string; status: string; length: string; date: string; activeQuoteId: string | null; selectedQuoteIds: string[] },
 ) {
   const query = normalizeSearchText(filters.query);
   const selectedIds = new Set(filters.selectedQuoteIds);
   return rows.filter((row) => {
+    const contentLength = Array.from(row.content.trim()).length;
     const matchesQuery = matchesSearchQuery(row.content, query);
     const matchesStatus =
       !filters.status ||
@@ -6604,8 +6740,13 @@ function filterQuotes(
       (filters.status === 'active' && row.active) ||
       (filters.status === 'inactive' && !row.active) ||
       (filters.status === 'selected' && selectedIds.has(row.id));
+    const matchesLength =
+      !filters.length ||
+      (filters.length === 'short' && contentLength <= 80) ||
+      (filters.length === 'medium' && contentLength > 80 && contentLength <= 180) ||
+      (filters.length === 'long' && contentLength > 180);
     const matchesDate = !filters.date || readingDateKey(row.createdAt) === filters.date;
-    return matchesQuery && matchesStatus && matchesDate;
+    return matchesQuery && matchesStatus && matchesLength && matchesDate;
   });
 }
 
