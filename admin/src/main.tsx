@@ -1112,10 +1112,7 @@ function AudioManager({ data, run }: { data: DataState; run: RunAction }) {
       <Panel title="Danh sách audio" className="span">
         <ListFilterBar
           draftQuery={draftQuery}
-          onDraftQueryChange={(value) => {
-            setDraftQuery(value);
-            setQuery(value.trim());
-          }}
+          onDraftQueryChange={setDraftQuery}
           placeholder="Tìm tiêu đề, mô tả, danh mục..."
           onSearch={() => setQuery(draftQuery.trim())}
           onReset={() => {
@@ -2889,10 +2886,7 @@ function VideoManager({ data, run }: { data: DataState; run: RunAction }) {
       <Panel title="Danh sách video" className="span">
         <ListFilterBar
           draftQuery={draftQuery}
-          onDraftQueryChange={(value) => {
-            setDraftQuery(value);
-            setQuery(value.trim());
-          }}
+          onDraftQueryChange={setDraftQuery}
           placeholder="Tìm tiêu đề, giảng sư, mô tả, danh mục..."
           onSearch={() => setQuery(draftQuery.trim())}
           onReset={() => {
@@ -4749,10 +4743,7 @@ function ArticleManager({ data, run, contentType }: { data: DataState; run: RunA
       <Panel title={`Danh sách ${articleLabel}`}>
         <ListFilterBar
           draftQuery={draftQuery}
-          onDraftQueryChange={(value) => {
-            setDraftQuery(value);
-            setQuery(value.trim());
-          }}
+          onDraftQueryChange={setDraftQuery}
           placeholder={`Tìm tiêu đề, tóm tắt, nội dung ${articleLabel}...`}
           onSearch={() => setQuery(draftQuery.trim())}
           onReset={() => {
@@ -4860,10 +4851,7 @@ function MeditationManager({ data, run }: { data: DataState; run: RunAction }) {
       <Panel title="Danh sách bài Thiền">
         <ListFilterBar
           draftQuery={draftQuery}
-          onDraftQueryChange={(value) => {
-            setDraftQuery(value);
-            setQuery(value.trim());
-          }}
+          onDraftQueryChange={setDraftQuery}
           placeholder="Tìm tiêu đề, mô tả, audio..."
           onSearch={() => setQuery(draftQuery.trim())}
           onReset={() => {
@@ -5262,10 +5250,7 @@ function QuoteManager({ data, run }: { data: DataState; run: RunAction }) {
       <Panel title="Danh sách trích dẫn">
         <ListFilterBar
           draftQuery={draftQuery}
-          onDraftQueryChange={(value) => {
-            setDraftQuery(value);
-            setQuery(value.trim());
-          }}
+          onDraftQueryChange={setDraftQuery}
           placeholder="Tìm nội dung trích dẫn..."
           onSearch={() => setQuery(draftQuery.trim())}
           onReset={() => {
@@ -6088,12 +6073,12 @@ function ListFilterBar({
       }}
     >
       <label>
-        Tìm trong danh sách
+        Tìm kiếm
         <input value={draftQuery} onChange={(event) => onDraftQueryChange(event.target.value)} placeholder={placeholder} />
       </label>
       <button className="primary" type="submit">
         <Search size={16} />
-        Tìm
+        Tìm kiếm
       </button>
       {children}
       <button className="ghost" type="button" onClick={onReset}>
