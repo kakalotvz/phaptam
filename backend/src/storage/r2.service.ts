@@ -81,6 +81,20 @@ export class R2Service {
     return { deleted: keys.length };
   }
 
+  publicUrlForKey(key: string) {
+    return `${this.publicBaseUrl.replace(/\/$/, '')}/${key.replace(/^\/+/, '')}`;
+  }
+
+  async putObject(key: string, body: Buffer, contentType: string) {
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }));
+    return this.publicUrlForKey(key);
+  }
+
   async usage() {
     let continuationToken: string | undefined;
     let objectCount = 0;

@@ -1,4 +1,12 @@
 :root {
+  --status-success: #15803d;
+  --status-success-bg: #dcfce7;
+  --status-info: #2563eb;
+  --status-info-bg: #dbeafe;
+  --status-warning: #b45309;
+  --status-warning-bg: #fef3c7;
+  --status-danger: #dc2626;
+  --status-danger-bg: #fee2e2;
   color: #2e2420;
   background: #f6f0dd;
   font-family: "Noto Sans", "Segoe UI", Arial, sans-serif;
@@ -18,6 +26,8 @@ body {
     linear-gradient(135deg, rgba(212, 175, 55, .10), transparent 34%),
     radial-gradient(circle at 90% 4%, rgba(109, 76, 65, .13), transparent 28%),
     #f6f0dd;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: rgba(212, 175, 55, .22);
 }
 
 button,
@@ -25,6 +35,11 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button,
+[role="button"] {
+  touch-action: manipulation;
 }
 
 .app-shell {
@@ -120,6 +135,47 @@ nav button,
   border-radius: 12px;
   cursor: pointer;
   transition: transform .18s ease, background .18s ease, color .18s ease;
+}
+
+nav button:focus-visible,
+.ghost:focus-visible,
+.primary:focus-visible,
+.danger:focus-visible,
+.upload-button:focus-within {
+  outline: 3px solid rgba(37, 99, 235, .55);
+  outline-offset: 2px;
+}
+
+.status-pill {
+  display: inline-flex;
+  max-width: min(48vw, 520px);
+  margin-right: 16px;
+  padding: 8px 11px;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.status-success {
+  color: var(--status-success);
+  background: var(--status-success-bg);
+}
+
+.status-info {
+  color: var(--status-info);
+  background: var(--status-info-bg);
+}
+
+.status-warning {
+  color: var(--status-warning);
+  background: var(--status-warning-bg);
+}
+
+.status-danger {
+  color: var(--status-danger);
+  background: var(--status-danger-bg);
 }
 
 .upload-field {
@@ -1090,6 +1146,11 @@ main {
   outline: none;
 }
 
+.rich-surface:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, .35);
+  outline-offset: -3px;
+}
+
 .news-editor .rich-surface {
   max-height: clamp(360px, 54vh, 620px);
   scrollbar-gutter: stable;
@@ -1428,6 +1489,24 @@ select:focus,
 textarea:focus {
   border-color: #b9922c;
   box-shadow: 0 0 0 3px rgba(212, 175, 55, .18);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, .35);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 .primary {

@@ -7,6 +7,32 @@ import { PrismaService } from '../prisma/prisma.service';
 import { generateScriptureTiming, validateScriptureLines } from '../scripture/timing';
 import { R2Service } from '../storage/r2.service';
 import { PresenceService } from '../presence/presence.service';
+import {
+  CreateAdminUserDto,
+  CreateNewsCategoryDto,
+  CreateNewsItemDto,
+  CreateRssSourceDto,
+  UpdateAdminUserDto,
+  UpdateNewsItemDto,
+  UpdateRssSourceDto,
+  UpdateSettingsDto,
+} from './admin.dto';
+import {
+  defaultQuoteRotationSettings,
+  extractUrls,
+  normalizePositiveNumber,
+  normalizeQuoteBackground,
+  quoteBackgroundKey,
+  QuoteBackground,
+  QuoteBackgroundSettings,
+  quoteLines,
+  quoteRotationIndex,
+  quoteRotationKey,
+  QuoteRotationSettings,
+  removedR2Urls,
+  uniqueStrings,
+  vietnamDateKey,
+} from './admin.utils';
 
 @UseGuards(AdminAuthGuard)
 @Controller('admin')
@@ -82,7 +108,7 @@ export class AdminController {
   }
 
   @Patch('settings')
-  async updateSettings(@Body() data: { contentPageSize?: number }) {
+  async updateSettings(@Body() data: UpdateSettingsDto) {
     if (data.contentPageSize !== undefined) {
       const pageSize = this.normalizePageSize(data.contentPageSize);
       await this.prisma.appSetting.upsert({
@@ -125,7 +151,7 @@ export class AdminController {
   }
 
   @Post('users')
-  async createUser(@Body() data: { email: string; username?: string; password: string; name?: string; birthDate?: string; role?: Role; active?: boolean }) {
+  async createUser(@Body() data: CreateAdminUserDto) {
     return this.prisma.user.create({
       data: {
         email: data.email,
@@ -143,7 +169,7 @@ export class AdminController {
   @Patch('users/:id')
   async updateUser(
     @Param('id') id: string,
-    @Body() data: { name?: string; username?: string; email?: string; password?: string; birthDate?: string; active?: boolean; role?: Role },
+    @Body() data: UpdateAdminUserDto,
   ) {
     return this.prisma.user.update({
       where: { id },
@@ -858,12 +884,12 @@ export class AdminController {
   }
 
   @Post('rss')
-  createRss(@Body() data: { name: string; url: string; active?: boolean }) {
+  createRss(@Body() data: CreateRssSourceDto) {
     return this.prisma.rssSource.create({ data });
   }
 
   @Patch('rss/:id')
-  updateRss(@Param('id') id: string, @Body() data: { name?: string; url?: string; active?: boolean }) {
+  updateRss(@Param('id') id: string, @Body() data: UpdateRssSourceDto) {
     return this.prisma.rssSource.update({ where: { id }, data });
   }
 
@@ -882,7 +908,7 @@ export class AdminController {
   }
 
   @Post('news-category')
-  createNewsCategory(@Body() data: { name: string; description?: string; contentType?: NewsContentType }) {
+  createNewsCategory(@Body() data: CreateNewsCategoryDto) {
     return this.prisma.newsCategory.create({ data: { ...data, contentType: data.contentType ?? NewsContentType.NEWS } });
   }
 
@@ -909,19 +935,7 @@ export class AdminController {
   @Post('news')
   createNewsItem(
     @Body()
-    data: {
-      title: string;
-      summary?: string;
-      content?: string;
-      imageUrl?: string;
-      link?: string;
-      categoryId?: string;
-      sourceName?: string;
-      sourceType?: NewsSourceType;
-      contentType?: NewsContentType;
-      shareEnabled?: boolean;
-      publishedAt?: string;
-    },
+    data: CreateNewsItemDto,
   ) {
     return this.prisma.newsItem.create({
       data: {
@@ -945,19 +959,7 @@ export class AdminController {
   async updateNewsItem(
     @Param('id') id: string,
     @Body()
-    data: {
-      title?: string;
-      summary?: string;
-      content?: string;
-      imageUrl?: string;
-      link?: string;
-      categoryId?: string;
-      sourceName?: string;
-      sourceType?: NewsSourceType;
-      contentType?: NewsContentType;
-      shareEnabled?: boolean;
-      publishedAt?: string;
-    },
+    data: UpdateNewsItemDto,
   ) {
     const current = await this.prisma.newsItem.findUniqueOrThrow({ where: { id } });
     const updated = await this.prisma.newsItem.update({
@@ -1219,96 +1221,4 @@ export class AdminController {
       create: { key: quoteBackgroundKey, value: JSON.stringify(items) },
     });
   }
-}
-
-function extractUrls(value?: string | null) {
-  if (!value) return [];
-  return Array.from(value.matchAll(/https?:\/\/[^\s"'<>]+/g)).map((match) => match[0]);
-}
-
-function removedR2Urls(previous?: string | null, next?: string | null) {
-  const nextUrls = new Set(extractUrls(next));
-  return extractUrls(previous).filter((url) => !nextUrls.has(url));
-}
-
-const quoteRotationKey = 'quoteRotation';
-const quoteBackgroundKey = 'quoteBackgrounds';
-
-type QuoteRotationSettings = {
-  enabled: boolean;
-  paused: boolean;
-  quoteIds: string[];
-  startDate: string;
-  offset: number;
-};
-
-type QuoteBackground = {
-  id: string;
-  imageUrl: string;
-  name: string;
-  sizeBytes?: number;
-  width?: number;
-  height?: number;
-  active: boolean;
-  createdAt: string;
-};
-
-type QuoteBackgroundSettings = QuoteBackground[];
-
-function defaultQuoteRotationSettings(): QuoteRotationSettings {
-  return { enabled: false, paused: false, quoteIds: [], startDate: vietnamDateKey(new Date()), offset: 0 };
-}
-
-function quoteLines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function uniqueStrings(values: unknown[]) {
-  return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)));
-}
-
-function normalizeQuoteBackground(value: unknown): QuoteBackground | null {
-  if (!value || typeof value !== 'object') return null;
-  const item = value as Partial<QuoteBackground>;
-  if (typeof item.id !== 'string' || typeof item.imageUrl !== 'string' || !item.imageUrl.trim()) return null;
-  return {
-    id: item.id,
-    imageUrl: item.imageUrl.trim(),
-    name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Ảnh nền trích dẫn',
-    sizeBytes: normalizePositiveNumber(item.sizeBytes),
-    width: normalizePositiveNumber(item.width),
-    height: normalizePositiveNumber(item.height),
-    active: item.active !== false,
-    createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
-  };
-}
-
-function normalizePositiveNumber(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
-}
-
-function vietnamDateKey(date: Date) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
-}
-
-function quoteRotationIndex(settings: QuoteRotationSettings, length: number) {
-  const start = Date.parse(`${settings.startDate}T00:00:00+07:00`);
-  const today = Date.parse(`${vietnamDateKey(new Date())}T00:00:00+07:00`);
-  const days = Number.isFinite(start) && Number.isFinite(today)
-    ? Math.max(0, Math.floor((today - start) / 86_400_000))
-    : 0;
-  return positiveModulo(days + settings.offset, length);
-}
-
-function positiveModulo(value: number, length: number) {
-  return ((value % length) + length) % length;
 }

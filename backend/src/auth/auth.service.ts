@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import { JwtModuleOptions, JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { createHmac, randomInt, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -125,7 +125,10 @@ export class AuthService {
   }
 
   private sign(sub: string, role: string) {
-    return this.jwt.signAsync({ sub, role });
+    const expiresIn = (role === 'ADMIN'
+      ? (this.config.get<string>('JWT_ADMIN_EXPIRES_IN') ?? '12h')
+      : (this.config.get<string>('JWT_EXPIRES_IN') ?? '7d')) as NonNullable<JwtModuleOptions['signOptions']>['expiresIn'];
+    return this.jwt.signAsync({ sub, role }, { expiresIn });
   }
 
   private createOtpRecord(otp: string) {

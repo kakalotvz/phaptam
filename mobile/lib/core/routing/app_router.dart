@@ -89,7 +89,7 @@ class AppShell extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.spa_outlined),
             selectedIcon: Icon(Icons.spa),
-            label: 'Home',
+            label: 'Trang chủ',
           ),
           NavigationDestination(
             icon: Icon(Icons.headphones_outlined),

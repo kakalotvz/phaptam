@@ -1,9 +1,14 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AdminAuthGuard implements CanActivate {
-  constructor(private readonly jwt: JwtService) {}
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -12,11 +17,19 @@ export class AdminAuthGuard implements CanActivate {
     if (!token) throw new UnauthorizedException('Không có token xác thực');
 
     try {
-      const payload = await this.jwt.verifyAsync(token);
+      const payload = await this.jwt.verifyAsync<{ sub?: string; role?: Role }>(token);
       request['user'] = payload;
       
-      if (payload.role !== 'ADMIN') {
+      if (!payload.sub || payload.role !== Role.ADMIN) {
         throw new ForbiddenException('Bạn không có quyền truy cập khu vực này');
+      }
+
+      const admin = await this.prisma.user.findFirst({
+        where: { id: payload.sub, role: Role.ADMIN, active: true },
+        select: { id: true },
+      });
+      if (!admin) {
+        throw new ForbiddenException('Tài khoản quản trị không còn hiệu lực');
       }
     } catch (error) {
       if (error instanceof ForbiddenException) throw error;

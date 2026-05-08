@@ -79,8 +79,10 @@ import {
   Audio,
   AudioCategory,
   Banner,
+  clearAdminToken,
   Feedback,
   getApiBaseUrl,
+  hasAdminToken,
   MeditationProgram,
   NewsCategory,
   NewsItem,
@@ -90,6 +92,7 @@ import {
   QuoteRotation,
   R2Usage,
   RssSource,
+  setAdminToken,
   setApiBaseUrl,
   Scripture,
   ScriptureLine,
@@ -472,7 +475,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setLoading(true); setError('');
     try {
       const res = await api.login({ email: identifier, password });
-      localStorage.setItem('phaptam_admin_token', res.accessToken);
+      setAdminToken(res.accessToken);
       onLogin();
     } catch (err: any) { setError(err.message || 'Sai tài khoản hoặc mật khẩu'); }
     finally { setLoading(false); }
@@ -508,20 +511,20 @@ function Login({ onLogin }: { onLogin: () => void }) {
           {mode === 'login' ? 'Quản trị viên' : mode === 'forgot' ? 'Quên mật khẩu' : 'Đặt lại mật khẩu'}
         </p>
 
-        {error && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px' }}>{error}</div>}
-        {success && <div style={{ color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px' }}>{success}</div>}
+        {error && <div role="alert" aria-live="assertive" style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px' }}>{error}</div>}
+        {success && <div role="status" aria-live="polite" style={{ color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px' }}>{success}</div>}
 
         {mode === 'login' && (
           <form onSubmit={handleLogin}>
             <div style={fieldStyle}>
-              <span style={labelStyle}>Tài khoản / Email</span>
-              <input style={inputStyle} value={identifier} onChange={(e) => setIdentifier(e.target.value)} required placeholder="admin hoặc email@gmail.com" autoFocus />
+              <label style={labelStyle} htmlFor="admin-login-identifier">Tài khoản / Email</label>
+              <input id="admin-login-identifier" name="identifier" autoComplete="username" spellCheck={false} style={inputStyle} value={identifier} onChange={(e) => setIdentifier(e.target.value)} required placeholder="admin hoặc email@gmail.com" autoFocus />
             </div>
             <div style={fieldStyle}>
-              <span style={labelStyle}>Mật khẩu</span>
-              <input style={inputStyle} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
+              <label style={labelStyle} htmlFor="admin-login-password">Mật khẩu</label>
+              <input id="admin-login-password" name="password" autoComplete="current-password" style={inputStyle} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
             </div>
-            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang xử lý...' : 'Đăng nhập'}</button>
+            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang xử lý…' : 'Đăng nhập'}</button>
             <div style={{ textAlign: 'center', marginTop: '16px' }}>
               <button type="button" style={btnLink} onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}>Quên mật khẩu?</button>
             </div>
@@ -532,10 +535,10 @@ function Login({ onLogin }: { onLogin: () => void }) {
           <form onSubmit={handleForgot}>
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>Nhập Email hoặc Username của tài khoản. Hệ thống sẽ gửi mã OTP 6 số về Email đã đăng ký.</p>
             <div style={fieldStyle}>
-              <span style={labelStyle}>Tài khoản / Email</span>
-              <input style={inputStyle} value={identifier} onChange={(e) => setIdentifier(e.target.value)} required placeholder="admin hoặc email@gmail.com" autoFocus />
+              <label style={labelStyle} htmlFor="admin-forgot-identifier">Tài khoản / Email</label>
+              <input id="admin-forgot-identifier" name="identifier" autoComplete="username" spellCheck={false} style={inputStyle} value={identifier} onChange={(e) => setIdentifier(e.target.value)} required placeholder="admin hoặc email@gmail.com" autoFocus />
             </div>
-            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang gửi...' : 'Gửi mã OTP'}</button>
+            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang gửi…' : 'Gửi mã OTP'}</button>
             <div style={{ textAlign: 'center', marginTop: '12px' }}>
               <button type="button" style={btnLink} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>← Quay lại đăng nhập</button>
             </div>
@@ -546,14 +549,14 @@ function Login({ onLogin }: { onLogin: () => void }) {
           <form onSubmit={handleReset}>
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>Kiểm tra Email và nhập mã OTP 6 số cùng mật khẩu mới.</p>
             <div style={fieldStyle}>
-              <span style={labelStyle}>Mã OTP (6 số)</span>
-              <input style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} required placeholder="123456" maxLength={6} autoFocus />
+              <label style={labelStyle} htmlFor="admin-reset-otp">Mã OTP (6 số)</label>
+              <input id="admin-reset-otp" name="one-time-code" autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]*" spellCheck={false} style={inputStyle} value={otp} onChange={(e) => setOtp(e.target.value)} required placeholder="123456" maxLength={6} autoFocus />
             </div>
             <div style={fieldStyle}>
-              <span style={labelStyle}>Mật khẩu mới (tối thiểu 8 ký tự)</span>
-              <input style={inputStyle} type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={8} placeholder="••••••••" />
+              <label style={labelStyle} htmlFor="admin-reset-password">Mật khẩu mới (tối thiểu 8 ký tự)</label>
+              <input id="admin-reset-password" name="new-password" autoComplete="new-password" style={inputStyle} type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={8} placeholder="••••••••" />
             </div>
-            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang xử lý...' : 'Đặt lại mật khẩu'}</button>
+            <button style={btnPrimary} type="submit" disabled={loading}>{loading ? 'Đang xử lý…' : 'Đặt lại mật khẩu'}</button>
             <div style={{ textAlign: 'center', marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '16px' }}>
               <button type="button" style={btnLink} onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}>Gửi lại mã OTP</button>
               <span style={{ color: '#d1d5db' }}>|</span>
@@ -567,7 +570,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(localStorage.getItem('phaptam_admin_token')));
+  const [isAuthenticated, setIsAuthenticated] = useState(hasAdminToken());
 
   const getHashSection = (): Section => {
     const hash = window.location.hash.slice(1);
@@ -680,7 +683,7 @@ function App() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Tải dữ liệu thất bại');
       if (caught instanceof Error && (caught.message.includes('401') || caught.message.includes('Unauthorized') || caught.message.includes('403'))) {
-        localStorage.removeItem('phaptam_admin_token');
+        clearAdminToken();
         setIsAuthenticated(false);
       }
     } finally {
@@ -706,7 +709,7 @@ function App() {
       setError(msg);
       notifyError(msg);
       if (msg.includes('401') || msg.includes('Unauthorized') || msg.includes('403')) {
-        localStorage.removeItem('phaptam_admin_token');
+        clearAdminToken();
         setIsAuthenticated(false);
       }
       return false;
@@ -721,7 +724,7 @@ function App() {
   }, [notice]);
 
   function handleLogout() {
-    localStorage.removeItem('phaptam_admin_token');
+    clearAdminToken();
     setIsAuthenticated(false);
   }
 
@@ -774,16 +777,16 @@ function App() {
               <h1>{menu.find((m) => m[0] === section)?.[1]}</h1>
             </div>
             <div>
-              {notice && <span style={{ color: '#059669', marginRight: '16px', fontWeight: 'bold' }}>{notice}</span>}
-              {error && <span style={{ color: '#dc2626', marginRight: '16px', fontWeight: 'bold' }}>Lỗi: {error}</span>}
+              {notice && <span className="status-pill status-success" role="status" aria-live="polite">{notice}</span>}
+              {error && <span className="status-pill status-danger" role="alert" aria-live="assertive">Lỗi: {error}</span>}
               <button className="primary" type="button" onClick={load} disabled={loading}>
                 <RefreshCcw size={15} />
-                {loading ? 'Đang tải...' : 'Làm mới'}
+                {loading ? 'Đang tải…' : 'Làm mới'}
               </button>
             </div>
           </div>
           {loading && data === emptyData ? (
-            <div>Đang tải dữ liệu...</div>
+            <div role="status" aria-live="polite">Đang tải dữ liệu…</div>
           ) : (
             <div className="content">
               {section === 'overview' && <Overview data={data} />}
@@ -3918,9 +3921,9 @@ function RichTextEditor({
         }}
       >
         {/* Headings */}
-        <button style={btnStyle(h2Active)} type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề Lớn"><Heading2 size={16} /></button>
-        <button style={btnStyle(h3Active)} type="button" onClick={() => runCommand('header', 3)} title="Tiêu đề Nhỏ"><Heading3 size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive('paragraph')))} type="button" onClick={() => runCommand('header', false)} title="Đoạn văn thường"><span style={{ fontWeight: 'bold' }}>Aa</span></button>
+        <button style={btnStyle(h2Active)} type="button" onClick={() => runCommand('header', 2)} title="Tiêu đề Lớn" aria-label="Tiêu đề Lớn"><Heading2 size={16} /></button>
+        <button style={btnStyle(h3Active)} type="button" onClick={() => runCommand('header', 3)} title="Tiêu đề Nhỏ" aria-label="Tiêu đề Nhỏ"><Heading3 size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('paragraph')))} type="button" onClick={() => runCommand('header', false)} title="Đoạn văn thường" aria-label="Đoạn văn thường"><span style={{ fontWeight: 'bold' }}>Aa</span></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
 
         {/* Typography */}
@@ -3953,11 +3956,11 @@ function RichTextEditor({
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Inline Formatting */}
-        <button style={btnStyle(Boolean(editor?.isActive('bold')))} type="button" onClick={() => runCommand('bold')} title="In đậm"><Bold size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive('italic')))} type="button" onClick={() => runCommand('italic')} title="In nghiêng"><Italic size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive('underline')))} type="button" onClick={() => runCommand('underline')} title="Gạch chân"><Underline size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive('strike')))} type="button" onClick={() => runCommand('strike')} title="Gạch ngang"><Strikethrough size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive('superscript')))} type="button" onClick={() => runCommand('superscript')} title="Số mũ (Mũ)"><SuperscriptIcon size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('bold')))} type="button" onClick={() => runCommand('bold')} title="In đậm" aria-label="In đậm"><Bold size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('italic')))} type="button" onClick={() => runCommand('italic')} title="In nghiêng" aria-label="In nghiêng"><Italic size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('underline')))} type="button" onClick={() => runCommand('underline')} title="Gạch chân" aria-label="Gạch chân"><Underline size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('strike')))} type="button" onClick={() => runCommand('strike')} title="Gạch ngang" aria-label="Gạch ngang"><Strikethrough size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('superscript')))} type="button" onClick={() => runCommand('superscript')} title="Số mũ (Mũ)" aria-label="Số mũ"><SuperscriptIcon size={16} /></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Colors */}
@@ -3980,27 +3983,27 @@ function RichTextEditor({
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Blocks & Lists */}
-        <button style={btnStyle(Boolean(editor?.isActive('blockquote')))} type="button" onClick={() => runCommand('blockquote')} title="Trích dẫn"><Quote size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive('bulletList')))} type="button" onClick={() => runCommand('list', 'bullet')} title="Danh sách"><List size={16} /></button>
-        <button style={btnStyle(Boolean(editor?.isActive('orderedList')))} type="button" onClick={() => runCommand('list', 'ordered')} title="Danh sách số"><ListOrdered size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('blockquote')))} type="button" onClick={() => runCommand('blockquote')} title="Trích dẫn" aria-label="Trích dẫn"><Quote size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('bulletList')))} type="button" onClick={() => runCommand('list', 'bullet')} title="Danh sách" aria-label="Danh sách"><List size={16} /></button>
+        <button style={btnStyle(Boolean(editor?.isActive('orderedList')))} type="button" onClick={() => runCommand('list', 'ordered')} title="Danh sách số" aria-label="Danh sách số"><ListOrdered size={16} /></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Alignment */}
-        <button style={btnStyle(inlineTextAlign === 'left' || Boolean(editor?.isActive({ textAlign: 'left' })))} type="button" onClick={() => runCommand('align', false)} title="Căn trái"><AlignLeft size={16} /></button>
-        <button style={btnStyle(inlineTextAlign === 'center' || Boolean(editor?.isActive({ textAlign: 'center' })))} type="button" onClick={() => runCommand('align', 'center')} title="Căn giữa"><AlignCenter size={16} /></button>
-        <button style={btnStyle(inlineTextAlign === 'right' || Boolean(editor?.isActive({ textAlign: 'right' })))} type="button" onClick={() => runCommand('align', 'right')} title="Căn phải"><AlignRight size={16} /></button>
+        <button style={btnStyle(inlineTextAlign === 'left' || Boolean(editor?.isActive({ textAlign: 'left' })))} type="button" onClick={() => runCommand('align', false)} title="Căn trái" aria-label="Căn trái"><AlignLeft size={16} /></button>
+        <button style={btnStyle(inlineTextAlign === 'center' || Boolean(editor?.isActive({ textAlign: 'center' })))} type="button" onClick={() => runCommand('align', 'center')} title="Căn giữa" aria-label="Căn giữa"><AlignCenter size={16} /></button>
+        <button style={btnStyle(inlineTextAlign === 'right' || Boolean(editor?.isActive({ textAlign: 'right' })))} type="button" onClick={() => runCommand('align', 'right')} title="Căn phải" aria-label="Căn phải"><AlignRight size={16} /></button>
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
         
         {/* Media & Links */}
-        <button style={btnStyle(linkActive)} type="button" onClick={addLink} title="Chèn liên kết"><Link2 size={16} /></button>
-        <button style={btnStyle(false)} type="button" onClick={removeLink} title="Bỏ liên kết"><Unlink size={16} /></button>
-        <button style={btnStyle(false)} type="button" onClick={addImageUrl} title="Chèn ảnh từ URL"><Image size={16} /></button>
-        <button style={btnStyle(false)} type="button" onClick={() => imageInputRef.current?.click()} title="Tải ảnh lên (R2)">{uploadingImage ? '...' : <ImagePlus size={16} />}</button>
-        <button style={btnStyle(false)} type="button" onClick={addVideo} title="Chèn video từ URL"><VideoIcon size={16} /></button>
-        <button style={btnStyle(false)} type="button" onClick={() => videoInputRef.current?.click()} title="Tải video lên (R2)">{uploadingVideo ? '...' : <Clapperboard size={16} />}</button>
+        <button style={btnStyle(linkActive)} type="button" onClick={addLink} title="Chèn liên kết" aria-label="Chèn liên kết"><Link2 size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={removeLink} title="Bỏ liên kết" aria-label="Bỏ liên kết"><Unlink size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={addImageUrl} title="Chèn ảnh từ URL" aria-label="Chèn ảnh từ URL"><Image size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={() => imageInputRef.current?.click()} title="Tải ảnh lên (R2)" aria-label="Tải ảnh lên R2">{uploadingImage ? '…' : <ImagePlus size={16} />}</button>
+        <button style={btnStyle(false)} type="button" onClick={addVideo} title="Chèn video từ URL" aria-label="Chèn video từ URL"><VideoIcon size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={() => videoInputRef.current?.click()} title="Tải video lên (R2)" aria-label="Tải video lên R2">{uploadingVideo ? '…' : <Clapperboard size={16} />}</button>
         
         <div style={{ width: '1px', background: '#d1d5db', margin: '0 4px' }}></div>
-        <button style={btnStyle(false)} type="button" onClick={() => { if(editor) editor.chain().focus().clearNodes().unsetAllMarks().setTextAlign('left').run(); }} title="Xóa định dạng"><Eraser size={16} /></button>
+        <button style={btnStyle(false)} type="button" onClick={() => { if(editor) editor.chain().focus().clearNodes().unsetAllMarks().setTextAlign('left').run(); }} title="Xóa định dạng" aria-label="Xóa định dạng"><Eraser size={16} /></button>
         
         <input ref={imageInputRef} type="file" accept="image/*,.webp,image/webp" hidden onChange={(event) => void uploadImage(event.target.files?.[0])} />
         <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime,video/webm" hidden onChange={(event) => void uploadVideo(event.target.files?.[0])} />
@@ -4234,37 +4237,37 @@ function BbCodeTextarea({
   return (
     <div className="bbcode-editor">
       <div className={`bbcode-toolbar ${compact ? 'compact' : ''}`} aria-label="Công cụ BBCode">
-        <button type="button" onClick={() => insertBbcode('[b]', '[/b]')} title="In đậm">
+        <button type="button" onClick={() => insertBbcode('[b]', '[/b]')} title="In đậm" aria-label="In đậm">
           <Bold size={16} />
         </button>
-        <button type="button" onClick={() => insertBbcode('[i]', '[/i]')} title="In nghiêng">
+        <button type="button" onClick={() => insertBbcode('[i]', '[/i]')} title="In nghiêng" aria-label="In nghiêng">
           <Italic size={16} />
         </button>
-        <button type="button" onClick={() => insertBbcode('[u]', '[/u]')} title="Gạch chân">
+        <button type="button" onClick={() => insertBbcode('[u]', '[/u]')} title="Gạch chân" aria-label="Gạch chân">
           <Underline size={16} />
         </button>
-        <button type="button" onClick={() => insertBbcode('[s]', '[/s]')} title="Gạch ngang">
+        <button type="button" onClick={() => insertBbcode('[s]', '[/s]')} title="Gạch ngang" aria-label="Gạch ngang">
           <Strikethrough size={16} />
         </button>
-        <button type="button" onClick={() => insertBbcode('[quote]', '[/quote]')} title="Trích dẫn">
+        <button type="button" onClick={() => insertBbcode('[quote]', '[/quote]')} title="Trích dẫn" aria-label="Trích dẫn">
           <Quote size={16} />
         </button>
-        <button type="button" onClick={() => insertBbcode('\n- ')} title="Danh sách">
+        <button type="button" onClick={() => insertBbcode('\n- ')} title="Danh sách" aria-label="Danh sách">
           <List size={16} />
         </button>
-        <button type="button" onClick={insertLink} title="Liên kết">
+        <button type="button" onClick={insertLink} title="Liên kết" aria-label="Liên kết">
           <Link2 size={16} />
         </button>
-        <button type="button" onClick={insertImage} title="Hình ảnh">
+        <button type="button" onClick={insertImage} title="Hình ảnh" aria-label="Hình ảnh">
           <ImagePlus size={16} />
         </button>
-        <button type="button" onClick={() => imageInputRef.current?.click()} title="Upload ảnh lên R2">
-          {uploadingImage ? '...' : <Upload size={16} />}
+        <button type="button" onClick={() => imageInputRef.current?.click()} title="Upload ảnh lên R2" aria-label="Upload ảnh lên R2">
+          {uploadingImage ? '…' : <Upload size={16} />}
         </button>
-        <button type="button" onClick={insertVideo} title="Video">
+        <button type="button" onClick={insertVideo} title="Video" aria-label="Video">
           <VideoIcon size={16} />
         </button>
-        <button type="button" onClick={clearFormat} title="Xóa format">
+        <button type="button" onClick={clearFormat} title="Xóa format" aria-label="Xóa format">
           <Eraser size={16} />
         </button>
         <input

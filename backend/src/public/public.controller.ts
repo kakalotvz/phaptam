@@ -49,6 +49,7 @@ export class PublicController {
     if (pagination == null) {
       return this.prisma.audio.findMany({
         where: { categoryId },
+        orderBy: { createdAt: 'desc' },
         include: { category: true },
         take: 30,
       });
@@ -222,6 +223,7 @@ export class PublicController {
     if (pagination == null) {
       return this.prisma.video.findMany({
         where: { categoryId },
+        orderBy: { createdAt: 'desc' },
         include: { category: true },
         take: 30,
       });
@@ -295,6 +297,7 @@ export class PublicController {
         where,
         orderBy: { publishedAt: 'desc' },
         include: { category: true },
+        take: 50,
       });
     }
     const [items, total] = await this.prisma.$transaction([
@@ -328,6 +331,7 @@ export class PublicController {
         where,
         orderBy: { publishedAt: 'desc' },
         include: { category: true },
+        take: 50,
       });
     }
     const [items, total] = await this.prisma.$transaction([
@@ -361,11 +365,11 @@ export class PublicController {
   }
 
   @Get('scripture-reminders')
-  scriptureReminders(@Query('user_id') userId?: string) {
+  scriptureReminders() {
     return this.prisma.scriptureReminder.findMany({
       where: {
         active: true,
-        userId: userId || null,
+        userId: null,
       },
       orderBy: { timeOfDay: 'asc' },
       include: {

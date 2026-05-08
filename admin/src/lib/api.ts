@@ -230,6 +230,7 @@ export type AppSettings = {
 };
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const adminTokenKey = 'phaptam_admin_token';
 
 export function defaultApiBaseUrl() {
   if (configuredBaseUrl) return configuredBaseUrl.replace(/\/$/, '');
@@ -246,10 +247,47 @@ export function setApiBaseUrl(value: string) {
   localStorage.setItem('phaptam_api_base_url', value.replace(/\/$/, ''));
 }
 
+export function getAdminToken() {
+  const currentToken = sessionStorage.getItem(adminTokenKey);
+  if (currentToken && !isJwtExpired(currentToken)) return currentToken;
+  if (currentToken) sessionStorage.removeItem(adminTokenKey);
+
+  const legacyToken = localStorage.getItem(adminTokenKey);
+  localStorage.removeItem(adminTokenKey);
+  if (!legacyToken || isJwtExpired(legacyToken)) return null;
+  sessionStorage.setItem(adminTokenKey, legacyToken);
+  return legacyToken;
+}
+
+export function setAdminToken(token: string) {
+  localStorage.removeItem(adminTokenKey);
+  sessionStorage.setItem(adminTokenKey, token);
+}
+
+export function clearAdminToken() {
+  sessionStorage.removeItem(adminTokenKey);
+  localStorage.removeItem(adminTokenKey);
+}
+
+export function hasAdminToken() {
+  return Boolean(getAdminToken());
+}
+
+function isJwtExpired(token: string) {
+  try {
+    const encodedPayload = token.split('.')[1] ?? '';
+    const normalizedPayload = encodedPayload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
+    const payload = JSON.parse(atob(normalizedPayload)) as { exp?: number };
+    return typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit, authenticate = true): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (authenticate) {
-    const token = localStorage.getItem('phaptam_admin_token');
+    const token = getAdminToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
 
@@ -335,7 +373,7 @@ export const api = {
   users: () => request<AdminUser[]>('/admin/users'),
   r2Usage: () => request<R2Usage>('/admin/r2/usage'),
   presence: () => request<OnlinePresenceStats>('/admin/presence'),
-  presignedUrl: (data: { kind: UploadKind; contentType: string }) =>
+  presignedUrl: (data: { kind: UploadKind; contentType: string; sizeBytes?: number }) =>
     request<PresignedUpload>('/upload/presigned-url', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -367,6 +405,7 @@ export async function uploadToR2WithMetadata(file: File, kind: UploadKind): Prom
   const { uploadUrl, publicUrl } = await api.presignedUrl({
     kind,
     contentType,
+    sizeBytes: normalized.size,
   });
 
   const response = await fetch(uploadUrl, {
